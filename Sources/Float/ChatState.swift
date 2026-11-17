@@ -4,7 +4,7 @@ import ImageIO
 import SwiftUI
 import UniformTypeIdentifiers
 
-struct ChatMessage: Identifiable {
+struct ChatMessage: Identifiable, Equatable {
     var id: String
     let runId: String?
     let position: Int
@@ -44,7 +44,7 @@ final class ChatState: ObservableObject {
     private var receivedFirstPage = false
     private var generation = 0
     private var visible = false
-    private var completedText: [String: (timestamp: String, text: String)] = [:]
+    private var expandedText: [String: (timestamp: String, text: String)] = [:]
     private var pendingMessage: ChatMessage?
 
     init(client: T3Client, defaults: UserDefaults = .standard) {
@@ -142,7 +142,7 @@ final class ChatState: ObservableObject {
         pendingMessage = nil
         earliest = nil
         receivedFirstPage = false
-        completedText = [:]
+        expandedText = [:]
         previews = [:]
         persist()
         focusRequest += 1
@@ -332,7 +332,12 @@ final class ChatState: ObservableObject {
                     connectionFailures += 1
                     if connectionFailures >= 10 && status != .running && status != .waiting { return }
                 }
-                let delay: Duration = visible && connectionFailures == 0 ? .milliseconds(850) : .seconds(3)
+                let delay: Duration
+                if !visible || connectionFailures > 0 {
+                    delay = .seconds(3)
+                } else {
+                    delay = status == .running ? .milliseconds(400) : .milliseconds(850)
+                }
                 try? await Task.sleep(for: delay)
             } while !Task.isCancelled
         }
@@ -342,7 +347,8 @@ final class ChatState: ObservableObject {
         var merged = Dictionary(uniqueKeysWithValues: messages.map { ($0.id, $0) })
         for item in snapshot.items where item.type == "user_message" || item.type == "assistant_message" {
             let isUser = item.type == "user_message"
-            let text = completedText[item.id]?.text ?? item.text ?? ""
+            let expanded = expandedText[item.id]
+            let text = expanded?.timestamp == item.updatedAt ? expanded?.text ?? "" : item.text ?? ""
             let attachments = isUser ? item.runId.flatMap { previews[$0] } ?? [] : []
             guard !text.isEmpty || !attachments.isEmpty else { continue }
             if isUser, let pending = pendingMessage, pending.runId == item.runId {
@@ -354,20 +360,20 @@ final class ChatState: ObservableObject {
                 date: item.date, previews: attachments
             )
         }
-        messages = merged.values.sorted {
+        let updated = merged.values.sorted {
             if $0.position != $1.position { return $0.position < $1.position }
             return $0.id < $1.id
         }
+        if updated != messages { messages = updated }
     }
 
     private func expandLongMessages(
         _ snapshot: ThreadSnapshot, reference: ThreadReference, generation version: Int
     ) async throws {
-        for item in snapshot.items where item.textTruncated && item.status == "completed" &&
-            completedText[item.id]?.timestamp != item.updatedAt {
+        for item in snapshot.items where item.textTruncated && expandedText[item.id]?.timestamp != item.updatedAt {
             let text = try await client.readRemainder(reference, item: item)
             guard generation == version, !Task.isCancelled else { return }
-            completedText[item.id] = (item.updatedAt, text)
+            expandedText[item.id] = (item.updatedAt, text)
         }
     }
 

@@ -130,11 +130,12 @@ public struct T3Client: Sendable {
     }
 
     public func read(_ thread: ThreadReference, before: Int? = nil) async throws -> ThreadSnapshot {
-        var args: [String: any Sendable] = [
+        // T3 reads forward for external clients unless given an upper bound.
+        // Use the largest JSON-safe integer to request the newest page.
+        try await readSnapshot([
             "threadId": thread.threadId, "view": "messages", "limit": 40, "maxCharsPerItem": 20_000,
-        ]
-        args["beforePosition"] = before
-        return try await readSnapshot(args)
+            "beforePosition": before ?? 9_007_199_254_740_991, "runLimit": 1,
+        ])
     }
 
     public func readRemainder(
