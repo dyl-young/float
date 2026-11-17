@@ -32,6 +32,7 @@ struct FloatView: View {
     private static let headerButtonInset: CGFloat = 10
     private static let footerButtonSize: CGFloat = 26
     private static let footerButtonInset: CGFloat = 9
+    private static let inputSideInset: CGFloat = 1
     private let inputShape = RoundedRectangle(cornerRadius: Theme.radius)
 
     private var showsTray: Bool { chat.hasConversation || chat.hasTrayNotice }
@@ -67,7 +68,8 @@ struct FloatView: View {
                         inputHeight = $0.height
                         inputTop = $0.minY
                     }
-                    .padding(.horizontal, 1)
+                    // Keep the input rim separate from the shell border; the footer remains full width.
+                    .padding(.horizontal, Self.inputSideInset)
                 footer
             }
             .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { composerHeight = ceil($0) }
