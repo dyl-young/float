@@ -74,14 +74,16 @@ body{margin:0;font-family:var(--font-sans);color:var(--foreground)}
 .ib{width:24px;height:24px;border-radius:7px;display:grid;place-items:center;color:var(--muted-foreground);flex:none}
 .ib.hv{background:color-mix(in oklab, var(--foreground) 9%, transparent);color:var(--foreground)}
 .ib svg{width:14px;height:14px}
-.msgs{padding:4px 12px 12px;display:flex;flex-direction:column;gap:10px}
+.msgs{padding:4px 12px 12px;display:flex;flex-direction:column;gap:12px}
 .msg-u{align-self:flex-end;max-width:84%;background:var(--user);border-radius:12px 12px 4px 12px;padding:7px 10px;font-size:12.5px;line-height:1.45}
 .thumbs{display:flex;gap:5px;justify-content:flex-end;margin-bottom:6px}
 .thumb{width:54px;height:40px;border-radius:7px;border:1px solid var(--line);position:relative;
   background:linear-gradient(135deg, color-mix(in oklab, var(--chart-3) 55%, var(--card)), color-mix(in oklab, var(--chart-1) 45%, var(--card)))}
 .thumb::after{content:"";position:absolute;inset:8px 8px auto 8px;height:4px;border-radius:2px;background:rgba(255,255,255,.35);box-shadow:0 8px 0 rgba(255,255,255,.22),0 16px 0 rgba(255,255,255,.16)}
-.msg-a{max-width:94%;background:color-mix(in oklab, var(--foreground) 4%, transparent);border:1px solid var(--line);border-radius:12px 12px 12px 4px;padding:8px 10px 4px;font-size:12.5px;line-height:1.5}
-.msg-a p{margin:0 0 6px}
+/* Assistant replies: plain text on the tray, no bubble, as in T3. Under it, a muted row: copy icon first, then the time, left-aligned. */
+.msg-a{padding:2px 2px 0;font-size:12.5px;line-height:1.55}
+.msg-a p{margin:0 0 7px}
+.msg-a .meta{justify-content:flex-start;gap:6px;margin:2px 0 0 -4px}
 code{font-family:var(--font-mono);font-size:11.5px;background:var(--code-background);padding:1px 4px;border-radius:4px}
 .meta{display:flex;align-items:center;gap:4px;justify-content:flex-end;color:var(--muted-foreground);font-size:10.5px;margin:0 -4px 0 0}
 .meta .ib{width:20px;height:20px}.meta .ib svg{width:12px;height:12px}
@@ -225,7 +227,7 @@ function shell({tray='', input, send, modelOpen, extra='', style=''}){
 }
 const ph = (t) => `<span class="ph">${t}</span>`;
 const thumb = (h=0) => `<div class="thumb" style="filter:hue-rotate(${h}deg)"></div>`;
-const reply = (ps, t) => `<div class="msg-a">${ps.map(p=>`<p>${p}</p>`).join('')}<div class="meta">${t}<span class="ib">${ic('copy')}</span></div></div>`;
+const reply = (ps, t) => `<div class="msg-a">${ps.map(p=>`<p>${p}</p>`).join('')}<div class="meta"><span class="ib">${ic('copy')}</span>${t}</div></div>`;
 const chip = (n,h=0) => `<div class="chip"><div class="mini" style="filter:hue-rotate(${h}deg)"></div><span>${n}</span><span class="x">${ic('x')}</span></div>`;
 
 document.getElementById('hero').insertAdjacentHTML('beforeend', shell({
@@ -243,15 +245,19 @@ const states = [
   [shell({tray: trayTop({title:'Mobile layout bug', body:`<div class="msg-u"><div class="thumbs">${thumb()}${thumb(60)}</div>What's wrong with this layout on mobile?</div><div class="step">${ic('check')}Read 2 images</div><div class="working"><span class="pulse"><i></i><i></i><i></i></span>Working · 14s</div>`}),
      input: ph('Queue a follow-up…'), send:'stop'}),
    `<b>3 · Working.</b> The tray slides up out of the input on first send. One status line, and send becomes a red stop ring.`],
+  [shell({tray: trayTop({title:'Mobile layout bug', body:`<div class="msg-u"><div class="thumbs">${thumb()}${thumb(60)}</div>What's wrong with this layout on mobile?</div>` +
+     reply(['The sidebar keeps its fixed <code>280px</code> width below the breakpoint, so the main column gets squeezed to about 90px.','Drop the fixed width under <code>md</code> and let the sidebar collapse into the header menu.'],'09:42')}),
+     input: ph('Ask a follow-up…')}),
+   `<b>4 · Replied.</b> Replies are plain text on the tray, with no bubble. Only your own messages sit in bubbles. Under it, as in T3: the copy button, then the time, left-aligned.`],
   [shell({tray: trayTop({title:'Clean up node_modules', dot:'var(--warning)', openHover:true, body:`<div class="msg-u">Find and delete stale node_modules folders under ~/repos</div><div class="notice warn">${ic('shield')}<div><b>Needs your approval</b>Wants to run <code>rm -rf</code> on 14 folders.<div><span class="btn pri">${ic('open')}Open in T3</span></div></div></div>`}),
      input: ph('Waiting on approval in T3…')}),
-   `<b>4 · Needs input.</b> Approvals hand off to the thread in T3. Header dot turns amber.`],
+   `<b>5 · Needs input.</b> Approvals hand off to the thread in T3. Header dot turns amber.`],
   [shell({tray: trayTop({title:'Float', sub:'T3 not running', dot:'var(--muted-foreground)', body:`<div class="notice info">${ic('power')}<div><b>T3 Code isn't running</b>Your draft is saved. Launch T3 and Float sends it.<div style="display:flex;gap:6px"><span class="btn pri">Launch T3</span><span class="btn ghost">Not now</span></div></div></div>`}),
      input: 'Summarise the diff in ~/repos/float since yesterday'}),
-   `<b>5 · T3 closed.</b> The tray opens just to show the notice. Draft and images survive.`],
+   `<b>6 · T3 closed.</b> The tray opens just to show the notice. Draft and images survive.`],
   [shell({input: ph('Ask anything…'), modelOpen:true, style:'margin-top:118px',
      extra:`<div class="menu"><div class="sel"><svg class="claude" style="color:var(--claude)"><use href="#i-burst"/></svg>Opus 5.5<small>default</small></div><div><svg style="color:var(--claude)"><use href="#i-burst"/></svg>Sonnet 5.5</div><div><svg style="color:var(--claude)"><use href="#i-burst"/></svg>Haiku 5.5</div></div>`}),
-   `<b>6 · Fast follow: model picker.</b> The model + effort control is already in the footer, so the menu drops in without moving anything.`],
+   `<b>7 · Fast follow: model picker.</b> The model + effort control is already in the footer, so the menu drops in without moving anything.`],
 ];
 document.getElementById('grid').innerHTML = states.map(([s,c]) => `<div><div class="bg">${s}</div><p class="cap">${c}</p></div>`).join('');
 </script>
