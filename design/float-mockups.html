@@ -67,7 +67,8 @@ body{margin:0;font-family:var(--font-sans);color:var(--foreground)}
        linear-gradient(#000,#000) bottom / 100% calc(100% - var(--r)) no-repeat}
 
 /* top tray contents */
-.hdr{display:flex;align-items:center;gap:6px;height:34px;padding:0 6px}
+/* Header buttons share centre lines with the footer: × over the paperclip, Open in T3 over the send ring (21px from each inner edge). */
+.hdr{display:flex;align-items:center;gap:6px;height:34px;padding:0 9px}
 /* Close: top-left, mirrors the right-hand buttons. Hides the panel, same as Esc. */
 .hdr .close svg{width:12px;height:12px}
 .hdr .close+.dot{margin-left:1px}
@@ -160,6 +161,8 @@ code{font-family:var(--font-mono);font-size:11.5px;background:var(--code-backgro
 .tray-foot{z-index:2}
 /* T3 rim: 1px hairline ring around the frosted input, following its 16px corners */
 .input{border-radius:var(--r);box-shadow:inset 0 0 0 1px color-mix(in oklab, var(--foreground) 9%, transparent)}
+/* 1px of solid tray between the shell's edge and the input rim, left and right, so the two lines never merge. */
+.input{margin-inline:1px}
 .msgs.under{padding-bottom:calc(var(--ov, 34px) + 10px)}
 .desk .msgs.under{padding-bottom:0}
 .desk .input.over{--ov:58px}
