@@ -23,8 +23,8 @@ struct ComposerEditor: NSViewRepresentable {
         editor.isRichText = false
         editor.importsGraphics = false
         editor.allowsUndo = true
-        editor.textColor = NSColor(FloatPalette.text)
-        editor.insertionPointColor = NSColor(FloatPalette.accent)
+        editor.textColor = NSColor(Theme.text)
+        editor.insertionPointColor = NSColor(Theme.accent)
         editor.font = .systemFont(ofSize: 14)
         editor.textContainerInset = NSSize(width: 0, height: 5)
         editor.textContainer?.lineFragmentPadding = 0
