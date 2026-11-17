@@ -77,7 +77,8 @@ public struct T3Client: Sendable {
         } catch {
             if submitted {
                 switch error {
-                case T3Error.tool, T3Error.http, T3Error.serverUnavailable, T3Error.authorization,
+                case T3Error.http(let status) where (400..<500).contains(status): break
+                case T3Error.tool, T3Error.serverUnavailable, T3Error.authorization,
                     T3Error.cliUnavailable, T3Error.localAddressRequired: break
                 default: throw T3Error.uncertainDelivery
                 }

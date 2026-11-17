@@ -48,8 +48,9 @@ public struct ThreadReference: Codable, Equatable, Sendable {
         if link.scheme == "t3code", link.host == "threads" { return link }
         guard let parts = URLComponents(url: link, resolvingAgainstBaseURL: false) else { return nil }
         let path = parts.percentEncodedPath.split(separator: "/")
-        if link.scheme == "t3-thread", let environment = parts.host, path.count == 1 {
-            return URL(string: "t3code://threads/\(environment)/\(path[0])")
+        if link.scheme == "t3-thread", parts.host == "v2", path.count >= 2 {
+            let id = threadId.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
+            return URL(string: "t3code://threads/\(path[0])/\(id)")
         }
         if ["https", "http"].contains(link.scheme ?? ""),
             path.count == 3, path[0] == "threads" {

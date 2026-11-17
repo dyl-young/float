@@ -6,6 +6,7 @@ let package = Package(
     platforms: [.macOS(.v14)],
     targets: [
         .target(name: "FloatCore"),
+        .executableTarget(name: "Float", dependencies: ["FloatCore"]),
         .testTarget(name: "FloatCoreTests", dependencies: ["FloatCore"]),
     ]
 )

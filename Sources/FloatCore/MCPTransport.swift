@@ -109,6 +109,7 @@ actor MCPTransport {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.httpShouldSetCookies = false
         configuration.urlCache = nil
+        configuration.connectionProxyDictionary = [:]
         configuration.timeoutIntervalForRequest = 20
         self.http = URLSession(configuration: configuration, delegate: NoRedirects(), delegateQueue: nil)
     }

@@ -1,0 +1,387 @@
+import AppKit
+import SwiftUI
+import UniformTypeIdentifiers
+
+enum FloatPalette {
+    static let canvas = Color(red: 0.067, green: 0.100, blue: 0.125)
+    static let composer = Color(red: 0.085, green: 0.129, blue: 0.157)
+    static let footer = Color(red: 0.113, green: 0.169, blue: 0.206)
+    static let raised = Color(red: 0.135, green: 0.206, blue: 0.250)
+    static let border = Color(red: 0.63, green: 0.76, blue: 0.86).opacity(0.16)
+    static let text = Color(red: 0.90, green: 0.95, blue: 0.99)
+    static let muted = Color(red: 0.59, green: 0.67, blue: 0.74)
+    static let accent = Color(red: 0.42, green: 0.69, blue: 0.91)
+}
+
+struct FloatView: View {
+    @ObservedObject var chat: ChatState
+    let resize: (CGFloat) -> Void
+
+    @State private var editorHeight: CGFloat = 28
+    @State private var followingLatest = true
+    @State private var copiedMessage: String?
+
+    private var panelHeight: CGFloat {
+        if chat.hasConversation { return 536 }
+        let previewSpace: CGFloat = chat.images.isEmpty ? 0 : 47
+        let noticeSpace: CGFloat = chat.notice == nil ? 0 : 56
+        return 106 + editorHeight + previewSpace + noticeSpace
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            if chat.hasConversation {
+                Rectangle().fill(FloatPalette.border).frame(height: 1).padding(.horizontal, 14)
+                timeline
+            }
+            if let notice = chat.notice { noticeBar(notice) }
+            if chat.notice == nil && chat.hasConversation { statusBar }
+            composer
+                .padding(.horizontal, 12)
+                .padding(.bottom, 12)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background {
+            RoundedRectangle(cornerRadius: 21, style: .continuous)
+                .fill(FloatPalette.canvas.opacity(0.985))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 21, style: .continuous)
+                .strokeBorder(FloatPalette.border, lineWidth: 1)
+                .allowsHitTesting(false)
+        }
+        .preferredColorScheme(.dark)
+        .onAppear { resize(panelHeight) }
+        .onChange(of: panelHeight) { _, value in resize(value) }
+        .onChange(of: chat.reference) { old, new in
+            if old?.threadId != new?.threadId { followingLatest = true }
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 9) {
+            Image(systemName: "rectangle.on.rectangle")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(FloatPalette.accent)
+                .accessibilityHidden(true)
+            Text(chat.title ?? "Float")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(FloatPalette.text)
+                .lineLimit(1)
+                .help(chat.title ?? "Float")
+                .accessibilityAddTraits(.isHeader)
+            Spacer()
+            PanelButton("New Chat", systemImage: "square.and.pencil", action: chat.newChat)
+                .disabled(chat.submitting)
+            PanelButton("Open in T3", systemImage: "arrow.up.right.square", action: chat.openThread)
+                .disabled(chat.reference?.desktopURL == nil)
+        }
+        .padding(.leading, 17)
+        .padding(.trailing, 12)
+        .frame(height: 43)
+    }
+
+    private var timeline: some View {
+        ScrollViewReader { reader in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 19) {
+                    if chat.hasOlderMessages {
+                        Button("Load older messages") {
+                            followingLatest = false
+                            chat.loadOlder()
+                        }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(FloatPalette.accent)
+                        .disabled(chat.loadingOlder)
+                        .frame(maxWidth: .infinity)
+                    }
+                    ForEach(chat.messages) { message in
+                        messageView(message)
+                    }
+                    Color.clear.frame(height: 1)
+                        .accessibilityHidden(true)
+                        .id("latest")
+                        .onAppear { followingLatest = true }
+                        .onDisappear { followingLatest = false }
+                }
+                .padding(.horizontal, 17)
+                .padding(.vertical, 16)
+            }
+            .defaultScrollAnchor(.bottom)
+            .onChange(of: chat.messages.last?.text) { _, _ in
+                if followingLatest { reader.scrollTo("latest", anchor: .bottom) }
+            }
+            .onChange(of: chat.messages.last?.id) { _, _ in
+                if followingLatest { reader.scrollTo("latest", anchor: .bottom) }
+            }
+            .accessibilityLabel("Conversation")
+        }
+    }
+
+    private func messageView(_ message: ChatMessage) -> some View {
+        VStack(alignment: message.isUser ? .trailing : .leading, spacing: 7) {
+            if !message.previews.isEmpty {
+                ViewThatFits(in: .horizontal) {
+                    previewRow(message.previews)
+                    ScrollView(.horizontal) { previewRow(message.previews) }
+                }
+            }
+            if !message.text.isEmpty {
+                Text(formatted(message))
+                    .font(.system(size: 14))
+                    .lineSpacing(3)
+                    .foregroundStyle(FloatPalette.text)
+                    .textSelection(.enabled)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 9)
+                    .background(message.isUser ? FloatPalette.raised : FloatPalette.composer,
+                        in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                    .accessibilityLabel(message.text)
+            }
+            if !message.isUser {
+                HStack(spacing: 8) {
+                    PanelButton(
+                        copiedMessage == message.id ? "Copied" : "Copy response",
+                        systemImage: copiedMessage == message.id ? "checkmark" : "document.on.document",
+                        size: 22
+                    ) {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(message.text, forType: .string)
+                        copiedMessage = message.id
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .seconds(1.5))
+                            if copiedMessage == message.id { copiedMessage = nil }
+                        }
+                    }
+                    if let date = message.date {
+                        Text(date, style: .time)
+                            .font(.system(size: 11).monospacedDigit())
+                            .foregroundStyle(FloatPalette.muted)
+                    }
+                }
+                .padding(.leading, 3)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: message.isUser ? .trailing : .leading)
+    }
+
+    private func previewRow(_ previews: [Data]) -> some View {
+        HStack(spacing: 6) {
+            ForEach(previews.indices, id: \.self) { index in
+                ImagePreview(data: previews[index], label: "Sent image \(index + 1)", size: 76)
+            }
+        }
+    }
+
+    private func formatted(_ message: ChatMessage) -> AttributedString {
+        guard !message.isUser else { return AttributedString(message.text) }
+        return (try? AttributedString(
+            markdown: message.text,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        )) ?? AttributedString(message.text)
+    }
+
+    @ViewBuilder private var statusBar: some View {
+        if chat.submitting || chat.loading || chat.status == .running {
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small).scaleEffect(0.76)
+                Text(chat.submitting ? "Sending…" : chat.loading ? "Loading chat…" : "Waiting for Claude Code…")
+                Spacer()
+            }
+            .font(.system(size: 12))
+            .foregroundStyle(FloatPalette.muted)
+            .padding(.horizontal, 17)
+            .padding(.vertical, 7)
+        } else if chat.status == .waiting || chat.status == .failed || chat.status == .stopped {
+            HStack(spacing: 8) {
+                Text(chat.status == .waiting ? "T3 needs your input." :
+                    chat.status == .failed ? "The agent run failed." : "The agent run stopped.")
+                    .foregroundStyle(FloatPalette.muted)
+                Spacer()
+                action("Open in T3", chat.openThread).disabled(chat.reference?.desktopURL == nil)
+            }
+            .font(.system(size: 12))
+            .padding(.horizontal, 17)
+            .padding(.vertical, 7)
+        }
+    }
+
+    private func noticeBar(_ text: String) -> some View {
+        HStack(alignment: .center, spacing: 8) {
+            Image(systemName: "info.circle")
+                .accessibilityHidden(true)
+            Text(text)
+                .lineLimit(3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityAddTraits(.updatesFrequently)
+            if chat.needsT3 { action("Launch T3", chat.launchT3) }
+        }
+        .font(.system(size: 12))
+        .foregroundStyle(FloatPalette.muted)
+        .padding(.horizontal, 17)
+        .padding(.vertical, 8)
+        .frame(minHeight: 40)
+    }
+
+    private func action(_ title: String, _ handle: @escaping () -> Void) -> some View {
+        Button(title, action: handle)
+            .buttonStyle(.plain)
+            .fontWeight(.semibold)
+            .foregroundStyle(FloatPalette.accent)
+            .fixedSize()
+    }
+
+    private var composer: some View {
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 4) {
+                if !chat.images.isEmpty { draftImages }
+                ZStack(alignment: .topLeading) {
+                    if chat.draft.isEmpty {
+                        Text(chat.hasConversation ? "Follow up…" : "Ask or start a task…")
+                            .font(.system(size: 14))
+                            .foregroundStyle(FloatPalette.muted)
+                            .padding(.top, 5)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                    }
+                    ComposerEditor(
+                        text: $chat.draft, height: $editorHeight, focusRequest: chat.focusRequest,
+                        submit: chat.send, pasteImages: chat.pasteImages
+                    )
+                    .frame(height: editorHeight)
+                }
+            }
+            .padding(.top, 8)
+            .padding(.horizontal, 13)
+            .padding(.bottom, 7)
+
+            HStack(spacing: 6) {
+                PanelButton("Attach images", systemImage: "paperclip", action: chooseImages)
+                Spacer()
+                Text("Opus 5.5")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(FloatPalette.muted)
+                    .help("Claude Opus 5.5 via Claude Code")
+                Button(action: chat.send) {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(chat.canSend ? FloatPalette.accent : FloatPalette.muted.opacity(0.62))
+                        .frame(width: 24, height: 24)
+                        .background {
+                            Circle().strokeBorder(
+                                chat.canSend ? FloatPalette.accent.opacity(0.85) : FloatPalette.border,
+                                lineWidth: 1
+                            )
+                        }
+                        .frame(width: 30, height: 30)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Send")
+                .help("Send · Return")
+                .disabled(!chat.canSend)
+            }
+            .padding(.leading, 7)
+            .padding(.trailing, 8)
+            .frame(height: 36)
+            .background(FloatPalette.footer)
+        }
+        .background(FloatPalette.composer)
+        .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .strokeBorder(FloatPalette.border, lineWidth: 1)
+                .allowsHitTesting(false)
+        }
+    }
+
+    private var draftImages: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 6) {
+                ForEach(chat.images) { file in
+                    HStack(spacing: 6) {
+                        ImagePreview(data: file.data, label: file.name, size: 30)
+                        Text(file.name)
+                            .font(.system(size: 11))
+                            .foregroundStyle(FloatPalette.text)
+                            .lineLimit(1)
+                            .frame(maxWidth: 110, alignment: .leading)
+                        PanelButton("Remove \(file.name)", systemImage: "xmark", size: 22) {
+                            chat.removeImage(file.id)
+                        }
+                    }
+                    .padding(3)
+                    .background(FloatPalette.raised, in: RoundedRectangle(cornerRadius: 8))
+                }
+            }
+            .padding(.vertical, 4)
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    private func chooseImages() {
+        let panel = NSOpenPanel()
+        panel.title = "Attach images"
+        panel.allowedContentTypes = [.image]
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        guard let window = NSApp.keyWindow else { return }
+        panel.beginSheetModal(for: window) { result in
+            if result == .OK { chat.addImageFiles(panel.urls) }
+        }
+    }
+}
+
+private struct ImagePreview: View {
+    let data: Data
+    let label: String
+    let size: CGFloat
+
+    var body: some View {
+        Group {
+            if let image = NSImage(data: data) {
+                Image(nsImage: image).resizable().scaledToFill()
+            } else {
+                Image(systemName: "photo").foregroundStyle(FloatPalette.muted)
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .accessibilityLabel(label)
+        .help(label)
+    }
+}
+
+private struct PanelButton: View {
+    let title: String
+    let systemImage: String
+    let size: CGFloat
+    let action: () -> Void
+
+    @Environment(\.isEnabled) private var enabled
+    @State private var hovered = false
+
+    init(_ title: String, systemImage: String, size: CGFloat = 30, action: @escaping () -> Void) {
+        self.title = title
+        self.systemImage = systemImage
+        self.size = size
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: size < 26 ? 11 : 13, weight: .medium))
+                .foregroundStyle(FloatPalette.muted.opacity(enabled ? 1 : 0.4))
+                .frame(width: size, height: size)
+                .background(hovered && enabled ? FloatPalette.raised : .clear, in: RoundedRectangle(cornerRadius: 6))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(title)
+        .accessibilityLabel(title)
+        .onHover { hovered = $0 }
+    }
+}
