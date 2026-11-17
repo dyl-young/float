@@ -15,12 +15,17 @@ enum ProviderIcon {
         }
     }
 
+    private var isAntigravity: Bool {
+        if case .antigravity = self { return true }
+        return false
+    }
+
     private var viewBox: CGRect {
         switch self {
         case .openAI: CGRect(x: 100, y: 100, width: 411, height: 411)
         case .claude: CGRect(x: 0, y: 0, width: 256, height: 257)
         case .cursor: CGRect(x: 0, y: 0, width: 466.73, height: 532.09)
-        case .antigravity: CGRect(x: 0, y: 0, width: 24, height: 24)
+        case .antigravity: .zero
         case .openCode: CGRect(x: 0, y: 0, width: 32, height: 40)
         }
     }
@@ -30,7 +35,7 @@ enum ProviderIcon {
         case .openAI: [(ProviderPaths.openAI, Theme.text)]
         case .claude: [(ProviderPaths.claude, Theme.claude)]
         case .cursor: [(ProviderPaths.cursor, Theme.cursor)]
-        case .antigravity: [(ProviderPaths.antigravity, Theme.antigravity)]
+        case .antigravity: []
         case .openCode: [(ProviderPaths.openCodeInset, Theme.openCodeInset), (ProviderPaths.openCode, Theme.openCode)]
         }
     }
@@ -44,16 +49,30 @@ enum ProviderIcon {
         ))
     }
 
-    var glyph: some View {
-        Canvas { context, size in
-            for (path, tint) in layers {
-                context.fill(fit(path, in: CGRect(origin: .zero, size: size)), with: .color(tint), style: .init(eoFill: true))
+    @ViewBuilder var glyph: some View {
+        if isAntigravity, let image = Self.antigravityImage {
+            Image(nsImage: image)
+                .resizable()
+                .scaledToFit()
+        } else {
+            Canvas { context, size in
+                for (path, tint) in layers {
+                    context.fill(fit(path, in: CGRect(origin: .zero, size: size)), with: .color(tint), style: .init(eoFill: true))
+                }
             }
         }
     }
 
     func menuImage(size: CGFloat = 13) -> NSImage {
         NSImage(size: NSSize(width: size, height: size), flipped: true) { rect in
+            if isAntigravity, let image = Self.antigravityImage {
+                image.draw(
+                    in: rect, from: NSRect(origin: .zero, size: image.size),
+                    operation: .sourceOver, fraction: 1, respectFlipped: true,
+                    hints: [.interpolation: NSImageInterpolation.high]
+                )
+                return true
+            }
             guard let context = NSGraphicsContext.current?.cgContext else { return false }
             for (path, tint) in layers {
                 context.setFillColor(NSColor(tint).cgColor)
@@ -63,6 +82,11 @@ enum ProviderIcon {
             return true
         }
     }
+
+    private static let antigravityImage: NSImage? = {
+        guard let url = Bundle.main.url(forResource: "antigravity", withExtension: "png") else { return nil }
+        return NSImage(contentsOf: url)
+    }()
 }
 
 struct ProviderGlyph: View {
@@ -83,7 +107,7 @@ struct ProviderGlyph: View {
     }
 }
 
-// SVG paths from T3’s Icons.tsx, marketing harness art, and OpenCode provider package.
+// SVG paths from T3’s provider assets and the OpenCode provider package.
 private enum ProviderPaths {
     static let openAI: Path = {
         var path = Path()
@@ -367,19 +391,6 @@ private enum ProviderPaths {
         path.addLine(to: .init(x: 437.4900, y: 140.6100))
         path.addCurve(to: .init(x: 444.0600, y: 152.0000), control1: .init(x: 443.3300, y: 140.6100), control2: .init(x: 446.9800, y: 146.9400))
         path.addLine(to: .init(x: 444.0500, y: 152.0000))
-        path.closeSubpath()
-        return path
-    }()
-
-    static let antigravity: Path = {
-        var path = Path()
-        path.move(to: .init(x: 21.7510, y: 22.6070))
-        path.addCurve(to: .init(x: 23.2590, y: 21.0990), control1: .init(x: 23.0910, y: 23.6120), control2: .init(x: 25.1010, y: 22.9420))
-        path.addCurve(to: .init(x: 12.0370, y: 1.0000), control1: .init(x: 17.7300, y: 15.7400), control2: .init(x: 18.9040, y: 1.0000))
-        path.addCurve(to: .init(x: 0.8150, y: 21.1000), control1: .init(x: 5.1700, y: 1.0000), control2: .init(x: 6.3420, y: 15.7400))
-        path.addCurve(to: .init(x: 2.3220, y: 22.6060), control1: .init(x: -1.1950, y: 23.1090), control2: .init(x: 0.9820, y: 23.6110))
-        path.addCurve(to: .init(x: 12.0370, y: 12.8920), control1: .init(x: 7.5140, y: 19.0890), control2: .init(x: 7.1790, y: 12.8920))
-        path.addCurve(to: .init(x: 21.7510, y: 22.6070), control1: .init(x: 16.8940, y: 12.8920), control2: .init(x: 16.5590, y: 19.0890))
         path.closeSubpath()
         return path
     }()
