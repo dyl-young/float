@@ -142,14 +142,17 @@ struct FloatView: View {
                             let grew = $0.height != timelineHeight
                             timelineHeight = $0.height
                             timelineBottom = $0.maxY
-                            if grew, followsLatest {
+                            if grew, followsLatest, chat.hasConversation {
                                 scroll.scrollTo(Self.latest, anchor: .bottom)
                             } else if !grew {
                                 followsLatest = timelineBottom <= inputTop + 3
                             }
                         }
-                    // The bottom anchor includes the input overlap so the latest text clears the frost.
-                    Color.clear.frame(height: inputHeight).id(Self.latest)
+                    // Conversations scroll under the composer, so their bottom anchor clears its overlap.
+                    // A notice-only tray is already sized to the card and must not scroll it under the header.
+                    Color.clear
+                        .frame(height: chat.hasConversation ? inputHeight : 0)
+                        .id(Self.latest)
                 }
             }
             .contentMargins(.trailing, 4, for: .scrollIndicators)
@@ -159,7 +162,7 @@ struct FloatView: View {
             .scrollIndicatorsFlash(trigger: conversationHover)
             .onHover { if $0 { conversationHover += 1 } }
             .onChange(of: inputTop) {
-                if followsLatest { scroll.scrollTo(Self.latest, anchor: .bottom) }
+                if followsLatest, chat.hasConversation { scroll.scrollTo(Self.latest, anchor: .bottom) }
                 if timelineBottom <= inputTop + 3 { followsLatest = true }
             }
             .onDisappear { followsLatest = true }
