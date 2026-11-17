@@ -18,12 +18,15 @@ struct FloatView: View {
     @State private var timelineHeight: CGFloat = 0
     @State private var timelineBottom: CGFloat = 0
     @State private var inputTop: CGFloat = 0
+    @State private var followsLatest = true
+    @State private var conversationHover = 0
     @State private var copiedMessage: String?
 
     private static let headerHeight: CGFloat = 38
     private static let headerFadeHeight: CGFloat = 14
     private static let maxHeight: CGFloat = 560
     private nonisolated static let shellSpace = "Float shell"
+    private static let latest = "Latest message"
     private let inputShape = RoundedRectangle(cornerRadius: Theme.radius)
 
     private var showsTray: Bool { chat.hasConversation || chat.notice != nil }
@@ -106,22 +109,63 @@ struct FloatView: View {
     private var tray: some View {
         VStack(spacing: 0) {
             header
+            conversation
+        }
+    }
+
+    private var conversation: some View {
+        ScrollViewReader { scroll in
             ScrollView {
-                timeline
-                    .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named(Self.shellSpace)) }) {
-                        timelineHeight = $0.height
-                        timelineBottom = $0.maxY
-                    }
+                VStack(spacing: 0) {
+                    timeline
+                        .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named(Self.shellSpace)) }) {
+                            let grew = $0.height != timelineHeight
+                            timelineHeight = $0.height
+                            timelineBottom = $0.maxY
+                            if grew, followsLatest {
+                                scroll.scrollTo(Self.latest, anchor: .bottom)
+                            } else if !grew {
+                                followsLatest = timelineBottom <= inputTop + 3
+                            }
+                        }
+                    // The bottom anchor includes the input overlap so the latest text clears the frost.
+                    Color.clear.frame(height: inputHeight).id(Self.latest)
+                }
             }
-            // Keep the latest message above the composer at rest while allowing it to scroll under the frost.
-            .contentMargins(.bottom, inputHeight, for: .scrollContent)
-            .defaultScrollAnchor(.bottom)
-            .scrollIndicators(.never)
+            .contentMargins(.trailing, 4, for: .scrollIndicators)
+            .contentMargins(.top, 4, for: .scrollIndicators)
+            .contentMargins(.bottom, inputHeight + 4, for: .scrollIndicators)
+            .scrollIndicators(.visible, axes: .vertical)
+            .scrollIndicatorsFlash(trigger: conversationHover)
+            .onHover { if $0 { conversationHover += 1 } }
+            .onChange(of: inputTop) {
+                if followsLatest { scroll.scrollTo(Self.latest, anchor: .bottom) }
+                if timelineBottom <= inputTop + 3 { followsLatest = true }
+            }
+            .onDisappear { followsLatest = true }
             .mask {
                 VStack(spacing: 0) {
                     LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
                         .frame(height: Self.headerFadeHeight)
                     Color.black
+                }
+            }
+            .overlay(alignment: .bottom) {
+                if chat.hasConversation, !followsLatest {
+                    Button {
+                        followsLatest = true
+                        scroll.scrollTo(Self.latest, anchor: .bottom)
+                    } label: {
+                        Text("↓ Latest")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Theme.text)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(Theme.raised, in: Capsule())
+                            .overlay { Capsule().strokeBorder(Theme.hairline, lineWidth: 1) }
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.bottom, inputHeight + 7)
                 }
             }
             .accessibilityLabel("Conversation")

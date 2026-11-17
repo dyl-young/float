@@ -11,12 +11,13 @@ struct ComposerEditor: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scroll = NSScrollView()
+        let scroll = EditorScrollView()
         scroll.drawsBackground = false
         scroll.borderType = .noBorder
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
         scroll.scrollerStyle = .overlay
+        scroll.scrollerKnobStyle = .light
 
         let editor = PromptTextView(frame: NSRect(x: 0, y: 0, width: 460, height: 24))
         editor.backgroundColor = .clear
@@ -79,6 +80,23 @@ struct ComposerEditor: NSViewRepresentable {
             let measured = min(136, max(28, ceil(content)))
             if measured != parent.height { parent.height = measured }
         }
+    }
+}
+
+private final class EditorScrollView: NSScrollView {
+    private var hoverArea: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverArea { removeTrackingArea(hoverArea) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+                                  owner: self, userInfo: nil)
+        addTrackingArea(area)
+        hoverArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        flashScrollers()
     }
 }
 
