@@ -67,7 +67,10 @@ body{margin:0;font-family:var(--font-sans);color:var(--foreground)}
        linear-gradient(#000,#000) bottom / 100% calc(100% - var(--r)) no-repeat}
 
 /* top tray contents */
-.hdr{display:flex;align-items:center;gap:6px;height:34px;padding:0 6px 0 12px}
+.hdr{display:flex;align-items:center;gap:6px;height:34px;padding:0 6px}
+/* Close: top-left, mirrors the right-hand buttons. Hides the panel, same as Esc. */
+.hdr .close svg{width:12px;height:12px}
+.hdr .close+.dot{margin-left:1px}
 .dot{width:6px;height:6px;border-radius:50%;background:var(--success);flex:none}
 .ttl{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}
 .ttl small{font-weight:400;color:var(--muted-foreground);margin-left:6px}
@@ -216,8 +219,8 @@ function footer({send='off', modelOpen=false}={}){
     <span class="ctl model ${modelOpen?'open':''}"><svg class="claude"><use href="#i-burst"/></svg>Opus 5.5<span class="bars"><i class="on" style="height:4px"></i><i class="on" style="height:7px"></i><i style="height:9px"></i><i style="height:11px"></i></span>${modelOpen?`<svg style="width:12px;height:12px"><use href="#i-chev"/></svg>`:''}</span>
     <span class="ctl">${ic('mic')}</span>${s}</div></div>`;
 }
-function trayTop({title, sub='No project', dot='var(--success)', openHover=false, body}){
-  return `<div class="tray-top"><div class="hdr"><span class="dot" style="background:${dot}"></span>
+function trayTop({title, sub='No project', dot='var(--success)', openHover=false, closeHover=false, body}){
+  return `<div class="tray-top"><div class="hdr"><span class="ib close ${closeHover?'hv':''}" title="Close (Esc)">${ic('x')}</span><span class="dot" style="background:${dot}"></span>
     <div class="ttl">${title}<small>${sub}</small></div>
     <span class="ib" title="New chat">${ic('new')}</span><span class="ib ${openHover?'hv':''}" title="Open in T3">${ic('open')}</span></div>
     <div class="msgs under">${body}</div></div>`;
@@ -245,10 +248,10 @@ const states = [
   [shell({tray: trayTop({title:'Mobile layout bug', body:`<div class="msg-u"><div class="thumbs">${thumb()}${thumb(60)}</div>What's wrong with this layout on mobile?</div><div class="step">${ic('check')}Read 2 images</div><div class="working"><span class="pulse"><i></i><i></i><i></i></span>Working · 14s</div>`}),
      input: ph('Queue a follow-up…'), send:'stop'}),
    `<b>3 · Working.</b> The tray slides up out of the input on first send. One status line, and send becomes a red stop ring.`],
-  [shell({tray: trayTop({title:'Mobile layout bug', body:`<div class="msg-u"><div class="thumbs">${thumb()}${thumb(60)}</div>What's wrong with this layout on mobile?</div>` +
+  [shell({tray: trayTop({title:'Mobile layout bug', closeHover:true, body:`<div class="msg-u"><div class="thumbs">${thumb()}${thumb(60)}</div>What's wrong with this layout on mobile?</div>` +
      reply(['The sidebar keeps its fixed <code>280px</code> width below the breakpoint, so the main column gets squeezed to about 90px.','Drop the fixed width under <code>md</code> and let the sidebar collapse into the header menu.'],'09:42')}),
      input: ph('Ask a follow-up…')}),
-   `<b>4 · Replied.</b> Replies are plain text on the tray, with no bubble. Only your own messages sit in bubbles. Under it, as in T3: the copy button, then the time, left-aligned.`],
+   `<b>4 · Replied.</b> Replies are plain text on the tray, with no bubble. Only your own messages sit in bubbles. Under it, as in T3: the copy button, then the time, left-aligned. The × at the top left (shown hovered) hides Float, same as <span class="kbd">Esc</span>.`],
   [shell({tray: trayTop({title:'Clean up node_modules', dot:'var(--warning)', openHover:true, body:`<div class="msg-u">Find and delete stale node_modules folders under ~/repos</div><div class="notice warn">${ic('shield')}<div><b>Needs your approval</b>Wants to run <code>rm -rf</code> on 14 folders.<div><span class="btn pri">${ic('open')}Open in T3</span></div></div></div>`}),
      input: ph('Waiting on approval in T3…')}),
    `<b>5 · Needs input.</b> Approvals hand off to the thread in T3. Header dot turns amber.`],
