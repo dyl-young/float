@@ -342,11 +342,12 @@ struct FloatView: View {
     }
 
     private func previewRow(_ previews: [Data]) -> some View {
-        HStack(spacing: 6) {
+        RightAlignedFlowLayout(spacing: 6) {
             ForEach(previews.indices, id: \.self) { index in
                 ImagePreview(data: previews[index], label: "Sent image \(index + 1)", size: 64, radius: 8)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 
     private func formatted(_ text: String) -> AttributedString {
@@ -494,6 +495,64 @@ struct FloatView: View {
 }
 
 // MARK: - Pieces
+
+private struct RightAlignedFlowLayout: Layout {
+    let spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        layout(subviews, width: proposal.width ?? .infinity).size
+    }
+
+    func placeSubviews(
+        in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+    ) {
+        let result = layout(subviews, width: bounds.width)
+        for row in result.rows {
+            var x = bounds.maxX - row.width
+            for item in row.items {
+                item.subview.place(
+                    at: CGPoint(x: x, y: bounds.minY + row.y),
+                    anchor: .topLeading,
+                    proposal: ProposedViewSize(item.size)
+                )
+                x += item.size.width + spacing
+            }
+        }
+    }
+
+    private func layout(_ subviews: Subviews, width: CGFloat) -> (size: CGSize, rows: [Row]) {
+        var rows: [Row] = []
+        var row = Row()
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            let nextWidth = row.items.isEmpty ? size.width : row.width + spacing + size.width
+            if nextWidth > width, !row.items.isEmpty {
+                rows.append(row)
+                row = Row(y: row.y + row.height + spacing)
+            }
+            row.items.append(Item(subview: subview, size: size))
+            row.width = row.items.count == 1 ? size.width : row.width + spacing + size.width
+            row.height = max(row.height, size.height)
+        }
+        if !row.items.isEmpty { rows.append(row) }
+        return (
+            CGSize(width: rows.map(\.width).max() ?? 0, height: rows.last.map { $0.y + $0.height } ?? 0),
+            rows
+        )
+    }
+
+    private struct Item {
+        let subview: LayoutSubview
+        let size: CGSize
+    }
+
+    private struct Row {
+        var items: [Item] = []
+        var width: CGFloat = 0
+        var height: CGFloat = 0
+        var y: CGFloat = 0
+    }
+}
 
 private struct ModelButton: View {
     @ObservedObject var chat: ChatState
