@@ -9,6 +9,7 @@ import UniformTypeIdentifiers
 struct FloatView: View {
     @ObservedObject var chat: ChatState
     let resize: (CGFloat) -> Void
+    let dismiss: () -> Void
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.displayScale) private var displayScale
@@ -27,6 +28,8 @@ struct FloatView: View {
     private static let maxHeight: CGFloat = 560
     private nonisolated static let shellSpace = "Float shell"
     private static let latest = "Latest message"
+    private static let edgeButtonSize: CGFloat = 26
+    private static let edgeButtonInset: CGFloat = 9
     private let inputShape = RoundedRectangle(cornerRadius: Theme.radius)
 
     private var showsTray: Bool { chat.hasConversation || chat.notice != nil }
@@ -62,6 +65,7 @@ struct FloatView: View {
                         inputHeight = $0.height
                         inputTop = $0.minY
                     }
+                    .padding(.horizontal, 1)
                 footer
             }
             .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { composerHeight = ceil($0) }
@@ -192,6 +196,8 @@ struct FloatView: View {
 
     private var header: some View {
         HStack(spacing: 6) {
+            PanelButton("Close · Esc", systemImage: "xmark", size: Self.edgeButtonSize, action: dismiss)
+                .offset(y: -1)
             Circle().fill(statusColor).frame(width: 6, height: 6).accessibilityHidden(true)
             HStack(spacing: 0) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -211,13 +217,12 @@ struct FloatView: View {
             .overlay {
                 PanelDragHandle().accessibilityHidden(true)
             }
-            PanelButton("New chat · ⌘N", systemImage: "square.and.pencil", size: 26, action: chat.newChat)
+            PanelButton("New chat · ⌘N", systemImage: "square.and.pencil", size: Self.edgeButtonSize, action: chat.newChat)
                 .disabled(chat.submitting || !chat.hasConversation)
-            PanelButton("Open in T3", systemImage: "arrow.up.forward.square", size: 26, action: chat.openThread)
+            PanelButton("Open in T3", systemImage: "arrow.up.forward.square", size: Self.edgeButtonSize, action: chat.openThread)
                 .disabled(chat.reference?.desktopURL == nil)
         }
-        .padding(.leading, 14)
-        .padding(.trailing, 8)
+        .padding(.horizontal, Self.edgeButtonInset)
         .frame(height: Self.headerHeight)
     }
 
@@ -415,7 +420,8 @@ struct FloatView: View {
 
     private var footer: some View {
         HStack(spacing: 4) {
-            PanelButton("Attach images", systemImage: "paperclip", size: 28, action: chooseImages)
+            PanelButton("Attach images", systemImage: "paperclip", size: Self.edgeButtonSize, action: chooseImages)
+                .offset(x: 0.5, y: -1)
             PanelDragHandle()
                 .frame(maxWidth: .infinity)
                 .frame(height: 30)
@@ -423,8 +429,7 @@ struct FloatView: View {
             modelPicker
             sendButton
         }
-        .padding(.leading, 8)
-        .padding(.trailing, 9)
+        .padding(.horizontal, Self.edgeButtonInset)
         .frame(height: 40)
         .background {
             TrayShape(side: .bottom)
@@ -446,11 +451,10 @@ struct FloatView: View {
         } label: {
             sendGlyph(stopping: stopping)
                 .foregroundStyle(tint.opacity(stopping || chat.canSend ? 1 : 0.7))
-                .frame(width: 26, height: 26)
+                .frame(width: Self.edgeButtonSize, height: Self.edgeButtonSize)
                 .overlay {
                     Circle().strokeBorder(tint.opacity(stopping || chat.canSend ? 1 : 0.45), lineWidth: 1.5)
                 }
-                .frame(width: 30, height: 30)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -498,7 +502,7 @@ private struct ModelButton: View {
 
     var body: some View {
         Button(action: chat.requestModelPicker) {
-            HStack(spacing: 6) {
+            HStack(alignment: .center, spacing: 6) {
                 ProviderGlyph(driverKind: chat.selectedCatalogModel?.driverKind ?? chat.selectedModel?.instanceId)
                 Text(chat.selectedCatalogModel?.shortLabel ?? chat.modelLabel)
                     .font(.system(size: 12, weight: .medium))
@@ -507,6 +511,7 @@ private struct ModelButton: View {
                     .font(.system(size: 8, weight: .bold))
                     .foregroundStyle(Theme.muted)
             }
+            .offset(y: -0.5)
             .padding(.horizontal, 8)
             .frame(height: 26)
             .background(hovered && enabled ? Color.white.opacity(0.08) : .clear, in: Capsule())

@@ -11,6 +11,7 @@ private final class FloatApp: NSObject, NSApplicationDelegate {
     private let chat: ChatState
     private var panel: FloatPanel?
     private var statusItem: NSStatusItem?
+    private var statusMenu: NSMenu?
     private var hotKey: EventHotKeyRef?
     private var hotKeyHandler: EventHandlerRef?
     private var desiredHeight: CGFloat = 79
@@ -96,7 +97,7 @@ private final class FloatApp: NSObject, NSApplicationDelegate {
         let host = NSHostingView(rootView: FloatView(chat: chat, resize: { [weak self] height in
             // SwiftUI may update its preferred size while the window is laying out.
             DispatchQueue.main.async { self?.resize(to: height) }
-        }))
+        }, dismiss: { [weak self] in self?.hide() }))
         host.sizingOptions = []
         panel.contentView = host
         self.panel = panel
@@ -141,8 +142,20 @@ private final class FloatApp: NSObject, NSApplicationDelegate {
         }
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Float", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-        item.menu = menu
+        item.button?.target = self
+        item.button?.action = #selector(statusItemClicked(_:))
+        item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
         statusItem = item
+        statusMenu = menu
+    }
+
+    @objc private func statusItemClicked(_ button: NSStatusBarButton) {
+        if NSApp.currentEvent?.type == .rightMouseUp {
+            let bottom = button.isFlipped ? button.bounds.maxY : button.bounds.minY
+            statusMenu?.popUp(positioning: nil, at: NSPoint(x: button.bounds.minX, y: bottom), in: button)
+        } else {
+            toggle()
+        }
     }
 
     private func installHotkey() {
