@@ -6,6 +6,7 @@ These mockups are the source of truth for Float's UI. When the app and a mockup 
 | --- | --- |
 | `shell-states.png`, `float-mockups.html` | The shell: a solid message tray, the frosted input and a solid footer, with concave corners where they meet. Also every state: summoned, pasted images, working, replied, needs approval, asks a question, T3 offline, model picker. |
 | `pickers.png`, `float-pickers.html` | Choosing a machine and a project (new chats only, never a branch or checkout), and the model picker across providers: favourites, provider tabs, search, disabled provider. |
+| `assets/providers/` | T3's own provider icons, copied from the T3 repo: `codex.svg` (T3 uses the OpenAI mark for Codex, in the text colour), `claude.svg` (`#D97757`), `cursor.svg` (`#EDECEC` on dark), and `antigravity.png` (T3 ships it as a 128px PNG). Float uses these exact assets, never redrawn approximations. |
 | `logo.png`, `float-*.svg` | The cloud logo: app icon, template glyph for the menu bar, and the filled variant. |
 
 Open the HTML files in a browser to inspect sizes. Their CSS variables map to `Sources/Float/Theme.swift`:
