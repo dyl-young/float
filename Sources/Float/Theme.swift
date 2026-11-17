@@ -19,6 +19,10 @@ enum Theme {
     static let warningSurface = Color(red: 0.209, green: 0.179, blue: 0.102)
     static let success = Color(red: 0.36, green: 0.78, blue: 0.56)
     static let claude = Color(red: 0.851, green: 0.467, blue: 0.341)
+    static let cursor = Color(red: 0.929, green: 0.925, blue: 0.925)
+    static let antigravity = Color(red: 0.357, green: 0.529, blue: 0.749)
+    static let openCode = Color(red: 0.945, green: 0.925, blue: 0.925)
+    static let openCodeInset = Color(red: 0.294, green: 0.275, blue: 0.275)
 
     static let radius: CGFloat = 16
 }

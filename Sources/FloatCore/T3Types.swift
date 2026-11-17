@@ -83,6 +83,7 @@ public struct T3Model: Identifiable, Equatable, Sendable {
     public let selection: T3ModelSelection
     public let label: String
     public let provider: String
+    public let driverKind: String
 
     public static func preferred(in models: [Self], saved: T3ModelSelection? = nil) -> Self? {
         models.first { $0.selection == saved }
@@ -115,7 +116,7 @@ struct T3ModelCatalog: Decodable, Sendable {
                     let selection = T3ModelSelection(instanceId: provider.providerInstanceId, model: model.id)
                     return T3Model(
                         selection: selection, label: model.label ?? selection.fallbackLabel,
-                        provider: provider.displayName ?? provider.driverKind
+                        provider: provider.displayName ?? provider.driverKind, driverKind: provider.driverKind
                     )
                 }
             }

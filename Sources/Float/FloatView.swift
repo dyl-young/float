@@ -392,7 +392,7 @@ private struct ModelButton: View {
     var body: some View {
         Button(action: chat.requestModelPicker) {
             HStack(spacing: 6) {
-                ProviderGlyph(instanceId: chat.selectedModel?.instanceId)
+                ProviderGlyph(driverKind: chat.selectedCatalogModel?.driverKind ?? chat.selectedModel?.instanceId)
                 Text(shortLabel)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(enabled ? Theme.text : Theme.muted)
@@ -470,34 +470,6 @@ private struct NoticeCard: View {
         .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(tint.opacity(0.35), lineWidth: 1)
-        }
-    }
-}
-
-/// Small provider mark for the model control: the Claude burst, or a neutral glyph.
-struct ProviderGlyph: View {
-    let instanceId: String?
-
-    var body: some View {
-        if instanceId == "claudeAgent" {
-            Canvas { context, size in
-                let c = CGPoint(x: size.width / 2, y: size.height / 2)
-                let outer = size.width / 2 - 0.5, inner = size.width * 0.13
-                for i in 0..<8 {
-                    let a = Double(i) * .pi / 4
-                    var line = Path()
-                    line.move(to: CGPoint(x: c.x + inner * cos(a), y: c.y + inner * sin(a)))
-                    line.addLine(to: CGPoint(x: c.x + outer * cos(a), y: c.y + outer * sin(a)))
-                    context.stroke(line, with: .color(Theme.claude), style: .init(lineWidth: 1.7, lineCap: .round))
-                }
-            }
-            .frame(width: 13, height: 13)
-            .accessibilityHidden(true)
-        } else {
-            Image(systemName: "sparkle")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(Theme.muted)
-                .accessibilityHidden(true)
         }
     }
 }

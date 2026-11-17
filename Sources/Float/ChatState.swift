@@ -81,8 +81,10 @@ final class ChatState: ObservableObject {
         savedModel == nil && selectedModel == defaultModel?.selection
     }
 
+    var selectedCatalogModel: T3Model? { models.first { $0.selection == selectedModel } }
+
     var modelLabel: String {
-        models.first { $0.selection == selectedModel }?.label
+        selectedCatalogModel?.label
             ?? selectedModel?.fallbackLabel
             ?? "Choose model"
     }
