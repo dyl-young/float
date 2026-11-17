@@ -23,6 +23,8 @@ final class ChatState: ObservableObject {
     @Published private(set) var title: String?
     @Published private(set) var status: RunStatus = .idle
     @Published private(set) var submitting = false
+    @Published private(set) var stopping = false
+    @Published private(set) var stopAcknowledged = false
     @Published private(set) var loading = false
     @Published private(set) var hasOlderMessages = false
     @Published private(set) var loadingOlder = false
@@ -47,6 +49,7 @@ final class ChatState: ObservableObject {
     private var visible = false
     private var expandedText: [String: (timestamp: String, text: String)] = [:]
     private var pendingMessage: ChatMessage?
+    private var activeRunId: String?
 
     init(client: T3Client, defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -65,8 +68,10 @@ final class ChatState: ObservableObject {
     }
 
     var hasConversation: Bool { reference != nil || submitting }
+    var showsStop: Bool { submitting || (status == .running && !stopAcknowledged) || stopping }
+    var canStop: Bool { showsStop && !stopping }
     var canSend: Bool {
-        !submitting && !loading && status != .running && status != .waiting &&
+        !submitting && !stopping && !loading && status != .running && status != .waiting &&
             (!draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !images.isEmpty)
     }
 
@@ -141,6 +146,9 @@ final class ChatState: ObservableObject {
         messages = []
         title = nil
         status = .idle
+        stopping = false
+        stopAcknowledged = false
+        activeRunId = nil
         notice = nil
         needsT3 = false
         loading = false
@@ -198,6 +206,7 @@ final class ChatState: ObservableObject {
         notice = nil
         needsT3 = false
         submitting = true
+        stopAcknowledged = false
         watcher?.cancel()
         watcher = nil
 
@@ -219,18 +228,47 @@ final class ChatState: ObservableObject {
                 pendingMessage = message
                 messages.append(message)
                 status = receipt.status
+                activeRunId = receipt.runId
                 if draft.trimmingCharacters(in: .whitespacesAndNewlines) == text { draft = "" }
                 let sent = Set(attachments.map(\.id))
                 images.removeAll { sent.contains($0.id) }
                 persist()
-                refresh(receipt.reference, force: true)
+                if stopping {
+                    await interrupt(receipt.reference, runId: receipt.runId, version: generation)
+                } else {
+                    refresh(receipt.reference, force: true)
+                }
             } catch {
+                stopping = false
                 showError(error)
                 if case T3Error.uncertainDelivery = error, let target { refresh(target, force: true) }
             }
             submitting = false
             focusRequest += 1
         }
+    }
+
+    func stop() {
+        guard canStop else { return }
+        stopping = true
+        // A first send may not have a thread or run ID until T3 acknowledges delivery.
+        guard !submitting, let reference else { return }
+        let version = generation
+        let runId = activeRunId
+        Task { await interrupt(reference, runId: runId, version: version) }
+    }
+
+    private func interrupt(_ reference: ThreadReference, runId: String?, version: Int) async {
+        do {
+            let accepted = try await client.stop(reference, runId: runId)
+            guard generation == version else { return }
+            stopAcknowledged = accepted && status == .running
+        } catch {
+            guard generation == version else { return }
+            showError(error)
+        }
+        stopping = false
+        refresh(reference, force: true)
     }
 
     func loadOlder() {
@@ -322,6 +360,8 @@ final class ChatState: ObservableObject {
                         hasOlderMessages = earliest != nil
                     }
                     status = page.thread.pendingRequestCount > 0 ? .waiting : page.thread.status
+                    activeRunId = page.recentRuns?.first { $0.status == .running }?.runId
+                    if status != .running { stopAcknowledged = false }
                     title = page.thread.title
                     threadModel = page.thread.modelSelection ?? threadModel
                     loading = false

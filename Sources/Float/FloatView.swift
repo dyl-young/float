@@ -186,7 +186,9 @@ struct FloatView: View {
         chat.reference?.desktopURL == nil ? nil : NoticeAction(title: "Open in T3", handle: { chat.openThread() })
     }
 
-    private var isThinking: Bool { chat.submitting || chat.loading || chat.status == .running }
+    private var isThinking: Bool {
+        !chat.stopAcknowledged && (chat.submitting || chat.loading || chat.status == .running)
+    }
 
     @ViewBuilder private var activity: some View {
         if let notice = chat.notice {
@@ -208,8 +210,8 @@ struct FloatView: View {
                 text: "The agent run failed.", tone: .error,
                 action: openAction
             )
-        } else if chat.status == .stopped {
-            Text("The agent run stopped.")
+        } else if chat.status == .stopped || chat.stopAcknowledged {
+            Text("Stopped")
                 .font(.system(size: 12))
                 .foregroundStyle(Theme.muted)
                 .padding(.leading, 2)
@@ -383,21 +385,37 @@ struct FloatView: View {
     }
 
     private var sendButton: some View {
-        Button(action: chat.send) {
-            Image(systemName: "arrow.up")
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(chat.canSend ? Theme.accent : Theme.muted.opacity(0.7))
+        let stopping = chat.showsStop
+        let tint = stopping ? Theme.error : chat.canSend ? Theme.accent : Theme.muted
+        let enabled = stopping ? chat.canStop : chat.canSend
+        return Button {
+            if stopping {
+                chat.stop()
+            } else {
+                chat.send()
+            }
+        } label: {
+            sendGlyph(stopping: stopping)
+                .foregroundStyle(tint.opacity(stopping || chat.canSend ? 1 : 0.7))
                 .frame(width: 26, height: 26)
                 .overlay {
-                    Circle().strokeBorder(chat.canSend ? Theme.accent : Theme.muted.opacity(0.45), lineWidth: 1.5)
+                    Circle().strokeBorder(tint.opacity(stopping || chat.canSend ? 1 : 0.45), lineWidth: 1.5)
                 }
                 .frame(width: 30, height: 30)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Send")
-        .help("Send · Return")
-        .disabled(!chat.canSend)
+        .accessibilityLabel(stopping ? "Stop" : "Send")
+        .help(stopping ? "Stop · ⌘." : "Send · Return")
+        .disabled(!enabled)
+    }
+
+    @ViewBuilder private func sendGlyph(stopping: Bool) -> some View {
+        if stopping {
+            RoundedRectangle(cornerRadius: 2).frame(width: 8, height: 8)
+        } else {
+            Image(systemName: "arrow.up").font(.system(size: 12, weight: .bold))
+        }
     }
 
     private var modelPicker: some View {

@@ -15,6 +15,9 @@ public struct T3Client: Sendable {
     }
 
     private struct Empty: Decodable {}
+    private struct Interruption: Decodable {
+        let status: String
+    }
 
     private let transport: MCPTransport
 
@@ -136,6 +139,16 @@ public struct T3Client: Sendable {
             "threadId": thread.threadId, "view": "messages", "limit": 40, "maxCharsPerItem": 20_000,
             "beforePosition": before ?? 9_007_199_254_740_991, "runLimit": 1,
         ])
+    }
+
+    /// True when T3 accepted the interrupt or the run was already stopped.
+    public func stop(_ thread: ThreadReference, runId: String?) async throws -> Bool {
+        var arguments = ["threadId": thread.threadId]
+        arguments["runId"] = runId
+        let result = try await transport.call(
+            "t3_thread_interrupt", arguments, result: Interruption.self
+        )
+        return result.status == "interrupt_requested" || RunStatus(result.status) == .stopped
     }
 
     public func readRemainder(

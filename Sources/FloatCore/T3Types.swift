@@ -177,6 +177,11 @@ public enum RunStatus: Equatable, Sendable {
 extension RunStatus: Decodable {}
 
 public struct ThreadSnapshot: Decodable, Sendable {
+    public struct Run: Decodable, Sendable {
+        public let runId: String
+        public let status: RunStatus
+    }
+
     public struct Thread: Decodable, Sendable {
         public let title: String
         public let status: RunStatus
@@ -209,6 +214,7 @@ public struct ThreadSnapshot: Decodable, Sendable {
 
     public let thread: Thread
     public let items: [Item]
+    public let recentRuns: [Run]?
     public let earlierPosition: Int?
 }
 

@@ -92,6 +92,7 @@ private final class FloatApp: NSObject, NSApplicationDelegate {
         panel.dismiss = { [weak self] in self?.hide() }
         panel.startNewChat = { [weak self] in self?.chat.newChat() }
         panel.openModelPicker = { [weak self] in self?.chat.requestModelPicker() }
+        panel.stopRun = { [weak self] in self?.chat.stop() }
         let host = NSHostingView(rootView: FloatView(chat: chat, resize: { [weak self] height in
             // SwiftUI may update its preferred size while the window is laying out.
             DispatchQueue.main.async { self?.resize(to: height) }

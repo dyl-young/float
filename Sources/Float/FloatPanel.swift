@@ -5,6 +5,7 @@ final class FloatPanel: NSPanel {
     var dismiss: (() -> Void)?
     var startNewChat: (() -> Void)?
     var openModelPicker: (() -> Void)?
+    var stopRun: (() -> Void)?
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
@@ -17,6 +18,9 @@ final class FloatPanel: NSPanel {
             return true
         case ("m", [.command, .shift]):
             if !event.isARepeat { openModelPicker?() }
+            return true
+        case (".", .command):
+            if !event.isARepeat { stopRun?() }
             return true
         default:
             return super.performKeyEquivalent(with: event)
