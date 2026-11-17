@@ -261,7 +261,10 @@ struct FloatView: View {
 
             HStack(spacing: 6) {
                 PanelButton("Attach images", systemImage: "paperclip", action: chooseImages)
-                Spacer()
+                PanelDragHandle()
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 30)
+                    .accessibilityHidden(true)
                 Text("Opus 5.5")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(FloatPalette.muted)
@@ -340,6 +343,30 @@ struct FloatView: View {
         guard let window = NSApp.keyWindow else { return }
         panel.beginSheetModal(for: window) { result in
             if result == .OK { chat.addImageFiles(panel.urls) }
+        }
+    }
+}
+
+private struct PanelDragHandle: NSViewRepresentable {
+    func makeNSView(context: Context) -> DragView {
+        let view = DragView()
+        view.toolTip = "Drag to move Float"
+        return view
+    }
+
+    func updateNSView(_ view: DragView, context: Context) {}
+
+    final class DragView: NSView {
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+        override var mouseDownCanMoveWindow: Bool { false }
+
+        override func resetCursorRects() {
+            super.resetCursorRects()
+            addCursorRect(bounds, cursor: .openHand)
+        }
+
+        override func mouseDown(with event: NSEvent) {
+            window?.performDrag(with: event)
         }
     }
 }

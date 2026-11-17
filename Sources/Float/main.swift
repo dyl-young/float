@@ -31,7 +31,6 @@ private final class FloatApp: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var hotKey: EventHotKeyRef?
     private var hotKeyHandler: EventHandlerRef?
-    private var screenNumber: NSNumber?
     private var desiredHeight: CGFloat = 79
     private var positioned = false
     private var shuttingDown = false
@@ -75,9 +74,7 @@ private final class FloatApp: NSObject, NSApplicationDelegate {
         let panel = self.panel ?? makePanel()
         let pointer = NSEvent.mouseLocation
         if let screen = NSScreen.screens.first(where: { $0.frame.contains(pointer) }) ?? NSScreen.main {
-            let id = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
-            if screenNumber != id { positioned = false }
-            screenNumber = id
+            if panel.screen != screen { positioned = false }
             layout(on: screen)
         }
         panel.orderFrontRegardless()
