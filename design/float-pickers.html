@@ -63,21 +63,25 @@ body{margin:0;font-family:var(--font-sans);color:var(--foreground)}
        linear-gradient(#000,#000) bottom / 100% calc(100% - var(--r)) no-repeat}
 
 /* top tray contents */
-.hdr{display:flex;align-items:center;gap:6px;height:34px;padding:0 6px 0 12px}
+.hdr{display:flex;align-items:center;gap:6px;height:34px;padding:0 9px}
+.hdr .close svg{width:12px;height:12px}
+.hdr .close+.dot{margin-left:1px}
 .dot{width:6px;height:6px;border-radius:50%;background:var(--success);flex:none}
 .ttl{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}
 .ttl small{font-weight:400;color:var(--muted-foreground);margin-left:6px}
 .ib{width:24px;height:24px;border-radius:7px;display:grid;place-items:center;color:var(--muted-foreground);flex:none}
 .ib.hv{background:color-mix(in oklab, var(--foreground) 9%, transparent);color:var(--foreground)}
 .ib svg{width:14px;height:14px}
-.msgs{padding:4px 12px 12px;display:flex;flex-direction:column;gap:10px}
+.msgs{padding:4px 12px 12px;display:flex;flex-direction:column;gap:12px}
 .msg-u{align-self:flex-end;max-width:84%;background:var(--user);border-radius:12px 12px 4px 12px;padding:7px 10px;font-size:12.5px;line-height:1.45}
 .thumbs{display:flex;gap:5px;justify-content:flex-end;margin-bottom:6px}
 .thumb{width:54px;height:40px;border-radius:7px;border:1px solid var(--line);position:relative;
   background:linear-gradient(135deg, color-mix(in oklab, var(--chart-3) 55%, var(--card)), color-mix(in oklab, var(--chart-1) 45%, var(--card)))}
 .thumb::after{content:"";position:absolute;inset:8px 8px auto 8px;height:4px;border-radius:2px;background:rgba(255,255,255,.35);box-shadow:0 8px 0 rgba(255,255,255,.22),0 16px 0 rgba(255,255,255,.16)}
-.msg-a{max-width:94%;background:color-mix(in oklab, var(--foreground) 4%, transparent);border:1px solid var(--line);border-radius:12px 12px 12px 4px;padding:8px 10px 4px;font-size:12.5px;line-height:1.5}
-.msg-a p{margin:0 0 6px}
+/* Assistant replies: plain text on the tray, no bubble, as in T3. Under it, a muted row: copy icon first, then the time, left-aligned. */
+.msg-a{padding:2px 2px 0;font-size:12.5px;line-height:1.55}
+.msg-a p{margin:0 0 7px}
+.msg-a .meta{justify-content:flex-start;gap:6px;margin:2px 0 0 -4px}
 code{font-family:var(--font-mono);font-size:11.5px;background:var(--code-background);padding:1px 4px;border-radius:4px}
 .meta{display:flex;align-items:center;gap:4px;justify-content:flex-end;color:var(--muted-foreground);font-size:10.5px;margin:0 -4px 0 0}
 .meta .ib{width:20px;height:20px}.meta .ib svg{width:12px;height:12px}
@@ -102,6 +106,8 @@ code{font-family:var(--font-mono);font-size:11.5px;background:var(--code-backgro
 
 /* frosted input */
 .input{padding:14px 16px 12px;font-size:13px;line-height:1.45;min-height:calc(1lh + 26px)}
+/* T3 rim, inset 1px from the shell edge so the two lines never merge. */
+.input{border-radius:var(--r);box-shadow:inset 0 0 0 1px color-mix(in oklab, var(--foreground) 9%, transparent);margin-inline:1px}
 .ph{color:var(--muted-foreground)}
 .caret{display:inline-block;width:1.5px;height:15px;background:var(--primary);vertical-align:-3px;margin-left:1px;animation:b 1s steps(1) infinite}
 @keyframes b{50%{opacity:0}}
@@ -266,7 +272,7 @@ document.getElementById('g1').innerHTML=[
     `<b>2 · Run on.</b> Lists T3’s linked machines with live status. Offline ones are dimmed. Switching machines resets the project if it doesn’t exist there.`,200),
   cell(shell({input:ph('Ask anything…')})+ctx({dev:'Mac mini',devIcon:'p-server',proj:'float',projOpen:true,projPop}),
     `<b>3 · Project.</b> Type to filter. No project is always first. Only projects on the chosen machine show. <span class="kbd">⇧</span><span class="kbd">⌘</span><span class="kbd">P</span> opens it.`,190),
-  cell(shell({tray:`<div class="tray-top"><div class="hdr"><span class="dot"></span><div class="ttl">Fix the panel resize<small style="display:inline-flex;align-items:center;gap:6px">${ic('p-folder').replace('<svg','<svg style="width:11px;height:11px"')}float · Mac mini</small></div><span class="ib"><svg><use href="#i-new"/></svg></span><span class="ib"><svg><use href="#i-open"/></svg></span></div><div class="msgs"><div class="msg-u">Why does the panel jump when the tray opens?</div><div class="msg-a"><p>The window resizes before SwiftUI lays out the tray, so it renders one frame at the old height.</p><div class="meta">09:41<span class="ib"><svg><use href="#i-copy"/></svg></span></div></div></div></div>`,input:ph('Ask a follow-up…')}),
+  cell(shell({tray:`<div class="tray-top"><div class="hdr"><span class="ib close"><svg><use href="#i-x"/></svg></span><span class="dot"></span><div class="ttl">Fix the panel resize<small style="display:inline-flex;align-items:center;gap:6px">${ic('p-folder').replace('<svg','<svg style="width:11px;height:11px"')}float · Mac mini</small></div><span class="ib"><svg><use href="#i-new"/></svg></span><span class="ib"><svg><use href="#i-open"/></svg></span></div><div class="msgs"><div class="msg-u">Why does the panel jump when the tray opens?</div><div class="msg-a"><p>The window resizes before SwiftUI lays out the tray, so it renders one frame at the old height.</p><div class="meta"><span class="ib"><svg><use href="#i-copy"/></svg></span>09:41</div></div></div></div>`,input:ph('Ask a follow-up…')}),
     `<b>4 · After the first send.</b> Machine and project are fixed for the thread. They move into the header subtitle and the context row goes away. ⌘N starts fresh.`),
 ].join('');
 
