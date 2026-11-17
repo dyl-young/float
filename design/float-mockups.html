@@ -143,6 +143,19 @@ code{font-family:var(--font-mono);font-size:11.5px;background:var(--code-backgro
 
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px 16px;align-items:start}
 @media (max-width:600px){.grid{grid-template-columns:1fr}.desk .shell{left:16px;width:auto}.app{width:calc(100% - 36px)}}
+
+/* v3: opaque panel; the frosted input blurs the messages scrolling behind it, not the desktop */
+.shell{background:var(--solid);backdrop-filter:none;-webkit-backdrop-filter:none}
+.tray-top::before{display:none}
+.input{position:relative;z-index:1;background:color-mix(in oklab, var(--foreground) 6%, color-mix(in oklab, var(--card) 35%, transparent));backdrop-filter:blur(5px) saturate(1.3);-webkit-backdrop-filter:blur(5px) saturate(1.3)}
+.input.over{margin-top:calc(-1 * var(--ov, 34px))}
+.input.over::before,.input.over::after{content:"";position:absolute;top:0;width:var(--r);height:var(--r);background:var(--solid);pointer-events:none}
+.input.over::before{left:0;-webkit-mask:radial-gradient(circle at 100% 100%, transparent calc(var(--r) - .5px), #000 var(--r));mask:radial-gradient(circle at 100% 100%, transparent calc(var(--r) - .5px), #000 var(--r))}
+.input.over::after{right:0;-webkit-mask:radial-gradient(circle at 0 100%, transparent calc(var(--r) - .5px), #000 var(--r));mask:radial-gradient(circle at 0 100%, transparent calc(var(--r) - .5px), #000 var(--r))}
+.tray-foot{z-index:2}
+.msgs.under{padding-bottom:calc(var(--ov, 34px) + 10px)}
+.desk .msgs.under{padding-bottom:0}
+.desk .input.over{--ov:58px}
 </style>
 </head>
 <body>
@@ -181,7 +194,7 @@ code{font-family:var(--font-mono);font-size:11.5px;background:var(--code-backgro
       </div>
       <div class="kbd-hint"><span class="kbd">⌥</span><span class="kbd">Space</span> show / hide · <span class="kbd">Esc</span> hide</div>
     </div>
-    <p class="cap">The input bar is the anchor. The message tray grows <b>up</b> out of it once a chat starts, so the composer stays put under your cursor from first keystroke to follow-up.</p>
+    <p class="cap">The panel is opaque. Messages scroll up <b>behind</b> the frosted input and blur through it, as in T3’s composer; the desktop never shows through. The input bar is the anchor. The message tray grows <b>up</b> out of it once a chat starts, so the composer stays put under your cursor from first keystroke to follow-up.</p>
   </div>
 
   <div>
@@ -203,10 +216,10 @@ function trayTop({title, sub='No project', dot='var(--success)', openHover=false
   return `<div class="tray-top"><div class="hdr"><span class="dot" style="background:${dot}"></span>
     <div class="ttl">${title}<small>${sub}</small></div>
     <span class="ib" title="New chat">${ic('new')}</span><span class="ib ${openHover?'hv':''}" title="Open in T3">${ic('open')}</span></div>
-    <div class="msgs">${body}</div></div>`;
+    <div class="msgs under">${body}</div></div>`;
 }
 function shell({tray='', input, send, modelOpen, extra='', style=''}){
-  return `<div class="shell" style="${style}">${extra}${tray}<div class="input">${input}</div>${footer({send, modelOpen})}</div>`;
+  return `<div class="shell" style="${style}">${extra}${tray}<div class="input${tray?' over':''}">${input}</div>${footer({send, modelOpen})}</div>`;
 }
 const ph = (t) => `<span class="ph">${t}</span>`;
 const thumb = (h=0) => `<div class="thumb" style="filter:hue-rotate(${h}deg)"></div>`;
@@ -216,7 +229,7 @@ const chip = (n,h=0) => `<div class="chip"><div class="mini" style="filter:hue-r
 document.getElementById('hero').insertAdjacentHTML('beforeend', shell({
   tray: trayTop({title:'Why is my zsh prompt slow', body:
     `<div class="msg-u"><div class="thumbs">${thumb()}</div>Why does my prompt take 2s to show up? Profile screenshot attached.</div>` +
-    reply(['Most of it is <code>nvm</code> loading at startup: 1.6s of the 2.1s in your profile.','Lazy-load it so it only runs the first time you call <code>node</code>.'],'09:41')}),
+    reply(['Most of it is <code>nvm</code> loading at startup: 1.6s of the 2.1s in your profile.','Lazy-load it so it only runs the first time you call <code>node</code>. Add a small wrapper in your <code>.zshrc</code> that defines <code>node</code>, <code>npm</code> and <code>npx</code>, loads nvm on first use, then hands off to the real command.'],'09:41')}),
   input: ph('Ask a follow-up…')
 }));
 
