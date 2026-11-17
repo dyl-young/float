@@ -183,7 +183,7 @@ struct FloatView: View {
         if chat.submitting || chat.loading || chat.status == .running {
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small).scaleEffect(0.76)
-                Text(chat.submitting ? "Sending…" : chat.loading ? "Loading chat…" : "Waiting for Claude Code…")
+                Text(chat.submitting ? "Sending…" : chat.loading ? "Loading chat…" : "Waiting for a reply…")
                 Spacer()
             }
             .font(.system(size: 12))
@@ -265,10 +265,7 @@ struct FloatView: View {
                     .frame(maxWidth: .infinity)
                     .frame(height: 30)
                     .accessibilityHidden(true)
-                Text("Opus 5.5")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(FloatPalette.muted)
-                    .help("Claude Opus 5.5 via Claude Code")
+                modelPicker
                 Button(action: chat.send) {
                     Image(systemName: "arrow.up")
                         .font(.system(size: 13, weight: .semibold))
@@ -308,6 +305,48 @@ struct FloatView: View {
             shape.strokeBorder(FloatPalette.border, lineWidth: 1)
                 .allowsHitTesting(false)
         }
+    }
+
+    private var modelPicker: some View {
+        Menu {
+            if chat.loadingModels {
+                Text("Loading models…")
+            } else if chat.modelCatalogFailed {
+                Text("Couldn’t load models from T3")
+            } else if chat.models.isEmpty {
+                Text("No enabled Codex or Claude models")
+            }
+
+            ForEach(chat.models) { model in
+                Button {
+                    chat.selectModel(model)
+                } label: {
+                    let name = "\(model.label) · \(model.provider)"
+                    if model.selection == chat.selectedModel {
+                        Label(name, systemImage: "checkmark")
+                    } else {
+                        Text(name)
+                    }
+                }
+            }
+
+            Divider()
+            Button("Reload Models", action: chat.reloadModels)
+                .disabled(chat.loadingModels)
+        } label: {
+            HStack(spacing: 5) {
+                Text(chat.modelLabel).lineLimit(1)
+                Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold))
+            }
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(FloatPalette.muted)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .disabled(!chat.canChooseModel)
+        .accessibilityLabel("Model")
+        .accessibilityValue(chat.modelLabel)
     }
 
     private var draftImages: some View {

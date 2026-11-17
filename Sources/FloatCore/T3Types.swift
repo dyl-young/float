@@ -60,10 +60,73 @@ public struct ThreadReference: Codable, Equatable, Sendable {
     }
 }
 
+public struct T3ModelSelection: Codable, Hashable, Sendable {
+    public let instanceId: String
+    public let model: String
+
+    public init(instanceId: String, model: String) {
+        self.instanceId = instanceId
+        self.model = model
+    }
+
+    var arguments: [String: String] { ["instanceId": instanceId, "model": model] }
+
+    public var fallbackLabel: String {
+        guard model.hasPrefix("gpt-") else { return model }
+        let parts = model.dropFirst(4).split(separator: "-")
+        return "GPT-" + parts.map { $0.capitalized }.joined(separator: " ")
+    }
+}
+
+public struct T3Model: Identifiable, Equatable, Sendable {
+    public var id: T3ModelSelection { selection }
+    public let selection: T3ModelSelection
+    public let label: String
+    public let provider: String
+
+    public static func preferred(in models: [Self], saved: T3ModelSelection? = nil) -> Self? {
+        models.first { $0.selection == saved }
+            ?? models.first { $0.selection.instanceId == "claudeAgent" && $0.selection.model == "claude-opus-5-5" }
+            ?? models.first { $0.selection.instanceId == "codex" && $0.selection.model == "gpt-6.1-sol" }
+            ?? models.first
+    }
+}
+
+struct T3ModelCatalog: Decodable, Sendable {
+    struct Provider: Decodable, Sendable {
+        struct Model: Decodable, Sendable {
+            let id: String
+            let label: String?
+        }
+
+        let providerInstanceId: String
+        let driverKind: String
+        let displayName: String?
+        let constraints: [String]
+        let models: [Model]
+    }
+
+    let providers: [Provider]
+
+    var available: [T3Model] {
+        providers.filter { ["codex", "claudeAgent"].contains($0.driverKind) && $0.constraints.isEmpty }
+            .flatMap { provider in
+                provider.models.map { model in
+                    let selection = T3ModelSelection(instanceId: provider.providerInstanceId, model: model.id)
+                    return T3Model(
+                        selection: selection, label: model.label ?? selection.fallbackLabel,
+                        provider: provider.displayName ?? provider.driverKind
+                    )
+                }
+            }
+    }
+}
+
 public struct ThreadReceipt: Sendable {
     public let reference: ThreadReference
     public let runId: String
     public let status: RunStatus
+    public let modelSelection: T3ModelSelection?
 }
 
 public enum RunStatus: Equatable, Sendable {
@@ -94,6 +157,13 @@ public struct ThreadSnapshot: Decodable, Sendable {
         public let status: RunStatus
         public let pendingRequestCount: Int
         public let link: URL?
+        public let providerInstanceId: String?
+        public let model: String?
+
+        public var modelSelection: T3ModelSelection? {
+            guard let providerInstanceId, let model else { return nil }
+            return T3ModelSelection(instanceId: providerInstanceId, model: model)
+        }
     }
 
     public struct Item: Decodable, Identifiable, Sendable {

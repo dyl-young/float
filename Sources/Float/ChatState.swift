@@ -29,6 +29,12 @@ final class ChatState: ObservableObject {
     @Published private(set) var notice: String?
     @Published private(set) var needsT3 = false
     @Published private(set) var focusRequest = 0
+    @Published private(set) var models: [T3Model] = []
+    @Published private(set) var loadingModels = false
+    @Published private(set) var modelCatalogFailed = false
+    @Published private var threadModel: T3ModelSelection?
+    @Published private var nextModel: T3ModelSelection?
+    @Published private var savedModel: T3ModelSelection?
 
     private let defaults: UserDefaults
     private let client: T3Client
@@ -45,6 +51,9 @@ final class ChatState: ObservableObject {
         self.defaults = defaults
         self.client = client
         draft = defaults.string(forKey: "draft") ?? ""
+        if let data = defaults.data(forKey: "preferredModel") {
+            savedModel = try? JSONDecoder().decode(T3ModelSelection.self, from: data)
+        }
         if let data = defaults.data(forKey: "thread"),
             let stored = try? JSONDecoder().decode(ThreadReference.self, from: data) {
             reference = stored
@@ -60,9 +69,47 @@ final class ChatState: ObservableObject {
             (!draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !images.isEmpty)
     }
 
+    var selectedModel: T3ModelSelection? {
+        if reference != nil { return nextModel ?? threadModel }
+        return T3Model.preferred(in: models, saved: savedModel)?.selection
+    }
+
+    var modelLabel: String {
+        models.first { $0.selection == selectedModel }?.label
+            ?? selectedModel?.fallbackLabel
+            ?? "Choose model"
+    }
+
+    var canChooseModel: Bool {
+        !submitting && !loading && status != .running && status != .waiting
+    }
+
+    func reloadModels() {
+        guard !loadingModels else { return }
+        loadingModels = true
+        modelCatalogFailed = false
+        Task {
+            defer { loadingModels = false }
+            do {
+                models = try await client.models()
+            } catch {
+                modelCatalogFailed = true
+            }
+        }
+    }
+
+    func selectModel(_ model: T3Model) {
+        guard canChooseModel else { return }
+        savedModel = model.selection
+        if reference != nil { nextModel = model.selection == threadModel ? nil : model.selection }
+        defaults.set(try? JSONEncoder().encode(model.selection), forKey: "preferredModel")
+        focusRequest += 1
+    }
+
     func revealed() {
         visible = true
         focusRequest += 1
+        if models.isEmpty { reloadModels() }
         if let reference { refresh(reference, force: watcher == nil) }
     }
 
@@ -76,6 +123,8 @@ final class ChatState: ObservableObject {
         draft = ""
         images = []
         reference = nil
+        threadModel = nil
+        nextModel = nil
         messages = []
         title = nil
         status = .idle
@@ -128,6 +177,7 @@ final class ChatState: ObservableObject {
         let attachments = images
         let request = UUID()
         let target = reference
+        let selection = target == nil ? selectedModel : nextModel
         notice = nil
         needsT3 = false
         submitting = true
@@ -136,8 +186,12 @@ final class ChatState: ObservableObject {
 
         Task {
             do {
-                let receipt = try await client.send(text, images: attachments, thread: target, requestId: request)
+                let receipt = try await client.send(
+                    text, images: attachments, thread: target, requestId: request, modelSelection: selection
+                )
                 reference = receipt.reference
+                threadModel = receipt.modelSelection ?? threadModel
+                nextModel = nil
                 if !attachments.isEmpty {
                     previews[receipt.runId] = attachments.compactMap { Self.thumbnail($0.data) }
                 }
@@ -251,6 +305,7 @@ final class ChatState: ObservableObject {
                     }
                     status = page.thread.pendingRequestCount > 0 ? .waiting : page.thread.status
                     title = page.thread.title
+                    threadModel = page.thread.modelSelection ?? threadModel
                     loading = false
                     if needsT3 {
                         notice = nil

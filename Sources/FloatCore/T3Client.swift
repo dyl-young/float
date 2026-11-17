@@ -11,6 +11,7 @@ public struct T3Client: Sendable {
         let link: URL?
         let runId: String
         let status: RunStatus
+        let modelSelection: T3ModelSelection?
     }
 
     private struct Empty: Decodable {}
@@ -28,9 +29,27 @@ public struct T3Client: Sendable {
 
     public func close() async { await transport.close() }
 
+    public func models() async throws -> [T3Model] {
+        do {
+            return try await transport.call("orchestrator_capabilities", [:], result: T3ModelCatalog.self).available
+        } catch let error as URLError where [.cannotConnectToHost, .networkConnectionLost, .notConnectedToInternet].contains(error.code) {
+            throw T3Error.serverUnavailable
+        }
+    }
+
     public func send(
-        _ text: String, images: [ImageAttachment], thread: ThreadReference?, requestId: UUID
+        _ text: String, images: [ImageAttachment], thread: ThreadReference?, requestId: UUID,
+        modelSelection: T3ModelSelection? = nil
     ) async throws -> ThreadReceipt {
+        let selection: T3ModelSelection?
+        if thread == nil, modelSelection == nil {
+            guard let preferred = T3Model.preferred(in: try await models()) else {
+                throw T3Error.tool("Enable Codex or Claude Code in T3 Settings → Providers to send a prompt.")
+            }
+            selection = preferred.selection
+        } else {
+            selection = modelSelection
+        }
         var uploads: [[String: any Sendable]] = []
         var submitted = false
         do {
@@ -49,8 +68,13 @@ public struct T3Client: Sendable {
             }
 
             let result: Delivery
-            submitted = true
             if let thread {
+                if let selection {
+                    _ = try await transport.call("t3_thread_configure", [
+                        "threadId": thread.threadId, "modelSelection": selection.arguments,
+                    ], result: Empty.self)
+                }
+                submitted = true
                 if uploads.isEmpty {
                     result = try await transport.call("t3_thread_send", [
                         "threadId": thread.threadId, "message": text, "mode": "queue",
@@ -62,18 +86,23 @@ public struct T3Client: Sendable {
                     ], result: Delivery.self)
                 }
             } else {
+                guard let selection else { throw T3Error.invalidResponse }
                 let title = text.split(whereSeparator: \.isNewline).first.map { String($0.prefix(80)) }
                     ?? images.first?.name ?? "Float chat"
+                submitted = true
                 result = try await transport.call("t3_thread_launch", [
                     "title": title, "scratch": true, "message": text, "attachments": uploads,
                     "runtimeMode": "approval-required", "interactionMode": "default",
                     "clientRequestId": requestId.uuidString,
-                    "modelSelection": ["instanceId": "claudeAgent", "model": "claude-opus-5-5"],
+                    "modelSelection": selection.arguments,
                 ], result: Delivery.self)
             }
             guard let id = result.threadId ?? thread?.threadId else { throw T3Error.invalidResponse }
             let reference = ThreadReference(threadId: id, link: result.link ?? thread?.link)
-            return ThreadReceipt(reference: reference, runId: result.runId, status: result.status)
+            return ThreadReceipt(
+                reference: reference, runId: result.runId, status: result.status,
+                modelSelection: result.modelSelection ?? selection
+            )
         } catch {
             if submitted {
                 switch error {
