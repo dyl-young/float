@@ -4,7 +4,7 @@ These mockups are the source of truth for Float's UI. When the app and a mockup 
 
 | File | Shows |
 | --- | --- |
-| `shell-states.png`, `float-mockups.html` | The shell: a solid message tray, the frosted input and a solid footer, with concave corners where they meet. Also every state: summoned, pasted images, working, replied, needs approval, T3 offline, model picker. |
+| `shell-states.png`, `float-mockups.html` | The shell: a solid message tray, the frosted input and a solid footer, with concave corners where they meet. Also every state: summoned, pasted images, working, replied, needs approval, asks a question, T3 offline, model picker. |
 | `pickers.png`, `float-pickers.html` | Choosing a machine and a project (new chats only, never a branch or checkout), and the model picker across providers: favourites, provider tabs, search, disabled provider. |
 | `logo.png`, `float-*.svg` | The cloud logo: app icon, template glyph for the menu bar, and the filled variant. |
 
@@ -32,5 +32,6 @@ The colours come from Dylan's nordbones T3 theme. So do the pixel thinking loade
 - **Thinking loader:** the 3×3 pixel grid, 4 frames, stepping every 300 ms. It's the only progress indicator.
 - **Replies:** show only assistant text. Never show tool calls. Replies have no bubble: plain text on the tray, as in T3. Under each reply sits a muted row with the copy button first, then the time, left-aligned. Only your own messages sit in bubbles.
 - **Header:** a close button (×) at the top left, then the status dot, title, and project and machine subtitle, then New chat and Open in T3 on the right. The × hides the panel, the same as Esc; the draft and chat stay. The compact state has no header, so Esc hides it there. Quit Float lives in the menu bar cloud's right-click menu. You can drag the window by the header as well as the footer.
+- **Questions and approvals:** when an agent asks you something through T3's ask-user-question tool, Float shows a question card in the tray: the header in small caps, "1 of N" when there are several, the question, and the options with their descriptions. Number keys pick, Return confirms, and typing in the input answers in your own words when the question allows it. The answer goes back through T3. Tool approvals still hand off to T3 with Open in T3.
 - **Footer:** paperclip on the left; provider icon, model and send/stop on the right.
 - **Shared centre lines:** the header's × sits on the same vertical centre line as the footer's paperclip, and Open in T3 on the same line as the send ring, 21pt in from each inner edge of the shell.
