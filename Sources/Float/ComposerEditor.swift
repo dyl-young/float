@@ -67,8 +67,15 @@ struct ComposerEditor: NSViewRepresentable {
 
         @MainActor func measure(_ editor: NSTextView) {
             guard let container = editor.textContainer, let layout = editor.layoutManager else { return }
+            if let width = editor.enclosingScrollView?.contentSize.width,
+                width > 0, abs(editor.frame.width - width) > 0.5 {
+                editor.setFrameSize(NSSize(width: width, height: editor.frame.height))
+            }
             layout.ensureLayout(for: container)
-            let content = layout.usedRect(for: container).height + 11
+            let content = max(
+                layout.usedRect(for: container).maxY,
+                layout.extraLineFragmentUsedRect.maxY
+            ) + 11
             let measured = min(136, max(28, ceil(content)))
             if measured != parent.height { parent.height = measured }
         }

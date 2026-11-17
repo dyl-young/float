@@ -19,28 +19,27 @@ struct FloatView: View {
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @State private var editorHeight: CGFloat = 28
-    @State private var followingLatest = true
+    @State private var composerHeight: CGFloat = 79
+    @State private var timelineHeight: CGFloat = 0
+    @State private var feedbackHeight: CGFloat = 0
     @State private var copiedMessage: String?
 
     private var panelHeight: CGFloat {
-        if chat.hasConversation { return 536 }
-        let previewSpace: CGFloat = chat.images.isEmpty ? 0 : 47
-        let noticeSpace: CGFloat = chat.notice == nil ? 0 : 56
-        return 51 + editorHeight + previewSpace + noticeSpace
+        guard chat.hasConversation else { return composerHeight }
+        let controlsHeight = composerHeight + 46 + feedbackHeight
+        return min(536, controlsHeight + max(68, timelineHeight))
     }
 
     var body: some View {
         VStack(spacing: 7) {
             if chat.hasConversation { conversation }
             composer
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { composerHeight = ceil($0) }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .preferredColorScheme(.dark)
         .onAppear { resize(panelHeight) }
         .onChange(of: panelHeight) { _, value in resize(value) }
-        .onChange(of: chat.reference) { old, new in
-            if old?.threadId != new?.threadId { followingLatest = true }
-        }
     }
 
     private var conversation: some View {
@@ -63,11 +62,14 @@ struct FloatView: View {
             .frame(height: 38)
             Rectangle().fill(FloatPalette.border).frame(height: 1).padding(.horizontal, 14)
             timeline
-            if let notice = chat.notice {
-                noticeBar(notice)
-            } else {
-                statusBar
+            VStack(spacing: 0) {
+                if let notice = chat.notice {
+                    noticeBar(notice)
+                } else {
+                    statusBar
+                }
             }
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { feedbackHeight = ceil($0) }
         }
         .background(FloatPalette.canvas)
         .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
@@ -79,41 +81,26 @@ struct FloatView: View {
     }
 
     private var timeline: some View {
-        ScrollViewReader { reader in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 19) {
-                    if chat.hasOlderMessages {
-                        Button("Load older messages") {
-                            followingLatest = false
-                            chat.loadOlder()
-                        }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 19) {
+                if chat.hasOlderMessages {
+                    Button("Load older messages", action: chat.loadOlder)
                         .buttonStyle(.plain)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(FloatPalette.accent)
                         .disabled(chat.loadingOlder)
                         .frame(maxWidth: .infinity)
-                    }
-                    ForEach(chat.messages) { message in
-                        messageView(message)
-                    }
-                    Color.clear.frame(height: 1)
-                        .accessibilityHidden(true)
-                        .id("latest")
-                        .onAppear { followingLatest = true }
-                        .onDisappear { followingLatest = false }
                 }
-                .padding(.horizontal, 17)
-                .padding(.vertical, 16)
+                ForEach(chat.messages) { message in
+                    messageView(message)
+                }
             }
-            .defaultScrollAnchor(.bottom)
-            .onChange(of: chat.messages.last?.text) { _, _ in
-                if followingLatest { reader.scrollTo("latest", anchor: .bottom) }
-            }
-            .onChange(of: chat.messages.last?.id) { _, _ in
-                if followingLatest { reader.scrollTo("latest", anchor: .bottom) }
-            }
-            .accessibilityLabel("Conversation")
+            .padding(.horizontal, 17)
+            .padding(.vertical, 14)
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { timelineHeight = ceil($0) }
         }
+        .defaultScrollAnchor(.bottom)
+        .accessibilityLabel("Conversation")
     }
 
     private func messageView(_ message: ChatMessage) -> some View {
@@ -309,44 +296,52 @@ struct FloatView: View {
 
     private var modelPicker: some View {
         Menu {
-            if chat.loadingModels {
-                Text("Loading models…")
-            } else if chat.modelCatalogFailed {
-                Text("Couldn’t load models from T3")
-            } else if chat.models.isEmpty {
-                Text("No enabled Codex or Claude models")
-            }
+            Section("Select model") {
+                if chat.loadingModels {
+                    Text("Loading models…")
+                } else if chat.modelCatalogFailed {
+                    Text("Couldn’t load models from T3")
+                } else if chat.models.isEmpty {
+                    Text("No enabled Codex or Claude models")
+                }
 
-            ForEach(chat.models) { model in
-                Button {
-                    chat.selectModel(model)
-                } label: {
-                    let name = "\(model.label) · \(model.provider)"
-                    if model.selection == chat.selectedModel {
-                        Label(name, systemImage: "checkmark")
-                    } else {
-                        Text(name)
+                if chat.defaultModel != nil {
+                    Button { chat.selectModel(nil) } label: {
+                        modelMenuLabel("Default", selected: chat.usesDefaultModel)
+                    }
+                }
+                ForEach(chat.models) { model in
+                    Button { chat.selectModel(model) } label: {
+                        let duplicate = chat.models.contains { $0.id != model.id && $0.label == model.label }
+                        let name = duplicate ? "\(model.label) · \(model.provider)" : model.label
+                        modelMenuLabel(name, selected: !chat.usesDefaultModel && model.selection == chat.selectedModel)
                     }
                 }
             }
 
-            Divider()
             Button("Reload Models", action: chat.reloadModels)
                 .disabled(chat.loadingModels)
         } label: {
-            HStack(spacing: 5) {
-                Text(chat.modelLabel).lineLimit(1)
-                Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold))
-            }
-            .font(.system(size: 11, weight: .medium))
-            .foregroundStyle(FloatPalette.muted)
+            Text(chat.modelLabel)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(FloatPalette.text)
         }
         .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
         .fixedSize()
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .background(.white.opacity(0.055), in: Capsule())
         .disabled(!chat.canChooseModel)
         .accessibilityLabel("Model")
         .accessibilityValue(chat.modelLabel)
+    }
+
+    @ViewBuilder private func modelMenuLabel(_ title: String, selected: Bool) -> some View {
+        if selected {
+            Label(title, systemImage: "checkmark")
+        } else {
+            Text(title)
+        }
     }
 
     private var draftImages: some View {

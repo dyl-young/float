@@ -130,10 +130,10 @@ private final class FloatApp: NSObject, NSApplicationDelegate {
         let width = min(Self.panelWidth, visible.width)
         let height = min(desiredHeight, visible.height)
         let x = positioned ? panel.frame.minX : visible.midX - width / 2
-        let top = positioned ? panel.frame.maxY : visible.maxY - min(115, visible.height / 6)
+        let bottom = positioned ? panel.frame.minY : visible.midY + visible.height * 0.10
         let rect = NSRect(
             x: min(max(x, visible.minX), visible.maxX - width),
-            y: min(max(top - height, visible.minY), visible.maxY - height),
+            y: min(max(bottom, visible.minY), visible.maxY - height),
             width: width, height: height
         )
         panel.setFrame(rect, display: true)

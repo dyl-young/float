@@ -74,6 +74,12 @@ final class ChatState: ObservableObject {
         return T3Model.preferred(in: models, saved: savedModel)?.selection
     }
 
+    var defaultModel: T3Model? { T3Model.preferred(in: models) }
+
+    var usesDefaultModel: Bool {
+        savedModel == nil && selectedModel == defaultModel?.selection
+    }
+
     var modelLabel: String {
         models.first { $0.selection == selectedModel }?.label
             ?? selectedModel?.fallbackLabel
@@ -98,11 +104,11 @@ final class ChatState: ObservableObject {
         }
     }
 
-    func selectModel(_ model: T3Model) {
-        guard canChooseModel else { return }
-        savedModel = model.selection
-        if reference != nil { nextModel = model.selection == threadModel ? nil : model.selection }
-        defaults.set(try? JSONEncoder().encode(model.selection), forKey: "preferredModel")
+    func selectModel(_ model: T3Model?) {
+        guard canChooseModel, let selection = (model ?? defaultModel)?.selection else { return }
+        savedModel = model?.selection
+        if reference != nil { nextModel = selection == threadModel ? nil : selection }
+        defaults.set(savedModel.flatMap { try? JSONEncoder().encode($0) }, forKey: "preferredModel")
         focusRequest += 1
     }
 
