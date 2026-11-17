@@ -162,7 +162,8 @@ private final class FloatApp: NSObject, NSApplicationDelegate {
     }
 
     @objc private func statusItemClicked(_ button: NSStatusBarButton) {
-        if NSApp.currentEvent?.type == .rightMouseUp {
+        let event = NSApp.currentEvent
+        if event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true {
             let bottom = button.isFlipped ? button.bounds.maxY : button.bounds.minY
             statusMenu?.popUp(positioning: nil, at: NSPoint(x: button.bounds.minX, y: bottom), in: button)
         } else {

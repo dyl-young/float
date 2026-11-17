@@ -28,8 +28,10 @@ struct FloatView: View {
     private static let maxHeight: CGFloat = 560
     private nonisolated static let shellSpace = "Float shell"
     private static let latest = "Latest message"
-    private static let edgeButtonSize: CGFloat = 26
-    private static let edgeButtonInset: CGFloat = 9
+    private static let headerButtonSize: CGFloat = 24
+    private static let headerButtonInset: CGFloat = 10
+    private static let footerButtonSize: CGFloat = 26
+    private static let footerButtonInset: CGFloat = 9
     private let inputShape = RoundedRectangle(cornerRadius: Theme.radius)
 
     private var showsTray: Bool { chat.hasConversation || chat.hasTrayNotice }
@@ -196,8 +198,10 @@ struct FloatView: View {
 
     private var header: some View {
         HStack(spacing: 6) {
-            PanelButton("Close · Esc", systemImage: "xmark", size: Self.edgeButtonSize, action: dismiss)
-                .offset(y: -1)
+            PanelButton(
+                "Close (Esc)", accessibilityLabel: "Close",
+                systemImage: "xmark", size: Self.headerButtonSize, glyphSize: 12, action: dismiss
+            )
             Circle()
                 .fill(statusColor)
                 .frame(width: 6, height: 6)
@@ -224,17 +228,17 @@ struct FloatView: View {
             if chat.hasConversation {
                 PanelButton(
                     "New chat · ⌘N", systemImage: "square.and.pencil",
-                    size: Self.edgeButtonSize, action: chat.newChat
+                    size: Self.headerButtonSize, action: chat.newChat
                 )
                 .disabled(chat.submitting)
                 PanelButton(
                     "Open in T3", systemImage: "arrow.up.forward.square",
-                    size: Self.edgeButtonSize, action: chat.openThread
+                    size: Self.headerButtonSize, action: chat.openThread
                 )
                 .disabled(chat.reference?.desktopURL == nil)
             }
         }
-        .padding(.horizontal, Self.edgeButtonInset)
+        .padding(.horizontal, Self.headerButtonInset)
         .frame(height: Self.headerHeight)
     }
 
@@ -439,7 +443,7 @@ struct FloatView: View {
 
     private var footer: some View {
         HStack(spacing: 4) {
-            PanelButton("Attach images", systemImage: "paperclip", size: Self.edgeButtonSize, action: chooseImages)
+            PanelButton("Attach images", systemImage: "paperclip", size: Self.footerButtonSize, action: chooseImages)
                 .offset(x: 0.5, y: -1)
             PanelDragHandle()
                 .frame(maxWidth: .infinity)
@@ -448,7 +452,7 @@ struct FloatView: View {
             modelPicker
             sendButton
         }
-        .padding(.horizontal, Self.edgeButtonInset)
+        .padding(.horizontal, Self.footerButtonInset)
         .frame(height: 40)
         .background {
             TrayShape(side: .bottom)
@@ -470,7 +474,7 @@ struct FloatView: View {
         } label: {
             sendGlyph(stopping: stopping)
                 .foregroundStyle(tint.opacity(stopping || chat.canSend ? 1 : 0.7))
-                .frame(width: Self.edgeButtonSize, height: Self.edgeButtonSize)
+                .frame(width: Self.footerButtonSize, height: Self.footerButtonSize)
                 .overlay {
                     Circle().strokeBorder(tint.opacity(stopping || chat.canSend ? 1 : 0.45), lineWidth: 1.5)
                 }
@@ -860,24 +864,32 @@ private struct ImagePreview: View {
 
 private struct PanelButton: View {
     let title: String
+    let accessibilityTitle: String
     let systemImage: String
     let size: CGFloat
+    let glyphSize: CGFloat?
     let action: () -> Void
 
     @Environment(\.isEnabled) private var enabled
     @State private var hovered = false
 
-    init(_ title: String, systemImage: String, size: CGFloat = 30, action: @escaping () -> Void) {
+    init(
+        _ title: String, accessibilityLabel: String? = nil,
+        systemImage: String, size: CGFloat = 30, glyphSize: CGFloat? = nil,
+        action: @escaping () -> Void
+    ) {
         self.title = title
+        accessibilityTitle = accessibilityLabel ?? title
         self.systemImage = systemImage
         self.size = size
+        self.glyphSize = glyphSize
         self.action = action
     }
 
     var body: some View {
         Button(action: action) {
             Image(systemName: systemImage)
-                .font(.system(size: size < 20 ? 9 : size < 26 ? 11 : 13, weight: .medium))
+                .font(.system(size: glyphSize ?? (size < 20 ? 9 : size < 26 ? 11 : 13), weight: .medium))
                 .foregroundStyle(hovered && enabled ? Theme.text : Theme.muted.opacity(enabled ? 1 : 0.4))
                 .frame(width: size, height: size)
                 .background(hovered && enabled ? Color.white.opacity(0.08) : .clear,
@@ -886,7 +898,7 @@ private struct PanelButton: View {
         }
         .buttonStyle(.plain)
         .help(title)
-        .accessibilityLabel(title)
+        .accessibilityLabel(accessibilityTitle)
         .onHover { hovered = $0 }
     }
 }
