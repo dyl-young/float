@@ -1,0 +1,244 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>:root{--background:#0f191f;--foreground:#e1f1ff;--muted:#141d25;--muted-foreground:#7e8b95;--card:#121c25;--popover:#19242e;--border:#2e4152;--primary:#6cb0e9;--primary-foreground:#0f191f;--success:#5cc78f;--warning:#fe9a00;--destructive:#fb414a;--code-background:#18212a;--chart-1:#6cb0e9;--chart-2:#5cc78f;--chart-3:#c792ea;--radius:10px;--font-sans:-apple-system,BlinkMacSystemFont,sans-serif;--font-mono:ui-monospace,SFMono-Regular,monospace}body{background:#0b1217;padding:16px}
+:root{
+  --r: 1rem;
+  --line: color-mix(in oklab, var(--border) 75%, transparent);
+  --glass: color-mix(in oklab, color-mix(in oklab, var(--foreground) 7%, var(--card)) 45%, transparent);
+  --solid: color-mix(in oklab, var(--card) 65%, var(--background));
+  --user: color-mix(in oklab, var(--primary) 22%, var(--card));
+  --claude: #d97757;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:var(--font-sans);color:var(--foreground)}
+.wrap{display:flex;flex-direction:column;gap:22px}
+.sec{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-foreground);margin:0 0 8px}
+.cap{font-size:12px;color:var(--muted-foreground);margin:8px 2px 0;line-height:1.4}
+.cap b{color:var(--foreground);font-weight:600}
+.kbd{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 4px;border-radius:5px;font-size:10.5px;
+  background:color-mix(in oklab, var(--foreground) 8%, transparent);box-shadow:inset 0 -1px 0 var(--line);color:var(--foreground)}
+
+/* ---------- backdrop: faint map lines so the frost reads ---------- */
+.desk,.bg{position:relative;border-radius:var(--radius);overflow:hidden;border:1px solid var(--line);
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='160'%3E%3Cg fill='none' stroke='%23a9c4dc' stroke-opacity='.12' stroke-width='1'%3E%3Cpath d='M0 30l40 12 30-20 50 18 40-6 60 22M10 160l20-60 40-10 10-50 60-20M120 160l10-40 50-20 20-60M0 90l60 8 40 30 70-10 50 20M150 0l-10 40 30 30-20 50'/%3E%3C/g%3E%3C/svg%3E"),
+    radial-gradient(110% 90% at 0% 0%, color-mix(in oklab, var(--primary) 14%, transparent), transparent 60%),
+    var(--background);}
+.bg{padding:14px;border-radius:12px}
+.desk{height:470px}
+.menubar{position:absolute;inset:0 0 auto 0;height:22px;display:flex;align-items:center;gap:14px;padding:0 10px;font-size:11px;
+  background:color-mix(in oklab, var(--background) 60%, transparent);backdrop-filter:blur(8px)}
+.menubar .r{margin-left:auto;display:flex;gap:12px;align-items:center;color:var(--muted-foreground)}
+.app{position:absolute;left:18px;top:38px;width:58%;bottom:18px;border-radius:10px;background:var(--background);border:1px solid var(--line);overflow:hidden}
+.app .tb{height:26px;display:flex;align-items:center;gap:6px;padding:0 10px;border-bottom:1px solid var(--line)}
+.app .tb i{width:9px;height:9px;border-radius:50%;background:var(--border)}
+.app .tb span{margin-left:10px;font-size:10px;color:var(--muted-foreground);font-family:var(--font-mono)}
+.code{padding:12px 14px;display:flex;flex-direction:column;gap:7px}
+.code div{height:6px;border-radius:3px;background:var(--line)}
+.code .k{background:color-mix(in oklab, var(--primary) 45%, transparent)}
+.code .s{background:color-mix(in oklab, var(--chart-2) 45%, transparent)}
+.kbd-hint{position:absolute;left:30px;bottom:30px;display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted-foreground)}
+.desk .shell{position:absolute;right:16px;bottom:16px;width:340px}
+
+/* ---------- the shell: solid top tray / frosted input / solid footer tray ---------- */
+.shell{position:relative;isolation:isolate;border-radius:var(--r);border:1px solid var(--line);
+  background:var(--glass);backdrop-filter:blur(14px) saturate(1.3);-webkit-backdrop-filter:blur(14px) saturate(1.3);
+  box-shadow:0 20px 50px -14px rgba(0,0,0,.6);display:flex;flex-direction:column}
+.tray-top,.tray-foot{position:relative}
+/* top tray: solid, extends r down behind the input with concave ears at the bottom corners */
+.tray-top::before{content:"";position:absolute;z-index:-1;inset:0 0 calc(-1 * var(--r)) 0;background:var(--solid);
+  border-radius:var(--r) var(--r) 0 0;pointer-events:none;
+  -webkit-mask:radial-gradient(circle at 100% 100%, transparent calc(var(--r) - .5px), #000 var(--r)) bottom left / var(--r) var(--r) no-repeat,
+       radial-gradient(circle at 0 100%, transparent calc(var(--r) - .5px), #000 var(--r)) bottom right / var(--r) var(--r) no-repeat,
+       linear-gradient(#000,#000) top / 100% calc(100% - var(--r)) no-repeat;
+  mask:radial-gradient(circle at 100% 100%, transparent calc(var(--r) - .5px), #000 var(--r)) bottom left / var(--r) var(--r) no-repeat,
+       radial-gradient(circle at 0 100%, transparent calc(var(--r) - .5px), #000 var(--r)) bottom right / var(--r) var(--r) no-repeat,
+       linear-gradient(#000,#000) top / 100% calc(100% - var(--r)) no-repeat}
+/* footer tray: the nordbones composer footer, unchanged */
+.tray-foot::before{content:"";position:absolute;z-index:-1;inset:calc(-1 * var(--r)) 0 0 0;background:var(--solid);
+  border-radius:0 0 var(--r) var(--r);pointer-events:none;
+  -webkit-mask:radial-gradient(circle at 100% 0, transparent calc(var(--r) - .5px), #000 var(--r)) top left / var(--r) var(--r) no-repeat,
+       radial-gradient(circle at 0 0, transparent calc(var(--r) - .5px), #000 var(--r)) top right / var(--r) var(--r) no-repeat,
+       linear-gradient(#000,#000) bottom / 100% calc(100% - var(--r)) no-repeat;
+  mask:radial-gradient(circle at 100% 0, transparent calc(var(--r) - .5px), #000 var(--r)) top left / var(--r) var(--r) no-repeat,
+       radial-gradient(circle at 0 0, transparent calc(var(--r) - .5px), #000 var(--r)) top right / var(--r) var(--r) no-repeat,
+       linear-gradient(#000,#000) bottom / 100% calc(100% - var(--r)) no-repeat}
+
+/* top tray contents */
+.hdr{display:flex;align-items:center;gap:6px;height:34px;padding:0 6px 0 12px}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--success);flex:none}
+.ttl{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}
+.ttl small{font-weight:400;color:var(--muted-foreground);margin-left:6px}
+.ib{width:24px;height:24px;border-radius:7px;display:grid;place-items:center;color:var(--muted-foreground);flex:none}
+.ib.hv{background:color-mix(in oklab, var(--foreground) 9%, transparent);color:var(--foreground)}
+.ib svg{width:14px;height:14px}
+.msgs{padding:4px 12px 12px;display:flex;flex-direction:column;gap:10px}
+.msg-u{align-self:flex-end;max-width:84%;background:var(--user);border-radius:12px 12px 4px 12px;padding:7px 10px;font-size:12.5px;line-height:1.45}
+.thumbs{display:flex;gap:5px;justify-content:flex-end;margin-bottom:6px}
+.thumb{width:54px;height:40px;border-radius:7px;border:1px solid var(--line);position:relative;
+  background:linear-gradient(135deg, color-mix(in oklab, var(--chart-3) 55%, var(--card)), color-mix(in oklab, var(--chart-1) 45%, var(--card)))}
+.thumb::after{content:"";position:absolute;inset:8px 8px auto 8px;height:4px;border-radius:2px;background:rgba(255,255,255,.35);box-shadow:0 8px 0 rgba(255,255,255,.22),0 16px 0 rgba(255,255,255,.16)}
+.msg-a{max-width:94%;background:color-mix(in oklab, var(--foreground) 4%, transparent);border:1px solid var(--line);border-radius:12px 12px 12px 4px;padding:8px 10px 4px;font-size:12.5px;line-height:1.5}
+.msg-a p{margin:0 0 6px}
+code{font-family:var(--font-mono);font-size:11.5px;background:var(--code-background);padding:1px 4px;border-radius:4px}
+.meta{display:flex;align-items:center;gap:4px;justify-content:flex-end;color:var(--muted-foreground);font-size:10.5px;margin:0 -4px 0 0}
+.meta .ib{width:20px;height:20px}.meta .ib svg{width:12px;height:12px}
+.working{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted-foreground)}
+.pulse{display:inline-flex;gap:3px}
+.pulse i{width:4px;height:4px;border-radius:50%;background:var(--primary);animation:p 1.2s infinite}
+.pulse i:nth-child(2){animation-delay:.15s}.pulse i:nth-child(3){animation-delay:.3s}
+@keyframes p{0%,100%{opacity:.25}50%{opacity:1}}
+.step{font-family:var(--font-mono);font-size:11px;color:var(--muted-foreground);display:flex;gap:6px;align-items:center}
+.step svg{width:12px;height:12px;color:var(--success)}
+.notice{border-radius:10px;padding:10px 11px;font-size:12px;line-height:1.45;display:flex;gap:9px;align-items:flex-start;border:1px solid}
+.notice svg{width:16px;height:16px;flex:none;margin-top:1px}
+.notice b{display:block;font-size:12.5px;margin-bottom:2px}
+.notice.warn{background:color-mix(in oklab, var(--warning) 12%, transparent);border-color:color-mix(in oklab, var(--warning) 40%, transparent)}
+.notice.warn svg{color:var(--warning)}
+.notice.info{background:color-mix(in oklab, var(--primary) 10%, transparent);border-color:color-mix(in oklab, var(--primary) 35%, transparent)}
+.notice.info svg{color:var(--primary)}
+.btn{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 10px;border-radius:999px;font-size:11.5px;font-weight:500;margin-top:8px}
+.btn svg{width:12px;height:12px;margin:0}
+.btn.pri{background:var(--primary);color:var(--primary-foreground)}
+.btn.ghost{color:var(--muted-foreground);box-shadow:inset 0 0 0 1px var(--line)}
+
+/* frosted input */
+.input{padding:14px 16px 12px;font-size:13px;line-height:1.45;min-height:calc(1lh + 26px)}
+.ph{color:var(--muted-foreground)}
+.caret{display:inline-block;width:1.5px;height:15px;background:var(--primary);vertical-align:-3px;margin-left:1px;animation:b 1s steps(1) infinite}
+@keyframes b{50%{opacity:0}}
+@media (prefers-reduced-motion:reduce){.caret,.pulse i{animation:none}}
+.chips{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap}
+.chip{display:flex;align-items:center;gap:5px;height:24px;max-width:120px;padding:0 4px 0 3px;border-radius:6px;background:color-mix(in oklab, var(--foreground) 7%, transparent);border:1px solid var(--line);font-size:11px}
+.chip .mini{width:18px;height:18px;border-radius:4px;flex:none;background:linear-gradient(135deg, color-mix(in oklab, var(--chart-3) 60%, var(--card)), color-mix(in oklab, var(--chart-1) 50%, var(--card)))}
+.chip span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip .x{width:16px;height:16px;display:grid;place-items:center;color:var(--muted-foreground);flex:none}
+.chip .x svg{width:10px;height:10px}
+
+/* footer controls */
+.foot{height:40px;display:flex;align-items:center;gap:2px;padding:0 8px 2px}
+.ctl{height:26px;min-width:26px;display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:999px;color:var(--muted-foreground);font-size:12px;padding:0 6px}
+.ctl svg{width:15px;height:15px}
+.ctl.model{color:var(--foreground);padding:0 4px 0 6px}
+.ctl.model.open{background:color-mix(in oklab, var(--foreground) 8%, transparent)}
+.ctl .claude{width:14px;height:14px;color:var(--claude)}
+.bars{display:inline-flex;align-items:flex-end;gap:1.5px;height:11px;margin-left:2px}
+.bars i{width:2px;border-radius:1px;background:var(--muted-foreground);opacity:.45}
+.bars i.on{opacity:1}
+.spacer{flex:1}
+.send{width:26px;height:26px;border-radius:999px;display:grid;place-items:center;color:var(--primary);box-shadow:inset 0 0 0 1.5px currentColor;flex:none;margin-left:4px}
+.send svg{width:13px;height:13px}
+.send.off{color:var(--muted-foreground);opacity:.6}
+.send.stop{color:var(--destructive)}
+.send.stop i{width:8px;height:8px;border-radius:2px;background:currentColor}
+
+.drop{position:absolute;inset:6px;border-radius:12px;border:1.5px dashed color-mix(in oklab, var(--primary) 70%, transparent);background:color-mix(in oklab, var(--primary) 12%, transparent);display:grid;place-items:center;font-size:12px;color:var(--primary);z-index:2}
+.menu{position:absolute;right:52px;bottom:42px;width:170px;border-radius:10px;background:var(--popover);border:1px solid var(--line);box-shadow:0 12px 30px -8px rgba(0,0,0,.6);padding:4px;font-size:12px;z-index:3}
+.menu div{display:flex;align-items:center;gap:8px;height:28px;padding:0 8px;border-radius:6px}
+.menu div.sel{background:color-mix(in oklab, var(--foreground) 8%, transparent)}
+.menu svg{width:13px;height:13px}
+.menu small{margin-left:auto;color:var(--muted-foreground)}
+
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px 16px;align-items:start}
+@media (max-width:600px){.grid{grid-template-columns:1fr}.desk .shell{left:16px;width:auto}.app{width:calc(100% - 36px)}}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="i-new" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.4 2.6a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4Z"/></symbol>
+    <symbol id="i-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></symbol>
+    <symbol id="i-clip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l8.6-8.6a4 4 0 0 1 5.7 5.7l-8.6 8.6a2 2 0 0 1-2.8-2.8l8.5-8.5"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+    <symbol id="i-burst" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 2.5v6M12 15.5v6M2.5 12h6M15.5 12h6M5.3 5.3l4.2 4.2M14.5 14.5l4.2 4.2M5.3 18.7l4.2-4.2M14.5 9.5l4.2-4.2"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="M12 8v4M12 16h.01"/></symbol>
+    <symbol id="i-power" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-float" viewBox="2.75 2 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M7.5 18A3.5 3.5 0 0 1 7.03 11.03A5 5 0 0 1 16.77 9.01A4.5 4.5 0 0 1 17 18Z"/></symbol>
+  </defs>
+</svg>
+
+<div class="wrap">
+  <div>
+    <p class="sec">In context</p>
+    <div class="desk" id="hero">
+      <div class="menubar"><b>Ghostty</b><span>Shell</span><span>Edit</span><span>View</span>
+        <div class="r"><svg width="13" height="13" style="color:var(--primary)"><use href="#i-float"/></svg><span>Wed 09:41</span></div></div>
+      <div class="app">
+        <div class="tb"><i></i><i></i><i></i><span>~/repos/float — zsh</span></div>
+        <div class="code">
+          <div style="width:42%" class="k"></div><div style="width:68%"></div><div style="width:55%"></div><div style="width:30%" class="s"></div>
+          <div style="width:74%"></div><div style="width:48%" class="k"></div><div style="width:61%"></div><div style="width:36%"></div>
+          <div style="width:58%" class="s"></div><div style="width:44%"></div><div style="width:70%"></div><div style="width:26%" class="k"></div>
+          <div style="width:52%"></div><div style="width:64%"></div><div style="width:40%" class="s"></div><div style="width:57%"></div>
+        </div>
+      </div>
+      <div class="kbd-hint"><span class="kbd">⌥</span><span class="kbd">Space</span> show / hide · <span class="kbd">Esc</span> hide</div>
+    </div>
+    <p class="cap">The input bar is the anchor. The message tray grows <b>up</b> out of it once a chat starts, so the composer stays put under your cursor from first keystroke to follow-up.</p>
+  </div>
+
+  <div>
+    <p class="sec">States</p>
+    <div class="grid" id="grid"></div>
+  </div>
+</div>
+
+<script>
+const ic = (id) => `<svg><use href="#i-${id}"/></svg>`;
+function footer({send='off', modelOpen=false}={}){
+  const s = send==='stop' ? `<span class="send stop"><i></i></span>` : `<span class="send ${send==='on'?'':'off'}">${ic('up')}</span>`;
+  return `<div class="tray-foot"><div class="foot">
+    <span class="ctl">${ic('clip')}</span><span class="spacer"></span>
+    <span class="ctl model ${modelOpen?'open':''}"><svg class="claude"><use href="#i-burst"/></svg>Opus 5.5<span class="bars"><i class="on" style="height:4px"></i><i class="on" style="height:7px"></i><i style="height:9px"></i><i style="height:11px"></i></span>${modelOpen?`<svg style="width:12px;height:12px"><use href="#i-chev"/></svg>`:''}</span>
+    <span class="ctl">${ic('mic')}</span>${s}</div></div>`;
+}
+function trayTop({title, sub='No project', dot='var(--success)', openHover=false, body}){
+  return `<div class="tray-top"><div class="hdr"><span class="dot" style="background:${dot}"></span>
+    <div class="ttl">${title}<small>${sub}</small></div>
+    <span class="ib" title="New chat">${ic('new')}</span><span class="ib ${openHover?'hv':''}" title="Open in T3">${ic('open')}</span></div>
+    <div class="msgs">${body}</div></div>`;
+}
+function shell({tray='', input, send, modelOpen, extra='', style=''}){
+  return `<div class="shell" style="${style}">${extra}${tray}<div class="input">${input}</div>${footer({send, modelOpen})}</div>`;
+}
+const ph = (t) => `<span class="ph">${t}</span>`;
+const thumb = (h=0) => `<div class="thumb" style="filter:hue-rotate(${h}deg)"></div>`;
+const reply = (ps, t) => `<div class="msg-a">${ps.map(p=>`<p>${p}</p>`).join('')}<div class="meta">${t}<span class="ib">${ic('copy')}</span></div></div>`;
+const chip = (n,h=0) => `<div class="chip"><div class="mini" style="filter:hue-rotate(${h}deg)"></div><span>${n}</span><span class="x">${ic('x')}</span></div>`;
+
+document.getElementById('hero').insertAdjacentHTML('beforeend', shell({
+  tray: trayTop({title:'Why is my zsh prompt slow', body:
+    `<div class="msg-u"><div class="thumbs">${thumb()}</div>Why does my prompt take 2s to show up? Profile screenshot attached.</div>` +
+    reply(['Most of it is <code>nvm</code> loading at startup: 1.6s of the 2.1s in your profile.','Lazy-load it so it only runs the first time you call <code>node</code>.'],'09:41')}),
+  input: ph('Ask a follow-up…')
+}));
+
+const states = [
+  [shell({input:`<span class="caret"></span>${ph(' Ask anything, or paste a screenshot…')}`}),
+   `<b>1 · Summoned.</b> <span class="kbd">⌥</span> <span class="kbd">Space</span> opens just the composer, focused. Same as your T3 one-line composer, nothing above it.`],
+  [shell({input:`<div class="chips">${chip('Screenshot 09.38.png')}${chip('image.png',60)}</div>What's wrong with this layout on mobile?<span class="caret"></span>`, send:'on'}),
+   `<b>2 · Pasted images.</b> <span class="kbd">⌘</span> <span class="kbd">V</span> adds removable chips inside the frosted input. Send ring lights up.`],
+  [shell({tray: trayTop({title:'Mobile layout bug', body:`<div class="msg-u"><div class="thumbs">${thumb()}${thumb(60)}</div>What's wrong with this layout on mobile?</div><div class="step">${ic('check')}Read 2 images</div><div class="working"><span class="pulse"><i></i><i></i><i></i></span>Working · 14s</div>`}),
+     input: ph('Queue a follow-up…'), send:'stop'}),
+   `<b>3 · Working.</b> The tray slides up out of the input on first send. One status line, and send becomes a red stop ring.`],
+  [shell({tray: trayTop({title:'Clean up node_modules', dot:'var(--warning)', openHover:true, body:`<div class="msg-u">Find and delete stale node_modules folders under ~/repos</div><div class="notice warn">${ic('shield')}<div><b>Needs your approval</b>Wants to run <code>rm -rf</code> on 14 folders.<div><span class="btn pri">${ic('open')}Open in T3</span></div></div></div>`}),
+     input: ph('Waiting on approval in T3…')}),
+   `<b>4 · Needs input.</b> Approvals hand off to the thread in T3. Header dot turns amber.`],
+  [shell({tray: trayTop({title:'Float', sub:'T3 not running', dot:'var(--muted-foreground)', body:`<div class="notice info">${ic('power')}<div><b>T3 Code isn't running</b>Your draft is saved. Launch T3 and Float sends it.<div style="display:flex;gap:6px"><span class="btn pri">Launch T3</span><span class="btn ghost">Not now</span></div></div></div>`}),
+     input: 'Summarise the diff in ~/repos/float since yesterday'}),
+   `<b>5 · T3 closed.</b> The tray opens just to show the notice. Draft and images survive.`],
+  [shell({input: ph('Ask anything…'), modelOpen:true, style:'margin-top:118px',
+     extra:`<div class="menu"><div class="sel"><svg class="claude" style="color:var(--claude)"><use href="#i-burst"/></svg>Opus 5.5<small>default</small></div><div><svg style="color:var(--claude)"><use href="#i-burst"/></svg>Sonnet 5.5</div><div><svg style="color:var(--claude)"><use href="#i-burst"/></svg>Haiku 5.5</div></div>`}),
+   `<b>6 · Fast follow: model picker.</b> The model + effort control is already in the footer, so the menu drops in without moving anything.`],
+];
+document.getElementById('grid').innerHTML = states.map(([s,c]) => `<div><div class="bg">${s}</div><p class="cap">${c}</p></div>`).join('');
+</script>
+</body>
+</html>
