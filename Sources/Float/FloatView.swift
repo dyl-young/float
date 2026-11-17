@@ -280,7 +280,7 @@ struct FloatView: View {
             }
         }
         .padding(.top, 10)
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 20)
         .padding(.bottom, 6)
     }
 
