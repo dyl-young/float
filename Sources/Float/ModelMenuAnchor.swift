@@ -35,27 +35,33 @@ struct ModelMenuAnchor: NSViewRepresentable {
         func showMenu(for chat: ChatState) {
             let menu = NSMenu()
             menu.autoenablesItems = false
-            menu.addItem(.sectionHeader(title: "Select model"))
+
+            let defaultItem = MenuAction("Default", selected: chat.defaultModel != nil && chat.usesDefaultModel) {
+                chat.selectModel(nil)
+            }
+            defaultItem.isEnabled = chat.defaultModel != nil
+            menu.addItem(defaultItem)
+            menu.addItem(.separator())
 
             if chat.loadingModels {
                 menu.addItem(MenuAction("Loading models…", action: nil))
             } else if chat.modelCatalogFailed {
                 menu.addItem(MenuAction("Couldn’t load models from T3", action: nil))
             } else if chat.models.isEmpty {
-                menu.addItem(MenuAction("No enabled Codex or Claude models", action: nil))
+                menu.addItem(MenuAction("No enabled models available for Float", action: nil))
             }
 
-            if chat.defaultModel != nil {
-                menu.addItem(MenuAction("Default", selected: chat.usesDefaultModel) {
-                    chat.selectModel(nil)
-                })
-            }
-            for model in chat.models {
-                let duplicate = chat.models.contains { $0.id != model.id && $0.label == model.label }
-                let title = duplicate ? "\(model.label) · \(model.provider)" : model.label
-                menu.addItem(MenuAction(title, selected: !chat.usesDefaultModel && model.selection == chat.selectedModel) {
-                    chat.selectModel(model)
-                })
+            let byProvider = Dictionary(grouping: chat.models, by: \.selection.instanceId)
+            var shownProviders: Set<String> = []
+            for first in chat.models where shownProviders.insert(first.selection.instanceId).inserted {
+                let header = NSMenuItem.sectionHeader(title: first.provider)
+                header.image = ProviderIcon(driverKind: first.driverKind)?.menuImage()
+                menu.addItem(header)
+                for model in byProvider[first.selection.instanceId, default: []] {
+                    menu.addItem(MenuAction(model.label, selected: !chat.usesDefaultModel && model.selection == chat.selectedModel) {
+                        chat.selectModel(model)
+                    })
+                }
             }
 
             menu.addItem(.separator())

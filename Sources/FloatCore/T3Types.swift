@@ -85,6 +85,25 @@ public struct T3Model: Identifiable, Equatable, Sendable {
     public let provider: String
     public let driverKind: String
 
+    public var shortLabel: String {
+        let brand: String?
+        switch driverKind {
+        case "claudeAgent": brand = "Claude"
+        case "codex": brand = "Codex"
+        case "antigravity": brand = "Antigravity"
+        case "cursor": brand = "Cursor"
+        case "opencode": brand = "OpenCode"
+        default: brand = nil
+        }
+        for prefix in [provider, brand].compactMap({ $0 }).sorted(by: { $0.count > $1.count }) {
+            if let range = label.range(of: prefix + " ", options: [.anchored, .caseInsensitive]),
+                range.upperBound != label.endIndex {
+                return String(label[range.upperBound...])
+            }
+        }
+        return label
+    }
+
     public static func preferred(in models: [Self], saved: T3ModelSelection? = nil) -> Self? {
         models.first { $0.selection == saved }
             ?? models.first { $0.selection.instanceId == "claudeAgent" && $0.selection.model == "claude-opus-5-5" }
@@ -104,13 +123,18 @@ struct T3ModelCatalog: Decodable, Sendable {
         let driverKind: String
         let displayName: String?
         let constraints: [String]
+        let runtimeModes: [String]?
         let models: [Model]
     }
 
     let providers: [Provider]
 
     var available: [T3Model] {
-        providers.filter { ["codex", "claudeAgent"].contains($0.driverKind) && $0.constraints.isEmpty }
+        providers.filter { provider in
+            ["codex", "claudeAgent", "antigravity"].contains(provider.driverKind)
+                && provider.constraints.isEmpty
+                && (provider.runtimeModes?.contains("approval-required") ?? true)
+        }
             .flatMap { provider in
                 provider.models.map { model in
                     let selection = T3ModelSelection(instanceId: provider.providerInstanceId, model: model.id)

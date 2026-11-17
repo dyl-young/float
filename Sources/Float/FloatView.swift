@@ -383,17 +383,11 @@ private struct ModelButton: View {
     @Environment(\.isEnabled) private var enabled
     @State private var hovered = false
 
-    /// "Claude Opus 5.5" reads as "Opus 5.5" next to the Claude mark.
-    private var shortLabel: String {
-        let label = chat.modelLabel
-        return label.hasPrefix("Claude ") ? String(label.dropFirst(7)) : label
-    }
-
     var body: some View {
         Button(action: chat.requestModelPicker) {
             HStack(spacing: 6) {
                 ProviderGlyph(driverKind: chat.selectedCatalogModel?.driverKind ?? chat.selectedModel?.instanceId)
-                Text(shortLabel)
+                Text(chat.selectedCatalogModel?.shortLabel ?? chat.modelLabel)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(enabled ? Theme.text : Theme.muted)
                 Image(systemName: "chevron.down")

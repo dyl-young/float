@@ -48,7 +48,7 @@ public struct T3Client: Sendable {
         let selection: T3ModelSelection?
         if thread == nil, modelSelection == nil {
             guard let preferred = T3Model.preferred(in: try await models()) else {
-                throw T3Error.tool("Enable Codex or Claude Code in T3 Settings → Providers to send a prompt.")
+                throw T3Error.tool("Enable a supported provider in T3 Settings → Providers to send a prompt.")
             }
             selection = preferred.selection
         } else {
