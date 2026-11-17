@@ -31,8 +31,12 @@ public struct T3Client: Sendable {
 
     public func models() async throws -> [T3Model] {
         do {
-            return try await transport.call("orchestrator_capabilities", [:], result: T3ModelCatalog.self).available
-        } catch let error as URLError where [.cannotConnectToHost, .networkConnectionLost, .notConnectedToInternet].contains(error.code) {
+            return try await transport.call(
+                "orchestrator_capabilities", [:], result: T3ModelCatalog.self, retryExpiredSession: true
+            ).available
+        } catch let error as URLError where [
+            .cannotConnectToHost, .networkConnectionLost, .notConnectedToInternet, .timedOut,
+        ].contains(error.code) {
             throw T3Error.serverUnavailable
         }
     }
@@ -130,11 +134,7 @@ public struct T3Client: Sendable {
             "threadId": thread.threadId, "view": "messages", "limit": 40, "maxCharsPerItem": 20_000,
         ]
         args["beforePosition"] = before
-        do {
-            return try await transport.call("t3_thread_read", args, result: ThreadSnapshot.self)
-        } catch let error as URLError where [.cannotConnectToHost, .networkConnectionLost, .notConnectedToInternet].contains(error.code) {
-            throw T3Error.serverUnavailable
-        }
+        return try await readSnapshot(args)
     }
 
     public func readRemainder(
@@ -143,14 +143,26 @@ public struct T3Client: Sendable {
         var text = item.text ?? ""
         var offset = item.nextTextOffset
         while let start = offset {
-            let page = try await transport.call("t3_thread_read", [
+            let page = try await readSnapshot([
                 "threadId": thread.threadId, "view": "messages",
                 "itemId": item.itemId, "textOffset": start, "maxCharsPerItem": 20_000,
-            ], result: ThreadSnapshot.self)
+            ])
             guard let part = page.items.first(where: { $0.itemId == item.itemId }) else { break }
             text += part.text ?? ""
             offset = part.nextTextOffset.flatMap { $0 > start ? $0 : nil }
         }
         return text
+    }
+
+    private func readSnapshot(_ arguments: [String: any Sendable]) async throws -> ThreadSnapshot {
+        do {
+            return try await transport.call(
+                "t3_thread_read", arguments, result: ThreadSnapshot.self, retryExpiredSession: true
+            )
+        } catch let error as URLError where [
+            .cannotConnectToHost, .networkConnectionLost, .notConnectedToInternet, .timedOut,
+        ].contains(error.code) {
+            throw T3Error.serverUnavailable
+        }
     }
 }

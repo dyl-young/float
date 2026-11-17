@@ -164,9 +164,13 @@ final class ChatState: ObservableObject {
         NSWorkspace.shared.openApplication(at: url, configuration: .init()) { _, error in
             let message = error?.localizedDescription
             Task { @MainActor in
-                guard let message else { return }
-                self.notice = message
-                self.needsT3 = true
+                if let message {
+                    self.notice = message
+                    self.needsT3 = true
+                } else {
+                    if let reference = self.reference { self.refresh(reference, force: self.watcher == nil) }
+                    self.reloadModels()
+                }
             }
         }
         needsT3 = false
@@ -215,7 +219,7 @@ final class ChatState: ObservableObject {
                 refresh(receipt.reference, force: true)
             } catch {
                 showError(error)
-                if status == .running, let target { refresh(target, force: true) }
+                if case T3Error.uncertainDelivery = error, let target { refresh(target, force: true) }
             }
             submitting = false
             focusRequest += 1
@@ -291,6 +295,7 @@ final class ChatState: ObservableObject {
         if messages.isEmpty { loading = true }
         let version = generation
         watcher = Task {
+            var connectionFailures = 0
             defer {
                 if generation == version && !Task.isCancelled {
                     watcher = nil
@@ -313,6 +318,7 @@ final class ChatState: ObservableObject {
                     title = page.thread.title
                     threadModel = page.thread.modelSelection ?? threadModel
                     loading = false
+                    connectionFailures = 0
                     if needsT3 {
                         notice = nil
                         needsT3 = false
@@ -322,9 +328,12 @@ final class ChatState: ObservableObject {
                     guard generation == version && !Task.isCancelled else { return }
                     showError(error)
                     loading = false
-                    if status != .running && status != .waiting { return }
+                    guard case T3Error.serverUnavailable = error else { return }
+                    connectionFailures += 1
+                    if connectionFailures >= 10 && status != .running && status != .waiting { return }
                 }
-                try? await Task.sleep(for: visible ? .milliseconds(850) : .seconds(3))
+                let delay: Duration = visible && connectionFailures == 0 ? .milliseconds(850) : .seconds(3)
+                try? await Task.sleep(for: delay)
             } while !Task.isCancelled
         }
     }

@@ -115,7 +115,8 @@ actor MCPTransport {
     }
 
     func call<Result: Decodable & Sendable>(
-        _ name: String, _ args: [String: any Sendable], result: Result.Type
+        _ name: String, _ args: [String: any Sendable], result: Result.Type,
+        retryExpiredSession: Bool = false
     ) async throws -> Result {
         let connected = try await connect()
         do {
@@ -128,6 +129,10 @@ actor MCPTransport {
         } catch let error as T3Error {
             if case .http(let status) = error, [401, 404].contains(status) {
                 await invalidate(connected)
+                if retryExpiredSession {
+                    try Task.checkCancellation()
+                    return try await call(name, args, result: result)
+                }
             }
             throw error
         }
@@ -152,6 +157,7 @@ actor MCPTransport {
 
     private func invalidate(_ connected: Connected) async {
         guard let active = connection, let value = try? await active.task.value,
+            connection?.task == active.task,
             value.credential.sessionId == connected.credential.sessionId else { return }
         connection = nil
         await terminate(connected)

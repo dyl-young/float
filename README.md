@@ -21,7 +21,7 @@ open dist/Float.app
 - Use the model menu to pick an enabled Codex or Claude Code model. A model change applies to your next prompt, and Float remembers your choice for new chats. **Default** restores automatic selection. On a Codex-only device, Float defaults to GPT-6.1 Sol when T3 offers it.
 - Float starts chats in T3’s **No project** workspace. The active chat and draft stay in place when you hide Float. Float remembers the last thread and unsent text across relaunches.
 - The top buttons start a new chat and open the current thread in T3. Runs continue in T3 while Float is hidden. Open the thread in T3 to handle agent approvals and questions.
-- If the local server is unavailable, **Launch T3** starts the app and leaves your draft ready to send.
+- If the local server is unavailable, **Launch T3** starts the app and leaves your draft ready to send. Float reconnects to reload the current conversation after a brief interruption.
 
 ## Development
 
