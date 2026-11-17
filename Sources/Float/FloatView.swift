@@ -11,15 +11,20 @@ struct FloatView: View {
     let resize: (CGFloat) -> Void
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.displayScale) private var displayScale
     @State private var editorHeight: CGFloat = 28
     @State private var inputHeight: CGFloat = 44
     @State private var composerHeight: CGFloat = 86
     @State private var timelineHeight: CGFloat = 0
+    @State private var timelineBottom: CGFloat = 0
+    @State private var inputTop: CGFloat = 0
     @State private var copiedMessage: String?
 
     private static let headerHeight: CGFloat = 38
     private static let headerFadeHeight: CGFloat = 14
     private static let maxHeight: CGFloat = 560
+    private nonisolated static let shellSpace = "Float shell"
+    private let inputShape = RoundedRectangle(cornerRadius: Theme.radius)
 
     private var showsTray: Bool { chat.hasConversation || chat.notice != nil }
 
@@ -36,7 +41,7 @@ struct FloatView: View {
             }
             VStack(spacing: 0) {
                 input
-                    .background { inputBackdrop }
+                    .background { inputBackdrop.clipShape(inputShape) }
                     .overlay(alignment: .top) {
                         if showsTray {
                             TrayShape(side: .top)
@@ -46,15 +51,19 @@ struct FloatView: View {
                         }
                     }
                     .overlay {
-                        RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
-                            .strokeBorder(Theme.text.opacity(0.09), lineWidth: 1)
+                        inputShape
+                            .strokeBorder(Theme.text.opacity(0.09), lineWidth: 1 / displayScale)
                             .allowsHitTesting(false)
                     }
-                    .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { inputHeight = $0 }
+                    .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named(Self.shellSpace)) }) {
+                        inputHeight = $0.height
+                        inputTop = $0.minY
+                    }
                 footer
             }
             .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { composerHeight = ceil($0) }
         }
+        .coordinateSpace(name: Self.shellSpace)
         .background(Theme.tray)
         .clipShape(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
         .overlay {
@@ -73,10 +82,22 @@ struct FloatView: View {
             Theme.raised
         } else {
             ZStack {
-                ComposerBackdrop().allowsHitTesting(false).accessibilityHidden(true)
+                Theme.tray
+                if showsTray, timelineBottom > inputTop {
+                    // Sample the timeline at its scroll position and blur only the portion under the input.
+                    GeometryReader { geometry in
+                        timeline
+                            .frame(width: geometry.size.width)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .offset(y: timelineBottom - timelineHeight - inputTop)
+                    }
+                    .blur(radius: 2.5)
+                }
                 Theme.raised.opacity(0.55)
                 Theme.text.opacity(0.06)
             }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
         }
     }
 
@@ -86,22 +107,11 @@ struct FloatView: View {
         VStack(spacing: 0) {
             header
             ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    if chat.hasOlderMessages {
-                        Button("Load older messages", action: chat.loadOlder)
-                            .buttonStyle(.plain)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(Theme.accent)
-                            .disabled(chat.loadingOlder)
-                            .frame(maxWidth: .infinity)
+                timeline
+                    .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named(Self.shellSpace)) }) {
+                        timelineHeight = $0.height
+                        timelineBottom = $0.maxY
                     }
-                    ForEach(chat.messages) { messageView($0) }
-                    activity
-                }
-                .padding(.horizontal, 14)
-                .padding(.top, Self.headerFadeHeight)
-                .padding(.bottom, 14)
-                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { timelineHeight = ceil($0) }
             }
             // Keep the latest message above the composer at rest while allowing it to scroll under the frost.
             .contentMargins(.bottom, inputHeight, for: .scrollContent)
@@ -116,6 +126,24 @@ struct FloatView: View {
             }
             .accessibilityLabel("Conversation")
         }
+    }
+
+    private var timeline: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            if chat.hasOlderMessages {
+                Button("Load older messages", action: chat.loadOlder)
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.accent)
+                    .disabled(chat.loadingOlder)
+                    .frame(maxWidth: .infinity)
+            }
+            ForEach(chat.messages) { messageView($0) }
+            activity
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, Self.headerFadeHeight)
+        .padding(.bottom, 14)
     }
 
     private var header: some View {
@@ -503,18 +531,6 @@ private struct PanelDragHandle: NSViewRepresentable {
             window?.performDrag(with: event)
         }
     }
-}
-
-private struct ComposerBackdrop: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        view.material = .hudWindow
-        view.blendingMode = .withinWindow
-        view.state = .active
-        return view
-    }
-
-    func updateNSView(_ view: NSVisualEffectView, context: Context) {}
 }
 
 private struct ImagePreview: View {
