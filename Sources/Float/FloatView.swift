@@ -177,7 +177,7 @@ struct FloatView: View {
     }
 
     private var timeline: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             if chat.hasOlderMessages {
                 Button("Load older messages", action: chat.loadOlder)
                     .buttonStyle(.plain)
@@ -329,11 +329,7 @@ struct FloatView: View {
             .frame(maxWidth: .infinity, alignment: .trailing)
             .padding(.leading, 48)
         } else {
-            let shape = UnevenRoundedRectangle(
-                topLeadingRadius: 12, bottomLeadingRadius: 4,
-                bottomTrailingRadius: 12, topTrailingRadius: 12, style: .continuous
-            )
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(formatted(message.text))
                     .font(.system(size: 13.5))
                     .lineSpacing(3)
@@ -341,27 +337,25 @@ struct FloatView: View {
                     .tint(Theme.accent)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                HStack(spacing: 2) {
-                    Spacer(minLength: 0)
+                HStack(spacing: 6) {
+                    Button { copy(message) } label: {
+                        Image(systemName: copiedMessage == message.id ? "checkmark" : "doc.on.doc")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Theme.muted)
+                            .frame(width: 12, height: 22, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(copiedMessage == message.id ? "Copied" : "Copy response")
+                    .accessibilityLabel(copiedMessage == message.id ? "Copied" : "Copy response")
                     if let date = message.date {
                         Text(date, style: .time)
                             .font(.system(size: 10.5).monospacedDigit())
                             .foregroundStyle(Theme.muted)
                     }
-                    PanelButton(
-                        copiedMessage == message.id ? "Copied" : "Copy response",
-                        systemImage: copiedMessage == message.id ? "checkmark" : "doc.on.doc",
-                        size: 22
-                    ) { copy(message) }
                 }
-                .padding(.trailing, -6)
             }
-            .padding(.horizontal, 11)
-            .padding(.top, 9)
-            .padding(.bottom, 3)
-            .background(Color.white.opacity(0.035), in: shape)
-            .overlay { shape.strokeBorder(Theme.hairline, lineWidth: 1) }
-            .padding(.trailing, 24)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
