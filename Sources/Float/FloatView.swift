@@ -8,7 +8,7 @@ import UniformTypeIdentifiers
 /// concave corners, like the nordbones T3 composer.
 struct FloatView: View {
     @ObservedObject var chat: ChatState
-    let resize: (CGFloat) -> Void
+    let resize: (CGFloat, Bool) -> Void
     let dismiss: () -> Void
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -80,8 +80,8 @@ struct FloatView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .preferredColorScheme(.dark)
-        .onAppear { resize(panelHeight) }
-        .onChange(of: panelHeight) { _, value in resize(value) }
+        .onAppear { resize(panelHeight, showsTray) }
+        .onChange(of: panelHeight) { _, value in resize(value, showsTray) }
     }
 
     @ViewBuilder private var inputBackdrop: some View {

@@ -2,6 +2,7 @@ import AppKit
 import Carbon
 import FloatCore
 import OSLog
+import QuartzCore
 import SwiftUI
 
 @MainActor
@@ -15,6 +16,7 @@ private final class FloatApp: NSObject, NSApplicationDelegate {
     private var hotKey: EventHotKeyRef?
     private var hotKeyHandler: EventHandlerRef?
     private var desiredHeight: CGFloat = 79
+    private var trayVisible: Bool?
     private var positioned = false
     private var shuttingDown = false
 
@@ -94,9 +96,9 @@ private final class FloatApp: NSObject, NSApplicationDelegate {
         panel.startNewChat = { [weak self] in self?.chat.newChat() }
         panel.openModelPicker = { [weak self] in self?.chat.requestModelPicker() }
         panel.stopRun = { [weak self] in self?.chat.stop() }
-        let host = NSHostingView(rootView: FloatView(chat: chat, resize: { [weak self] height in
+        let host = NSHostingView(rootView: FloatView(chat: chat, resize: { [weak self] height, trayVisible in
             // SwiftUI may update its preferred size while the window is laying out.
-            DispatchQueue.main.async { self?.resize(to: height) }
+            DispatchQueue.main.async { self?.resize(to: height, trayVisible: trayVisible) }
         }, dismiss: { [weak self] in self?.hide() }))
         host.sizingOptions = []
         panel.contentView = host
@@ -104,13 +106,15 @@ private final class FloatApp: NSObject, NSApplicationDelegate {
         return panel
     }
 
-    private func resize(to height: CGFloat) {
+    private func resize(to height: CGFloat, trayVisible: Bool) {
+        let animate = self.trayVisible.map { $0 != trayVisible } ?? false
+        self.trayVisible = trayVisible
         guard height != desiredHeight else { return }
         desiredHeight = height
-        if let screen = panel?.screen ?? NSScreen.main { layout(on: screen) }
+        if let screen = panel?.screen ?? NSScreen.main { layout(on: screen, animated: animate) }
     }
 
-    private func layout(on screen: NSScreen) {
+    private func layout(on screen: NSScreen, animated: Bool = false) {
         guard let panel else { return }
         let visible = screen.visibleFrame.insetBy(dx: 12, dy: 12)
         let width = min(Self.panelWidth, visible.width)
@@ -122,7 +126,15 @@ private final class FloatApp: NSObject, NSApplicationDelegate {
             y: min(max(bottom, visible.minY), visible.maxY - height),
             width: width, height: height
         )
-        panel.setFrame(rect, display: true)
+        if animated, panel.isVisible {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.18
+                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                panel.animator().setFrame(rect, display: true)
+            }
+        } else {
+            panel.setFrame(rect, display: true)
+        }
         positioned = true
     }
 
