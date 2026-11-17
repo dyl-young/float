@@ -26,6 +26,7 @@ The colours come from Dylan's nordbones T3 theme. So do the pixel thinking loade
 ## Fixed rules
 
 - **Opaque panel, frosted input.** The panel is opaque, so the desktop never shows through. The conversation scrolls up *behind* the frosted input, and the input blurs the message text under it, as in T3's composer. The solid footer tucks under the input with concave corners. The input's top corners are drawn as solid concave ears over the scrolling content.
+- **Input rim.** As in T3, the frosted input has a 1px hairline ring (foreground at about 9%) that follows its 16pt corners all the way round, so it reads as its own inset card.
 
 - **Corner radius:** 16 for the shell, 12 for bubbles, 10 for cards and menus, 6 for chips.
 - **Thinking loader:** the 3×3 pixel grid, 4 frames, stepping every 300 ms. It's the only progress indicator.
