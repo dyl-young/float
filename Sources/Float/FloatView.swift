@@ -444,7 +444,7 @@ struct FloatView: View {
     private var footer: some View {
         HStack(spacing: 4) {
             PanelButton("Attach images", systemImage: "paperclip", size: Self.footerButtonSize, action: chooseImages)
-                .offset(x: 0.5, y: -1)
+                .offset(y: -1)
             PanelDragHandle()
                 .frame(maxWidth: .infinity)
                 .frame(height: 30)
