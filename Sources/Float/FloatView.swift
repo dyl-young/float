@@ -12,11 +12,13 @@ struct FloatView: View {
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @State private var editorHeight: CGFloat = 28
+    @State private var inputHeight: CGFloat = 44
     @State private var composerHeight: CGFloat = 86
     @State private var timelineHeight: CGFloat = 0
     @State private var copiedMessage: String?
 
     private static let headerHeight: CGFloat = 38
+    private static let headerFadeHeight: CGFloat = 14
     private static let maxHeight: CGFloat = 560
 
     private var showsTray: Bool { chat.hasConversation || chat.notice != nil }
@@ -29,14 +31,31 @@ struct FloatView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if showsTray { tray }
+            if showsTray {
+                tray.padding(.bottom, -inputHeight)
+            }
             VStack(spacing: 0) {
                 input
+                    .background { inputBackdrop }
+                    .overlay(alignment: .top) {
+                        if showsTray {
+                            TrayShape(side: .top)
+                                .fill(Theme.tray)
+                                .frame(height: Theme.radius)
+                                .allowsHitTesting(false)
+                        }
+                    }
+                    .overlay {
+                        RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
+                            .strokeBorder(Theme.text.opacity(0.09), lineWidth: 1)
+                            .allowsHitTesting(false)
+                    }
+                    .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { inputHeight = $0 }
                 footer
             }
             .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { composerHeight = ceil($0) }
         }
-        .background { shellBackground }
+        .background(Theme.tray)
         .clipShape(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
@@ -49,13 +68,14 @@ struct FloatView: View {
         .onChange(of: panelHeight) { _, value in resize(value) }
     }
 
-    @ViewBuilder private var shellBackground: some View {
+    @ViewBuilder private var inputBackdrop: some View {
         if reduceTransparency {
-            Theme.surface
+            Theme.raised
         } else {
             ZStack {
                 ComposerBackdrop().allowsHitTesting(false).accessibilityHidden(true)
                 Theme.raised.opacity(0.55)
+                Theme.text.opacity(0.06)
             }
         }
     }
@@ -79,24 +99,22 @@ struct FloatView: View {
                     activity
                 }
                 .padding(.horizontal, 14)
-                .padding(.top, 4)
+                .padding(.top, Self.headerFadeHeight)
                 .padding(.bottom, 14)
                 .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { timelineHeight = ceil($0) }
             }
+            // Keep the latest message above the composer at rest while allowing it to scroll under the frost.
+            .contentMargins(.bottom, inputHeight, for: .scrollContent)
             .defaultScrollAnchor(.bottom)
             .scrollIndicators(.never)
             .mask {
                 VStack(spacing: 0) {
-                    LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom).frame(height: 10)
+                    LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                        .frame(height: Self.headerFadeHeight)
                     Color.black
                 }
             }
             .accessibilityLabel("Conversation")
-        }
-        .background {
-            TrayShape(side: .top)
-                .fill(Theme.tray.opacity(reduceTransparency ? 0 : 1))
-                .padding(.bottom, -Theme.radius)
         }
     }
 
@@ -331,7 +349,7 @@ struct FloatView: View {
         .frame(height: 40)
         .background {
             TrayShape(side: .bottom)
-                .fill(Theme.tray.opacity(reduceTransparency ? 0 : 1))
+                .fill(Theme.tray)
                 .padding(.top, -Theme.radius)
         }
     }
@@ -491,7 +509,7 @@ private struct ComposerBackdrop: NSViewRepresentable {
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
         view.material = .hudWindow
-        view.blendingMode = .behindWindow
+        view.blendingMode = .withinWindow
         view.state = .active
         return view
     }

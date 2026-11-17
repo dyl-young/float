@@ -55,6 +55,10 @@ struct ModelMenuAnchor: NSViewRepresentable {
             var shownProviders: Set<String> = []
             for first in chat.models where shownProviders.insert(first.selection.instanceId).inserted {
                 let header = NSMenuItem.sectionHeader(title: first.provider)
+                header.attributedTitle = NSAttributedString(string: first.provider, attributes: [
+                    .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
+                    .foregroundColor: NSColor(Theme.muted),
+                ])
                 header.image = ProviderIcon(driverKind: first.driverKind)?.menuImage()
                 menu.addItem(header)
                 for model in byProvider[first.selection.instanceId, default: []] {

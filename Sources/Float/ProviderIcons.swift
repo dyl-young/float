@@ -53,7 +53,7 @@ enum ProviderIcon {
     }
 
     func menuImage(size: CGFloat = 13) -> NSImage {
-        let image = NSImage(size: NSSize(width: size, height: size), flipped: true) { rect in
+        NSImage(size: NSSize(width: size, height: size), flipped: true) { rect in
             guard let context = NSGraphicsContext.current?.cgContext else { return false }
             for (path, tint) in layers {
                 context.setFillColor(NSColor(tint).cgColor)
@@ -62,8 +62,6 @@ enum ProviderIcon {
             }
             return true
         }
-        image.isTemplate = self == .openAI || self == .cursor
-        return image
     }
 }
 
