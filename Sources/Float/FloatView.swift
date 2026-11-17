@@ -217,6 +217,7 @@ struct FloatView: View {
 
     private var composer: some View {
         let radius: CGFloat = 17
+        let footerHeight: CGFloat = 36
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         return VStack(spacing: 0) {
             VStack(spacing: 0) {
@@ -274,8 +275,7 @@ struct FloatView: View {
             }
             .padding(.leading, 7)
             .padding(.trailing, 8)
-            .frame(height: 36)
-            .background(FloatPalette.footer.opacity(reduceTransparency ? 0 : 0.44))
+            .frame(height: footerHeight)
         }
         .background {
             ZStack {
@@ -285,6 +285,22 @@ struct FloatView: View {
                         .accessibilityHidden(true)
                 }
                 shape.fill(FloatPalette.footer.opacity(reduceTransparency ? 1 : 0.42))
+                if !reduceTransparency {
+                    Canvas { context, size in
+                        let bounds = CGRect(origin: .zero, size: size)
+                        let footerTop = bounds.height - footerHeight
+                        let inputBounds = CGRect(x: 0, y: 0, width: bounds.width, height: footerTop)
+                        let footerBounds = CGRect(
+                            x: 0, y: inputBounds.midY, width: bounds.width, height: bounds.height - inputBounds.midY
+                        )
+                        // Continue the footer tint through the cutouts around the input corners.
+                        var outsideInput = Path(bounds)
+                        outsideInput.addPath(shape.path(in: inputBounds))
+                        context.clip(to: outsideInput, style: FillStyle(eoFill: true))
+                        context.fill(Path(footerBounds), with: .color(FloatPalette.footer.opacity(0.44)))
+                    }
+                    .allowsHitTesting(false)
+                }
             }
         }
         .clipShape(shape)
