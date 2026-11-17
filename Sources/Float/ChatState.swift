@@ -14,14 +14,29 @@ struct ChatMessage: Identifiable, Equatable {
     let previews: [Data]
 }
 
+enum NoticeKind {
+    case input
+    case connection
+    case run
+}
+
 @MainActor
 final class ChatState: ObservableObject {
-    @Published var draft: String { didSet { defaults.set(draft, forKey: "draft") } }
+    @Published var draft: String {
+        didSet {
+            defaults.set(draft, forKey: "draft")
+            if noticeKind == .input { clearNotice() }
+        }
+    }
     @Published private(set) var images: [ImageAttachment] = []
     @Published private(set) var reference: ThreadReference?
     @Published private(set) var messages: [ChatMessage] = []
     @Published private(set) var title: String?
-    @Published private(set) var status: RunStatus = .idle
+    @Published private(set) var status: RunStatus = .idle {
+        didSet {
+            if oldValue != status { dismissedStatusNotice = nil }
+        }
+    }
     @Published private(set) var submitting = false
     @Published private(set) var stopping = false
     @Published private(set) var stopAcknowledged = false
@@ -29,6 +44,8 @@ final class ChatState: ObservableObject {
     @Published private(set) var hasOlderMessages = false
     @Published private(set) var loadingOlder = false
     @Published private(set) var notice: String?
+    @Published private(set) var noticeKind: NoticeKind?
+    @Published private(set) var noticeDetail: String?
     @Published private(set) var needsT3 = false
     @Published private(set) var focusRequest = 0
     @Published private(set) var modelPickerRequest = 0
@@ -38,6 +55,9 @@ final class ChatState: ObservableObject {
     @Published private var threadModel: T3ModelSelection?
     @Published private var nextModel: T3ModelSelection?
     @Published private var savedModel: T3ModelSelection?
+    @Published private var dismissedStatusNotice: RunStatus?
+    @Published private(set) var failureReason: String?
+    @Published private(set) var failureDetail: String?
 
     private let defaults: UserDefaults
     private let client: T3Client
@@ -68,6 +88,8 @@ final class ChatState: ObservableObject {
     }
 
     var hasConversation: Bool { reference != nil || submitting }
+    var hasTrayNotice: Bool { notice != nil && noticeKind != .input }
+    var statusNoticeDismissed: Bool { dismissedStatusNotice == status }
     var showsStop: Bool { submitting || (status == .running && !stopAcknowledged) || stopping }
     var canStop: Bool { showsStop && !stopping }
     var canSend: Bool {
@@ -149,7 +171,10 @@ final class ChatState: ObservableObject {
         stopping = false
         stopAcknowledged = false
         activeRunId = nil
-        notice = nil
+        clearNotice()
+        dismissedStatusNotice = nil
+        failureReason = nil
+        failureDetail = nil
         needsT3 = false
         loading = false
         hasOlderMessages = false
@@ -167,21 +192,21 @@ final class ChatState: ObservableObject {
         guard let url = reference?.desktopURL else { return }
         if !NSWorkspace.shared.open(url) {
             needsT3 = true
-            notice = "Float couldn’t open the thread in T3 Code."
+            setNotice("Float couldn't open the thread in T3 Code.", kind: .connection)
         }
     }
 
     func launchT3() {
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.t3tools.t3code") else {
-            notice = "T3 Code isn’t installed. Download it from t3.codes."
+            setNotice("T3 Code isn't installed. Download it from t3.codes.", kind: .connection)
             return
         }
         NSWorkspace.shared.openApplication(at: url, configuration: .init()) { _, error in
             let message = error?.localizedDescription
             Task { @MainActor in
                 if let message {
-                    self.notice = message
                     self.needsT3 = true
+                    self.setNotice("Float couldn't launch T3 Code.", kind: .connection, detail: message)
                 } else {
                     if let reference = self.reference { self.refresh(reference, force: self.watcher == nil) }
                     self.reloadModels()
@@ -189,21 +214,21 @@ final class ChatState: ObservableObject {
             }
         }
         needsT3 = false
-        notice = nil
+        clearNotice()
     }
 
     func send() {
         guard canSend else { return }
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard text.utf16.count <= 120_000 else {
-            notice = "T3 accepts up to 120,000 characters per message."
+            setNotice("T3 accepts up to 120,000 characters per message.", kind: .input)
             return
         }
         let attachments = images
         let request = UUID()
         let target = reference
         let selection = target == nil ? selectedModel : nextModel
-        notice = nil
+        clearNotice()
         needsT3 = false
         submitting = true
         stopAcknowledged = false
@@ -294,18 +319,18 @@ final class ChatState: ObservableObject {
     func addImageFiles(_ urls: [URL]) {
         for url in urls {
             guard images.count < ImageAttachment.maxCount else {
-                notice = "Attach up to eight images per message."
+                setNotice("Attach up to eight images per message.", kind: .input)
                 break
             }
             do {
                 let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
                 guard size <= ImageAttachment.maxBytes else {
-                    notice = "Images must be 10 MB or smaller."
+                    setNotice("Images must be 10 MB or smaller.", kind: .input)
                     continue
                 }
                 addImage(try Data(contentsOf: url), name: url.lastPathComponent)
             } catch {
-                notice = "Float couldn’t open \(url.lastPathComponent)."
+                setNotice("Float couldn't open \(url.lastPathComponent).", kind: .input)
             }
         }
     }
@@ -330,7 +355,15 @@ final class ChatState: ObservableObject {
         return false
     }
 
-    func removeImage(_ id: UUID) { images.removeAll { $0.id == id } }
+    func removeImage(_ id: UUID) {
+        images.removeAll { $0.id == id }
+        if noticeKind == .input { clearNotice() }
+    }
+
+    func dismissNotice() {
+        clearNotice()
+        if status == .waiting || status == .failed { dismissedStatusNotice = status }
+    }
 
     func close() async { await client.close() }
 
@@ -361,13 +394,14 @@ final class ChatState: ObservableObject {
                     }
                     status = page.thread.pendingRequestCount > 0 ? .waiting : page.thread.status
                     activeRunId = page.recentRuns?.first { $0.status == .running }?.runId
+                    updateFailure(from: page)
                     if status != .running { stopAcknowledged = false }
                     title = page.thread.title
                     threadModel = page.thread.modelSelection ?? threadModel
                     loading = false
                     connectionFailures = 0
-                    if needsT3 {
-                        notice = nil
+                    if needsT3 || noticeKind == .connection {
+                        clearNotice()
                         needsT3 = false
                     }
                     if status != .running && status != .waiting { return }
@@ -425,15 +459,89 @@ final class ChatState: ObservableObject {
     }
 
     private func showError(_ error: Error) {
+        let detail = error.localizedDescription
         if case T3Error.serverUnavailable = error {
             needsT3 = true
-            notice = "The local T3 server is unavailable."
+            setNotice("The local T3 server isn't responding.", kind: .connection, detail: detail)
+        } else if case T3Error.cliUnavailable = error {
+            needsT3 = true
+            setNotice("Float couldn't find the local T3 command.", kind: .connection, detail: detail)
+        } else if case T3Error.authorization = error {
+            setNotice("T3 Code couldn't authorize Float.", kind: .connection, detail: detail)
+        } else if case T3Error.localAddressRequired = error {
+            setNotice("T3 Code's local server address isn't valid.", kind: .connection, detail: detail)
+        } else if case T3Error.uncertainDelivery = error {
+            setNotice("T3 Code may have received that message. Check the thread before sending again.",
+                kind: .run, detail: detail)
         } else {
-            let text = error.localizedDescription
-            notice = text.contains("Provider instance \"claudeAgent\" is disabled")
-                ? "Claude Code is disabled in T3. Enable it in T3 Settings → Providers and sign in if needed."
-                : text
+            setNotice(Self.friendlyError(detail), kind: .run, detail: detail)
         }
+    }
+
+    private func updateFailure(from snapshot: ThreadSnapshot) {
+        guard status == .failed else {
+            failureReason = nil
+            failureDetail = nil
+            return
+        }
+        let failedRun = snapshot.recentRuns?.first { $0.status == .failed }
+        let raw = failedRun?.failureReason ?? snapshot.items.reversed().first(where: {
+            $0.type == "error" && (failedRun == nil || $0.runId == failedRun?.runId)
+        })?.text
+        guard let raw, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            failureReason = nil
+            failureDetail = nil
+            return
+        }
+        failureReason = Self.friendlyFailure(raw)
+        failureDetail = raw
+    }
+
+    private static func friendlyError(_ raw: String) -> String {
+        let lower = raw.lowercased()
+        if lower.contains("provider instance \"claudeagent\" is disabled") {
+            return "Claude Code is disabled in T3 Code. Enable it in T3 Settings → Providers."
+        }
+        if lower.contains("enable a supported provider") || lower.contains("no enabled models") {
+            return "No supported model is enabled in T3 Code."
+        }
+        if lower.contains("rate limit") || lower.contains("too many requests") {
+            return "The model provider is rate-limited. Try again shortly."
+        }
+        if lower.contains("timed out") || lower.contains("timeout") {
+            return "T3 Code timed out waiting for the model."
+        }
+        if lower.contains("sign in") || lower.contains("authentication") || lower.contains("unauthorized") {
+            return "T3 Code needs you to sign in again."
+        }
+        return "Something went wrong in T3 Code."
+    }
+
+    private static func friendlyFailure(_ raw: String) -> String {
+        let friendly = friendlyError(raw)
+        if friendly != "Something went wrong in T3 Code." { return friendly }
+        let compact = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lower = compact.lowercased()
+        let looksLikeEnvelope = compact.hasPrefix("{") || compact.hasPrefix("[")
+            || lower.contains("\"jsonrpc\"") || lower.contains("mcp error")
+            || lower.contains("structuredcontent") || lower.contains("\nat ")
+            || lower.contains("traceback") || lower.contains("stack trace")
+        if !looksLikeEnvelope, compact.count <= 240, !compact.contains("\n") {
+            return compact
+        }
+        return "T3 Code reported an internal error."
+    }
+
+    private func setNotice(_ text: String, kind: NoticeKind, detail: String? = nil) {
+        notice = text
+        noticeKind = kind
+        noticeDetail = detail == text ? nil : detail
+    }
+
+    private func clearNotice() {
+        notice = nil
+        noticeKind = nil
+        noticeDetail = nil
     }
 
     private func persist() {
@@ -443,17 +551,17 @@ final class ChatState: ObservableObject {
 
     private func addImage(_ data: Data, name: String) {
         guard images.count < ImageAttachment.maxCount else {
-            notice = "Attach up to eight images per message."
+            setNotice("Attach up to eight images per message.", kind: .input)
             return
         }
         guard data.count <= ImageAttachment.maxBytes else {
-            notice = "Images must be 10 MB or smaller."
+            setNotice("Images must be 10 MB or smaller.", kind: .input)
             return
         }
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
             let identifier = CGImageSourceGetType(source), let type = UTType(identifier as String)
         else {
-            notice = "Float couldn’t read that image."
+            setNotice("Float couldn't read that image.", kind: .input)
             return
         }
         let payload: (data: Data, type: UTType)
@@ -465,11 +573,11 @@ final class ChatState: ObservableObject {
         ] as CFDictionary), let png = Self.encode(image, as: .png) {
             payload = (png, .png)
         } else {
-            notice = "Float couldn’t convert that image."
+            setNotice("Float couldn't convert that image.", kind: .input)
             return
         }
         guard payload.data.count <= ImageAttachment.maxBytes else {
-            notice = "The converted image exceeds T3’s 10 MB limit."
+            setNotice("The converted image exceeds T3's 10 MB limit.", kind: .input)
             return
         }
         let ext = payload.type.preferredFilenameExtension ?? "png"

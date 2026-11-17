@@ -180,6 +180,7 @@ public struct ThreadSnapshot: Decodable, Sendable {
     public struct Run: Decodable, Sendable {
         public let runId: String
         public let status: RunStatus
+        public let failureReason: String?
     }
 
     public struct Thread: Decodable, Sendable {

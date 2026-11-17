@@ -32,7 +32,7 @@ struct FloatView: View {
     private static let edgeButtonInset: CGFloat = 9
     private let inputShape = RoundedRectangle(cornerRadius: Theme.radius)
 
-    private var showsTray: Bool { chat.hasConversation || chat.notice != nil }
+    private var showsTray: Bool { chat.hasConversation || chat.hasTrayNotice }
 
     private var panelHeight: CGFloat {
         guard showsTray else { return composerHeight }
@@ -198,7 +198,11 @@ struct FloatView: View {
         HStack(spacing: 6) {
             PanelButton("Close · Esc", systemImage: "xmark", size: Self.edgeButtonSize, action: dismiss)
                 .offset(y: -1)
-            Circle().fill(statusColor).frame(width: 6, height: 6).accessibilityHidden(true)
+            Circle()
+                .fill(statusColor)
+                .frame(width: 6, height: 6)
+                .help(statusLabel)
+                .accessibilityLabel(statusLabel)
             HStack(spacing: 0) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(chat.title ?? "Float")
@@ -217,10 +221,18 @@ struct FloatView: View {
             .overlay {
                 PanelDragHandle().accessibilityHidden(true)
             }
-            PanelButton("New chat · ⌘N", systemImage: "square.and.pencil", size: Self.edgeButtonSize, action: chat.newChat)
-                .disabled(chat.submitting || !chat.hasConversation)
-            PanelButton("Open in T3", systemImage: "arrow.up.forward.square", size: Self.edgeButtonSize, action: chat.openThread)
+            if chat.hasConversation {
+                PanelButton(
+                    "New chat · ⌘N", systemImage: "square.and.pencil",
+                    size: Self.edgeButtonSize, action: chat.newChat
+                )
+                .disabled(chat.submitting)
+                PanelButton(
+                    "Open in T3", systemImage: "arrow.up.forward.square",
+                    size: Self.edgeButtonSize, action: chat.openThread
+                )
                 .disabled(chat.reference?.desktopURL == nil)
+            }
         }
         .padding(.horizontal, Self.edgeButtonInset)
         .frame(height: Self.headerHeight)
@@ -236,6 +248,16 @@ struct FloatView: View {
         }
     }
 
+    private var statusLabel: String {
+        if chat.needsT3 { return "T3 not running" }
+        switch chat.status {
+        case .running: return "Working"
+        case .waiting: return "Needs input"
+        case .failed: return "Failed"
+        default: return chat.submitting ? "Working" : "Ready"
+        }
+    }
+
     private var openAction: NoticeAction? {
         chat.reference?.desktopURL == nil ? nil : NoticeAction(title: "Open in T3", handle: { chat.openThread() })
     }
@@ -245,31 +267,43 @@ struct FloatView: View {
     }
 
     @ViewBuilder private var activity: some View {
-        if let notice = chat.notice {
-            NoticeCard(
-                text: notice, tone: chat.needsT3 ? .info : .error,
-                action: chat.needsT3 ? NoticeAction(title: "Launch T3", handle: { chat.launchT3() }) : nil
-            )
-        } else if isThinking {
-            ThinkingLoader(size: 16)
-                .padding(.leading, 2)
-                .padding(.vertical, 4)
-        } else if chat.status == .waiting {
-            NoticeCard(
-                text: "T3 needs your approval or an answer to continue.", tone: .warning,
-                action: openAction
-            )
-        } else if chat.status == .failed {
-            NoticeCard(
-                text: "The agent run failed.", tone: .error,
-                action: openAction
-            )
-        } else if chat.status == .stopped || chat.stopAcknowledged {
-            Text("Stopped")
-                .font(.system(size: 12))
-                .foregroundStyle(Theme.muted)
-                .padding(.leading, 2)
+        VStack(alignment: .leading, spacing: 8) {
+            if let notice = chat.notice, chat.noticeKind != .input {
+                NoticeCard(
+                    text: notice,
+                    detail: chat.noticeDetail,
+                    tone: chat.needsT3 ? .info : .error,
+                    action: chat.needsT3
+                        ? NoticeAction(title: "Launch T3", handle: { chat.launchT3() })
+                        : chat.noticeKind == .run ? openAction : nil,
+                    dismiss: chat.dismissNotice
+                )
+            }
+            if isThinking {
+                ThinkingLoader(size: 16)
+                    .padding(.leading, 2)
+                    .padding(.vertical, 4)
+            } else if chat.status == .waiting, !chat.statusNoticeDismissed {
+                NoticeCard(
+                    text: "T3 needs your approval or an answer to continue.", tone: .warning,
+                    action: openAction, dismiss: chat.dismissNotice
+                )
+            } else if chat.status == .failed, !chat.statusNoticeDismissed {
+                NoticeCard(
+                    text: ["The agent run failed.", chat.failureReason].compactMap { $0 }.joined(separator: " "),
+                    detail: chat.failureDetail,
+                    tone: .error,
+                    action: openAction,
+                    dismiss: chat.dismissNotice
+                )
+            } else if chat.status == .stopped || chat.stopAcknowledged {
+                Text("Stopped")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.muted)
+                    .padding(.leading, 2)
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: Messages
@@ -381,6 +415,13 @@ struct FloatView: View {
                 )
                 .frame(height: editorHeight)
             }
+            if let notice = chat.notice, chat.noticeKind == .input {
+                Text(notice)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.error)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .help(chat.noticeDetail ?? notice)
+            }
         }
         .padding(.top, 10)
         .padding(.horizontal, 20)
@@ -478,7 +519,7 @@ struct FloatView: View {
             .disabled(!chat.canChooseModel)
             .help("Choose model · ⇧⌘M")
             .accessibilityLabel("Model")
-            .accessibilityValue(chat.modelLabel)
+            .accessibilityValue(chat.modelCatalogFailed ? "Models unavailable" : chat.modelLabel)
     }
 
     private func chooseImages() {
@@ -562,13 +603,21 @@ private struct ModelButton: View {
     var body: some View {
         Button(action: chat.requestModelPicker) {
             HStack(alignment: .center, spacing: 6) {
-                ProviderGlyph(driverKind: chat.selectedCatalogModel?.driverKind ?? chat.selectedModel?.instanceId)
-                Text(chat.selectedCatalogModel?.shortLabel ?? chat.modelLabel)
+                if chat.modelCatalogFailed {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Theme.warning)
+                } else {
+                    ProviderGlyph(driverKind: chat.selectedCatalogModel?.driverKind ?? chat.selectedModel?.instanceId)
+                }
+                Text(chat.modelCatalogFailed ? "Models unavailable" : chat.selectedCatalogModel?.shortLabel ?? chat.modelLabel)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(enabled ? Theme.text : Theme.muted)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .bold))
-                    .foregroundStyle(Theme.muted)
+                    .foregroundStyle(chat.modelCatalogFailed ? Theme.muted : enabled ? Theme.text : Theme.muted)
+                if !chat.modelCatalogFailed {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(Theme.muted)
+                }
             }
             .offset(y: -0.5)
             .padding(.horizontal, 8)
@@ -590,8 +639,21 @@ private struct NoticeAction {
 private struct NoticeCard: View {
     enum Tone { case info, warning, error }
     let text: String
+    var detail: String?
     let tone: Tone
     var action: NoticeAction?
+    let dismiss: () -> Void
+
+    init(
+        text: String, detail: String? = nil, tone: Tone,
+        action: NoticeAction? = nil, dismiss: @escaping () -> Void
+    ) {
+        self.text = text
+        self.detail = detail
+        self.tone = tone
+        self.action = action
+        self.dismiss = dismiss
+    }
 
     private var tint: Color {
         switch tone {
@@ -636,12 +698,15 @@ private struct NoticeCard: View {
                 }
             }
             Spacer(minLength: 0)
+            PanelButton("Dismiss", systemImage: "xmark", size: 18, action: dismiss)
+                .offset(x: 3, y: -3)
         }
         .padding(10)
         .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(tint.opacity(0.35), lineWidth: 1)
         }
+        .help(detail ?? text)
     }
 }
 

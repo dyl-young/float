@@ -69,7 +69,7 @@ struct ModelMenuAnchor: NSViewRepresentable {
             }
 
             menu.addItem(.separator())
-            let reload = MenuAction("Reload Models") { chat.reloadModels() }
+            let reload = MenuAction("Reload") { chat.reloadModels() }
             reload.isEnabled = !chat.loadingModels
             menu.addItem(reload)
             menu.popUp(positioning: nil, at: NSPoint(x: bounds.minX, y: bounds.minY), in: self)
