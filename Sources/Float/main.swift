@@ -5,24 +5,6 @@ import OSLog
 import SwiftUI
 
 @MainActor
-private final class FloatPanel: NSPanel {
-    var dismiss: (() -> Void)?
-
-    override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { false }
-
-    override func cancelOperation(_ sender: Any?) { dismiss?() }
-
-    override func keyDown(with event: NSEvent) {
-        if event.keyCode == 53 {
-            dismiss?()
-        } else {
-            super.keyDown(with: event)
-        }
-    }
-}
-
-@MainActor
 private final class FloatApp: NSObject, NSApplicationDelegate {
     private static let panelWidth: CGFloat = 516
     private let logger = Logger(subsystem: "com.dylyoung.float", category: "panel")
@@ -108,6 +90,8 @@ private final class FloatApp: NSObject, NSApplicationDelegate {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.appearance = NSAppearance(named: .darkAqua)
         panel.dismiss = { [weak self] in self?.hide() }
+        panel.startNewChat = { [weak self] in self?.chat.newChat() }
+        panel.openModelPicker = { [weak self] in self?.chat.requestModelPicker() }
         let host = NSHostingView(rootView: FloatView(chat: chat, resize: { [weak self] height in
             // SwiftUI may update its preferred size while the window is laying out.
             DispatchQueue.main.async { self?.resize(to: height) }

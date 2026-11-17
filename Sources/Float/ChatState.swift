@@ -29,6 +29,7 @@ final class ChatState: ObservableObject {
     @Published private(set) var notice: String?
     @Published private(set) var needsT3 = false
     @Published private(set) var focusRequest = 0
+    @Published private(set) var modelPickerRequest = 0
     @Published private(set) var models: [T3Model] = []
     @Published private(set) var loadingModels = false
     @Published private(set) var modelCatalogFailed = false
@@ -88,6 +89,10 @@ final class ChatState: ObservableObject {
 
     var canChooseModel: Bool {
         !submitting && !loading && status != .running && status != .waiting
+    }
+
+    func requestModelPicker() {
+        if canChooseModel { modelPickerRequest += 1 }
     }
 
     func reloadModels() {

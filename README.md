@@ -18,6 +18,7 @@ open dist/Float.app
 - Press **Option–Space** to show or hide Float. **Esc** hides it. If another app has that shortcut, use **Show or Hide Float** in the menu bar.
 - Drag the empty space in the composer’s footer to move Float.
 - Press **Return** to send and **Shift–Return** for a new line. Paste a screenshot with **Command–V** or use the paperclip to attach images. Each message can include up to eight images of 10 MB each.
+- Press **Command–N** to start a new chat and **Shift–Command–M** to open the model picker when Float has focus.
 - Use the model menu to pick an enabled Codex or Claude Code model. A model change applies to your next prompt, and Float remembers your choice for new chats. **Default** restores automatic selection. On a Codex-only device, Float defaults to GPT-6.1 Sol when T3 offers it.
 - Float starts chats in T3’s **No project** workspace. The active chat and draft stay in place when you hide Float. Float remembers the last thread and unsent text across relaunches.
 - Replies appear in chunks while the model is running. The top buttons start a new chat and open the current thread in T3. Runs continue in T3 while Float is hidden. Open the thread in T3 to handle agent approvals and questions.

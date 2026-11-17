@@ -54,7 +54,7 @@ struct FloatView: View {
                         .accessibilityAddTraits(.isHeader)
                 }
                 Spacer()
-                action("New Chat", chat.newChat).disabled(chat.submitting)
+                action("New Chat", chat.newChat).disabled(chat.submitting).help("New Chat · ⌘N")
                 action("Open in T3", chat.openThread).disabled(chat.reference?.desktopURL == nil)
             }
             .font(.system(size: 12))
@@ -311,53 +311,24 @@ struct FloatView: View {
     }
 
     private var modelPicker: some View {
-        Menu {
-            Section("Select model") {
-                if chat.loadingModels {
-                    Text("Loading models…")
-                } else if chat.modelCatalogFailed {
-                    Text("Couldn’t load models from T3")
-                } else if chat.models.isEmpty {
-                    Text("No enabled Codex or Claude models")
-                }
-
-                if chat.defaultModel != nil {
-                    Button { chat.selectModel(nil) } label: {
-                        modelMenuLabel("Default", selected: chat.usesDefaultModel)
-                    }
-                }
-                ForEach(chat.models) { model in
-                    Button { chat.selectModel(model) } label: {
-                        let duplicate = chat.models.contains { $0.id != model.id && $0.label == model.label }
-                        let name = duplicate ? "\(model.label) · \(model.provider)" : model.label
-                        modelMenuLabel(name, selected: !chat.usesDefaultModel && model.selection == chat.selectedModel)
-                    }
-                }
+        Button(action: chat.requestModelPicker) {
+            HStack(spacing: 4) {
+                Text(chat.modelLabel).font(.system(size: 11, weight: .medium))
+                Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold))
             }
-
-            Button("Reload Models", action: chat.reloadModels)
-                .disabled(chat.loadingModels)
-        } label: {
-            Text(chat.modelLabel)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(FloatPalette.text)
+            .foregroundStyle(FloatPalette.text)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(.white.opacity(0.055), in: Capsule())
+            .contentShape(Capsule())
         }
-        .menuStyle(.borderlessButton)
+        .buttonStyle(.plain)
         .fixedSize()
-        .padding(.horizontal, 7)
-        .padding(.vertical, 4)
-        .background(.white.opacity(0.055), in: Capsule())
+        .background(ModelMenuAnchor(chat: chat, request: chat.modelPickerRequest))
         .disabled(!chat.canChooseModel)
+        .help("Choose model · ⇧⌘M")
         .accessibilityLabel("Model")
         .accessibilityValue(chat.modelLabel)
-    }
-
-    @ViewBuilder private func modelMenuLabel(_ title: String, selected: Bool) -> some View {
-        if selected {
-            Label(title, systemImage: "checkmark")
-        } else {
-            Text(title)
-        }
     }
 
     private var draftImages: some View {
