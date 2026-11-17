@@ -149,19 +149,24 @@ struct FloatView: View {
     private var header: some View {
         HStack(spacing: 6) {
             Circle().fill(statusColor).frame(width: 6, height: 6).accessibilityHidden(true)
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(chat.title ?? "Float")
-                    .font(.system(size: 12.5, weight: .semibold))
-                    .foregroundStyle(Theme.text)
-                    .lineLimit(1)
-                    .help(chat.title ?? "Float")
-                    .accessibilityAddTraits(.isHeader)
-                Text(chat.needsT3 ? "T3 not running" : "No project")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Theme.muted)
-                    .fixedSize()
+            HStack(spacing: 0) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(chat.title ?? "Float")
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .foregroundStyle(Theme.text)
+                        .lineLimit(1)
+                        .accessibilityAddTraits(.isHeader)
+                    Text(chat.needsT3 ? "T3 not running" : "No project")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.muted)
+                        .fixedSize()
+                }
+                Spacer(minLength: 8)
             }
-            Spacer(minLength: 8)
+            .frame(height: Self.headerHeight)
+            .overlay {
+                PanelDragHandle().accessibilityHidden(true)
+            }
             PanelButton("New chat · ⌘N", systemImage: "square.and.pencil", size: 26, action: chat.newChat)
                 .disabled(chat.submitting || !chat.hasConversation)
             PanelButton("Open in T3", systemImage: "arrow.up.forward.square", size: 26, action: chat.openThread)
@@ -544,6 +549,10 @@ private struct PanelDragHandle: NSViewRepresentable {
     final class DragView: NSView {
         override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
         override var mouseDownCanMoveWindow: Bool { false }
+
+        override func resetCursorRects() {
+            addCursorRect(bounds, cursor: .arrow)
+        }
 
         override func mouseDown(with event: NSEvent) {
             window?.performDrag(with: event)
