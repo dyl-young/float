@@ -32,7 +32,7 @@ private final class FloatApp: NSObject, NSApplicationDelegate {
     private var hotKey: EventHotKeyRef?
     private var hotKeyHandler: EventHandlerRef?
     private var screenNumber: NSNumber?
-    private var desiredHeight: CGFloat = 152
+    private var desiredHeight: CGFloat = 79
     private var positioned = false
     private var shuttingDown = false
 
@@ -95,12 +95,10 @@ private final class FloatApp: NSObject, NSApplicationDelegate {
     private func makePanel() -> FloatPanel {
         let panel = FloatPanel(
             contentRect: NSRect(x: 0, y: 0, width: Self.panelWidth, height: desiredHeight),
-            styleMask: [.titled, .nonactivatingPanel, .fullSizeContentView],
+            styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered, defer: false
         )
         panel.title = "Float"
-        panel.titleVisibility = .hidden
-        panel.titlebarAppearsTransparent = true
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
         panel.becomesKeyOnlyIfNeeded = false

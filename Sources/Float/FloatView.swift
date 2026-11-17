@@ -25,32 +25,15 @@ struct FloatView: View {
         if chat.hasConversation { return 536 }
         let previewSpace: CGFloat = chat.images.isEmpty ? 0 : 47
         let noticeSpace: CGFloat = chat.notice == nil ? 0 : 56
-        return 106 + editorHeight + previewSpace + noticeSpace
+        return 51 + editorHeight + previewSpace + noticeSpace
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            if chat.hasConversation {
-                Rectangle().fill(FloatPalette.border).frame(height: 1).padding(.horizontal, 14)
-                timeline
-            }
-            if let notice = chat.notice { noticeBar(notice) }
-            if chat.notice == nil && chat.hasConversation { statusBar }
+        VStack(spacing: 7) {
+            if chat.hasConversation { conversation }
             composer
-                .padding(.horizontal, 12)
-                .padding(.bottom, 12)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background {
-            RoundedRectangle(cornerRadius: 21, style: .continuous)
-                .fill(FloatPalette.canvas.opacity(0.985))
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: 21, style: .continuous)
-                .strokeBorder(FloatPalette.border, lineWidth: 1)
-                .allowsHitTesting(false)
-        }
         .preferredColorScheme(.dark)
         .onAppear { resize(panelHeight) }
         .onChange(of: panelHeight) { _, value in resize(value) }
@@ -59,27 +42,39 @@ struct FloatView: View {
         }
     }
 
-    private var header: some View {
-        HStack(spacing: 9) {
-            Image(systemName: "rectangle.on.rectangle")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(FloatPalette.accent)
-                .accessibilityHidden(true)
-            Text(chat.title ?? "Float")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(FloatPalette.text)
-                .lineLimit(1)
-                .help(chat.title ?? "Float")
-                .accessibilityAddTraits(.isHeader)
-            Spacer()
-            PanelButton("New Chat", systemImage: "square.and.pencil", action: chat.newChat)
-                .disabled(chat.submitting)
-            PanelButton("Open in T3", systemImage: "arrow.up.right.square", action: chat.openThread)
-                .disabled(chat.reference?.desktopURL == nil)
+    private var conversation: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 14) {
+                if let title = chat.title {
+                    Text(title)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(FloatPalette.text)
+                        .lineLimit(1)
+                        .help(title)
+                        .accessibilityAddTraits(.isHeader)
+                }
+                Spacer()
+                action("New Chat", chat.newChat).disabled(chat.submitting)
+                action("Open in T3", chat.openThread).disabled(chat.reference?.desktopURL == nil)
+            }
+            .font(.system(size: 12))
+            .padding(.horizontal, 15)
+            .frame(height: 38)
+            Rectangle().fill(FloatPalette.border).frame(height: 1).padding(.horizontal, 14)
+            timeline
+            if let notice = chat.notice {
+                noticeBar(notice)
+            } else {
+                statusBar
+            }
         }
-        .padding(.leading, 17)
-        .padding(.trailing, 12)
-        .frame(height: 43)
+        .background(FloatPalette.canvas)
+        .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .strokeBorder(FloatPalette.border, lineWidth: 1)
+                .allowsHitTesting(false)
+        }
     }
 
     private var timeline: some View {
@@ -200,7 +195,6 @@ struct FloatView: View {
                     chat.status == .failed ? "The agent run failed." : "The agent run stopped.")
                     .foregroundStyle(FloatPalette.muted)
                 Spacer()
-                action("Open in T3", chat.openThread).disabled(chat.reference?.desktopURL == nil)
             }
             .font(.system(size: 12))
             .padding(.horizontal, 17)
@@ -256,6 +250,8 @@ struct FloatView: View {
             .padding(.top, 8)
             .padding(.horizontal, 13)
             .padding(.bottom, 7)
+
+            if !chat.hasConversation, let notice = chat.notice { noticeBar(notice) }
 
             HStack(spacing: 6) {
                 PanelButton("Attach images", systemImage: "paperclip", action: chooseImages)
