@@ -8,7 +8,8 @@ import UniformTypeIdentifiers
 /// concave corners, like the nordbones T3 composer.
 struct FloatView: View {
     @ObservedObject var chat: ChatState
-    let resize: (CGFloat, Bool) -> Void
+    @ObservedObject var sizing: PanelSizing
+    let resize: (CGFloat, Bool, Bool) -> Void
     let dismiss: () -> Void
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -25,7 +26,6 @@ struct FloatView: View {
 
     private static let headerHeight: CGFloat = 38
     private static let headerFadeHeight: CGFloat = 14
-    private static let maxHeight: CGFloat = 560
     private nonisolated static let shellSpace = "Float shell"
     private static let latest = "Latest message"
     private static let headerButtonSize: CGFloat = 24
@@ -40,7 +40,7 @@ struct FloatView: View {
     private var panelHeight: CGFloat {
         guard showsTray else { return composerHeight }
         let timeline = chat.hasConversation ? max(56, timelineHeight) : timelineHeight
-        return min(Self.maxHeight, composerHeight + Self.headerHeight + timeline)
+        return min(sizing.maximumHeight, composerHeight + Self.headerHeight + timeline)
     }
 
     var body: some View {
@@ -82,10 +82,22 @@ struct FloatView: View {
                 .strokeBorder(Theme.hairline, lineWidth: 1)
                 .allowsHitTesting(false)
         }
+        .overlay(alignment: .top) {
+            if showsTray {
+                PanelResizeHandle(
+                    begin: sizing.beginResize,
+                    resize: sizing.resize,
+                    end: sizing.endResize,
+                    reset: sizing.reset
+                )
+                .frame(height: 4)
+                .accessibilityHidden(true)
+            }
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .preferredColorScheme(.dark)
-        .onAppear { resize(panelHeight, showsTray) }
-        .onChange(of: panelHeight) { _, value in resize(value, showsTray) }
+        .onAppear { resize(panelHeight, showsTray, sizing.isDragging) }
+        .onChange(of: panelHeight) { _, value in resize(value, showsTray, sizing.isDragging) }
     }
 
     @ViewBuilder private var inputBackdrop: some View {
@@ -836,6 +848,69 @@ private struct PanelDragHandle: NSViewRepresentable {
 
         override func mouseDown(with event: NSEvent) {
             window?.performDrag(with: event)
+        }
+    }
+}
+
+private struct PanelResizeHandle: NSViewRepresentable {
+    let begin: () -> Void
+    let resize: (CGFloat) -> Void
+    let end: () -> Void
+    let reset: () -> Void
+
+    func makeNSView(context: Context) -> ResizeView {
+        let view = ResizeView()
+        updateNSView(view, context: context)
+        return view
+    }
+
+    func updateNSView(_ view: ResizeView, context: Context) {
+        view.begin = begin
+        view.resize = resize
+        view.end = end
+        view.reset = reset
+    }
+
+    static func dismantleNSView(_ view: ResizeView, coordinator: ()) {
+        view.finishResize()
+    }
+
+    final class ResizeView: NSView {
+        var begin: (() -> Void)?
+        var resize: ((CGFloat) -> Void)?
+        var end: (() -> Void)?
+        var reset: (() -> Void)?
+        private var startY: CGFloat?
+
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+        override var mouseDownCanMoveWindow: Bool { false }
+
+        override func resetCursorRects() {
+            addCursorRect(bounds, cursor: .resizeUpDown)
+        }
+
+        override func mouseDown(with event: NSEvent) {
+            if event.clickCount == 2 {
+                reset?()
+                return
+            }
+            startY = NSEvent.mouseLocation.y
+            begin?()
+        }
+
+        override func mouseDragged(with event: NSEvent) {
+            guard let startY else { return }
+            resize?(NSEvent.mouseLocation.y - startY)
+        }
+
+        override func mouseUp(with event: NSEvent) {
+            finishResize()
+        }
+
+        func finishResize() {
+            guard startY != nil else { return }
+            startY = nil
+            end?()
         }
     }
 }
