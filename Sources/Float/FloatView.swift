@@ -4,8 +4,8 @@ import UniformTypeIdentifiers
 
 enum FloatPalette {
     static let canvas = Color(red: 0.067, green: 0.100, blue: 0.125)
-    static let composer = Color(red: 0.085, green: 0.129, blue: 0.157)
-    static let footer = Color(red: 0.113, green: 0.169, blue: 0.206)
+    static let composer = Color(red: 0.073, green: 0.115, blue: 0.145)
+    static let footer = Color(red: 0.096, green: 0.145, blue: 0.177)
     static let raised = Color(red: 0.135, green: 0.206, blue: 0.250)
     static let border = Color(red: 0.63, green: 0.76, blue: 0.86).opacity(0.16)
     static let text = Color(red: 0.90, green: 0.95, blue: 0.99)
@@ -17,6 +17,7 @@ struct FloatView: View {
     @ObservedObject var chat: ChatState
     let resize: (CGFloat) -> Void
 
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @State private var editorHeight: CGFloat = 28
     @State private var followingLatest = true
     @State private var copiedMessage: String?
@@ -228,30 +229,35 @@ struct FloatView: View {
     }
 
     private var composer: some View {
-        VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 4) {
-                if !chat.images.isEmpty { draftImages }
-                ZStack(alignment: .topLeading) {
-                    if chat.draft.isEmpty {
-                        Text(chat.hasConversation ? "Follow up…" : "Ask or start a task…")
-                            .font(.system(size: 14))
-                            .foregroundStyle(FloatPalette.muted)
-                            .padding(.top, 5)
-                            .allowsHitTesting(false)
-                            .accessibilityHidden(true)
+        let radius: CGFloat = 17
+        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
+        return VStack(spacing: 0) {
+            VStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 4) {
+                    if !chat.images.isEmpty { draftImages }
+                    ZStack(alignment: .topLeading) {
+                        if chat.draft.isEmpty {
+                            Text(chat.hasConversation ? "Follow up…" : "Ask or start a task…")
+                                .font(.system(size: 14))
+                                .foregroundStyle(FloatPalette.muted)
+                                .padding(.top, 5)
+                                .allowsHitTesting(false)
+                                .accessibilityHidden(true)
+                        }
+                        ComposerEditor(
+                            text: $chat.draft, height: $editorHeight, focusRequest: chat.focusRequest,
+                            submit: chat.send, pasteImages: chat.pasteImages
+                        )
+                        .frame(height: editorHeight)
                     }
-                    ComposerEditor(
-                        text: $chat.draft, height: $editorHeight, focusRequest: chat.focusRequest,
-                        submit: chat.send, pasteImages: chat.pasteImages
-                    )
-                    .frame(height: editorHeight)
                 }
-            }
-            .padding(.top, 8)
-            .padding(.horizontal, 13)
-            .padding(.bottom, 7)
+                .padding(.top, 8)
+                .padding(.horizontal, 13)
+                .padding(.bottom, 7)
 
-            if !chat.hasConversation, let notice = chat.notice { noticeBar(notice) }
+                if !chat.hasConversation, let notice = chat.notice { noticeBar(notice) }
+            }
+            .background(FloatPalette.composer.opacity(reduceTransparency ? 1 : 0.62), in: shape)
 
             HStack(spacing: 6) {
                 PanelButton("Attach images", systemImage: "paperclip", action: chooseImages)
@@ -282,13 +288,21 @@ struct FloatView: View {
             .padding(.leading, 7)
             .padding(.trailing, 8)
             .frame(height: 36)
-            .background(FloatPalette.footer)
+            .background(FloatPalette.footer.opacity(reduceTransparency ? 0 : 0.44))
         }
-        .background(FloatPalette.composer)
-        .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+        .background {
+            ZStack {
+                if !reduceTransparency {
+                    ComposerBackdrop(radius: radius)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+                shape.fill(FloatPalette.footer.opacity(reduceTransparency ? 1 : 0.42))
+            }
+        }
+        .clipShape(shape)
         .overlay {
-            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .strokeBorder(FloatPalette.border, lineWidth: 1)
+            shape.strokeBorder(FloatPalette.border, lineWidth: 1)
                 .allowsHitTesting(false)
         }
     }
@@ -328,6 +342,24 @@ struct FloatView: View {
             if result == .OK { chat.addImageFiles(panel.urls) }
         }
     }
+}
+
+private struct ComposerBackdrop: NSViewRepresentable {
+    let radius: CGFloat
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .hudWindow
+        view.blendingMode = .behindWindow
+        view.state = .active
+        view.wantsLayer = true
+        view.layer?.cornerRadius = radius
+        view.layer?.cornerCurve = .continuous
+        view.layer?.masksToBounds = true
+        return view
+    }
+
+    func updateNSView(_ view: NSVisualEffectView, context: Context) {}
 }
 
 private struct ImagePreview: View {
