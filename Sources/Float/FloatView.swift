@@ -60,7 +60,9 @@ struct FloatView: View {
     private var shell: some View {
         VStack(spacing: 0) {
             if showsTray {
-                tray.padding(.bottom, -inputHeight)
+                // Only conversations scroll beneath the frosted input. A notice-only tray
+                // keeps its measured bottom gap and sits entirely above the composer.
+                tray.padding(.bottom, chat.hasConversation ? -inputHeight : 0)
             }
             VStack(spacing: 0) {
                 input
