@@ -17,6 +17,7 @@ struct FloatView: View {
     @State private var editorHeight: CGFloat = 28
     @State private var inputHeight: CGFloat = 44
     @State private var composerHeight: CGFloat = 86
+    @State private var nonConversationHeight: CGFloat?
     @State private var timelineHeight: CGFloat = 0
     @State private var timelineBottom: CGFloat = 0
     @State private var inputTop: CGFloat = 0
@@ -40,17 +41,23 @@ struct FloatView: View {
     private var showsContextRow: Bool { !chat.hasConversation }
 
     private var panelHeight: CGFloat {
-        let contextHeight = showsContextRow ? Self.contextRowHeight : 0
-        guard showsTray else { return composerHeight + contextHeight }
-        let timeline = chat.hasConversation ? max(56, timelineHeight) : timelineHeight
-        return min(sizing.maximumHeight, composerHeight + Self.headerHeight + timeline) + contextHeight
+        guard chat.hasConversation else {
+            return nonConversationHeight ?? composerHeight + Self.contextRowHeight
+        }
+        return min(sizing.maximumHeight, composerHeight + Self.headerHeight + max(56, timelineHeight))
     }
 
     var body: some View {
+        let hasConversation = chat.hasConversation
         VStack(spacing: 0) {
             shell
             if showsContextRow { projectContextRow }
         }
+        // Measure the whole stack, including the context row, at its natural height.
+        .fixedSize(horizontal: false, vertical: !hasConversation)
+        .onGeometryChange(for: CGFloat?.self, of: { geometry in
+            hasConversation ? nil : ceil(geometry.size.height)
+        }) { nonConversationHeight = $0 }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .preferredColorScheme(.dark)
         .onAppear { resize(panelHeight, showsTray, sizing.isDragging) }
@@ -59,10 +66,12 @@ struct FloatView: View {
 
     private var shell: some View {
         VStack(spacing: 0) {
-            if showsTray {
-                // Only conversations scroll beneath the frosted input. A notice-only tray
-                // keeps its measured bottom gap and sits entirely above the composer.
-                tray.padding(.bottom, chat.hasConversation ? -inputHeight : 0)
+            if showsTray { header }
+            if chat.hasConversation {
+                conversation.padding(.bottom, -inputHeight)
+            } else if chat.hasTrayNotice {
+                noticeCard
+                    .padding(14)
             }
             VStack(spacing: 0) {
                 input
@@ -99,7 +108,7 @@ struct FloatView: View {
                 .allowsHitTesting(false)
         }
         .overlay(alignment: .top) {
-            if showsTray {
+            if chat.hasConversation {
                 PanelResizeHandle(
                     begin: sizing.beginResize,
                     resize: sizing.resize,
@@ -138,7 +147,7 @@ struct FloatView: View {
         } else {
             ZStack {
                 Theme.tray
-                if showsTray, timelineBottom > inputTop {
+                if chat.hasConversation, timelineBottom > inputTop {
                     // Sample the timeline at its scroll position and blur only the portion under the input.
                     GeometryReader { geometry in
                         timeline
@@ -158,13 +167,6 @@ struct FloatView: View {
 
     // MARK: Message tray
 
-    private var tray: some View {
-        VStack(spacing: 0) {
-            header
-            conversation
-        }
-    }
-
     private var conversation: some View {
         ScrollViewReader { scroll in
             ScrollView {
@@ -180,10 +182,9 @@ struct FloatView: View {
                                 followsLatest = timelineBottom <= inputTop + 3
                             }
                         }
-                    // Conversations scroll under the composer, so their bottom anchor clears its overlap.
-                    // A notice-only tray is already sized to the card and must not scroll it under the header.
+                    // The bottom anchor clears the composer's overlap.
                     Color.clear
-                        .frame(height: chat.hasConversation ? inputHeight : 0)
+                        .frame(height: inputHeight)
                         .id(Self.latest)
                 }
             }
@@ -327,23 +328,27 @@ struct FloatView: View {
         !chat.stopAcknowledged && (chat.submitting || chat.loading || chat.status == .running)
     }
 
+    @ViewBuilder private var noticeCard: some View {
+        if let notice = chat.notice, chat.noticeKind != .input {
+            NoticeCard(
+                title: chat.noticeTitle,
+                text: notice,
+                detail: chat.noticeDetail,
+                tone: chat.needsT3 ? .info : .error,
+                action: chat.canLaunchT3
+                    ? NoticeAction(title: "Launch T3", handle: { chat.launchT3() })
+                    : chat.noticeKind == .run ? openAction : nil,
+                secondaryAction: chat.canLaunchT3
+                    ? NoticeAction(title: "Not now", handle: { chat.dismissNotice() })
+                    : nil,
+                dismiss: chat.dismissNotice
+            )
+        }
+    }
+
     @ViewBuilder private var activity: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if let notice = chat.notice, chat.noticeKind != .input {
-                NoticeCard(
-                    title: chat.noticeTitle,
-                    text: notice,
-                    detail: chat.noticeDetail,
-                    tone: chat.needsT3 ? .info : .error,
-                    action: chat.canLaunchT3
-                        ? NoticeAction(title: "Launch T3", handle: { chat.launchT3() })
-                        : chat.noticeKind == .run ? openAction : nil,
-                    secondaryAction: chat.canLaunchT3
-                        ? NoticeAction(title: "Not now", handle: { chat.dismissNotice() })
-                        : nil,
-                    dismiss: chat.dismissNotice
-                )
-            }
+            noticeCard
             if let summary = chat.answeredQuestionSummary, !summary.isEmpty {
                 Text("Answered: \(summary)")
                     .font(.system(size: 11))

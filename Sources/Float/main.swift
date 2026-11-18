@@ -140,14 +140,12 @@ private final class FloatApp: NSObject, NSApplicationDelegate, NSWindowDelegate 
             y: bottom,
             width: width, height: height
         )
-        if animated, panel.isVisible {
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.18
-                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                panel.animator().setFrame(rect, display: true)
-            }
-        } else {
-            panel.setFrame(rect, display: true)
+        // Route each frame through the animator so a new measurement can
+        // supersede a pending tray transition.
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = animated && panel.isVisible ? 0.18 : 0
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            panel.animator().setFrame(rect, display: true)
         }
         positioned = true
     }
