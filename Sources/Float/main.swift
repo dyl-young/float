@@ -107,6 +107,7 @@ private final class FloatApp: NSObject, NSApplicationDelegate, NSWindowDelegate 
         panel.openMachinePicker = { [weak self] in self?.chat.requestMachinePicker() }
         panel.stopRun = { [weak self] in self?.chat.stop() }
         panel.allowApproval = { [weak self] in self?.chat.allowVisibleApproval() ?? false }
+        panel.goBackQuestion = { [weak self] in self?.chat.goBackQuestion() ?? false }
         panel.sizing = sizing
         let host = FloatPanelHostingView(rootView: FloatView(chat: chat, resize: {
             [weak self] height, trayVisible in

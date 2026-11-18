@@ -963,6 +963,12 @@ private struct QuestionCard: View {
             }
 
             HStack(spacing: 8) {
+                if position > 1 {
+                    Button("Back") { chat.goBackQuestion() }
+                        .floatPillButtonStyle(tint: nil)
+                        .disabled(chat.answeringQuestion)
+                        .help("Back · ⌘[")
+                }
                 Button(chat.isLastQuestion ? "Send answer" : "Next", action: chat.confirmQuestion)
                     .floatPillButtonStyle()
                     .disabled(!chat.questionCanAdvance || chat.answeringQuestion)

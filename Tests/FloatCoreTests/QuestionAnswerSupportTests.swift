@@ -93,3 +93,59 @@ func hidesRedundantQuestionOptionDescriptions(
         T3QuestionAnswerBuilder.build(questions: [singleQuestion], drafts: [:]) == nil
     )
 }
+
+@Test func advancesLocallyAndKeepsPickedAnswersWhenGoingBack() {
+    let second = T3Question(
+        id: "report", header: "Report", question: "Include a summary?",
+        options: [.init(label: "Include summary", description: "", value: "yes")],
+        allowCustomAnswer: false
+    )
+    var flow = T3QuestionFlow(request: .init(requestId: "request", questions: [singleQuestion, second]))
+    let backedFromFirst = flow.goBack()
+    #expect(!backedFromFirst)
+    #expect(flow.confirm() == nil)
+
+    flow.select(singleQuestion.options[0])
+    #expect(flow.confirm() == .advanced)
+    #expect(flow.index == 1)
+    #expect(!flow.canAdvance)
+    flow.select(second.options[0])
+
+    let backed = flow.goBack()
+    #expect(backed)
+    #expect(flow.index == 0)
+    #expect(flow.isSelected(singleQuestion.options[0]))
+    flow.select(singleQuestion.options[1])
+    #expect(flow.confirm() == .advanced)
+    #expect(flow.isSelected(second.options[0]))
+    #expect(flow.confirm() == .submit(["scope": .text("Just list them"), "report": .text("yes")]))
+}
+
+@Test func restoresCustomComposerTextAndMultiSelectDraftsAcrossSteps() {
+    let custom = T3Question(
+        id: "notes", header: "Notes", question: "Anything else?",
+        options: [], allowCustomAnswer: true
+    )
+    let multiple = T3Question(
+        id: "areas", header: "Areas", question: "Which areas?",
+        options: [
+            .init(label: "Server", description: "", value: "server"),
+            .init(label: "Web", description: "", value: "web"),
+        ],
+        multiSelect: true, allowCustomAnswer: false
+    )
+    var flow = T3QuestionFlow(request: .init(requestId: "request", questions: [custom, multiple]))
+    flow.setCustomAnswer("  Only generated folders  ")
+    #expect(flow.confirm() == .advanced)
+    #expect(flow.composerText.isEmpty)
+    flow.select(multiple.options[1])
+    flow.select(multiple.options[0])
+
+    let backed = flow.goBack()
+    #expect(backed)
+    #expect(flow.composerText == "  Only generated folders  ")
+    #expect(flow.confirm() == .advanced)
+    #expect(flow.confirm() == .submit([
+        "notes": .text("Only generated folders"), "areas": .selections(["web", "server"]),
+    ]))
+}

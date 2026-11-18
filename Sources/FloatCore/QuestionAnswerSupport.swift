@@ -81,3 +81,86 @@ public enum T3QuestionAnswerBuilder {
         return answers
     }
 }
+
+public struct T3QuestionFlow: Sendable {
+    public enum Confirmation: Equatable, Sendable {
+        case advanced
+        case submit([String: T3QuestionAnswer])
+    }
+
+    public let request: T3PendingQuestionRequest
+    public private(set) var index = 0
+    public private(set) var drafts: [String: T3QuestionDraft]
+
+    public init(request: T3PendingQuestionRequest) {
+        self.request = request
+        drafts = Dictionary(uniqueKeysWithValues: request.questions.map {
+            ($0.id, T3QuestionDraft(customAnswer: $0.allowsCustom ? $0.initialAnswer : nil))
+        })
+    }
+
+    public var activeQuestion: T3Question? {
+        request.questions.indices.contains(index) ? request.questions[index] : nil
+    }
+
+    public var isLast: Bool { index >= request.questions.count - 1 }
+
+    private var activeDraft: T3QuestionDraft? {
+        activeQuestion.flatMap { drafts[$0.id] }
+    }
+
+    public var canAdvance: Bool {
+        guard let question = activeQuestion else { return false }
+        return T3QuestionAnswerBuilder.resolve(question, draft: activeDraft) != nil
+    }
+
+    public var composerText: String {
+        guard activeQuestion?.allowsCustom == true else { return "" }
+        return activeDraft?.customAnswer ?? ""
+    }
+
+    public func isSelected(_ option: T3Question.Option) -> Bool {
+        activeDraft?.selectedOptionValues.contains(option.answerValue) == true
+    }
+
+    public mutating func select(_ option: T3Question.Option) {
+        guard let question = activeQuestion, question.options.contains(option) else { return }
+        var draft = drafts[question.id] ?? T3QuestionDraft()
+        let value = option.answerValue
+        if !question.allowsMultiple {
+            draft.selectedOptionValues = [value]
+        } else if let index = draft.selectedOptionValues.firstIndex(of: value) {
+            draft.selectedOptionValues.remove(at: index)
+        } else {
+            draft.selectedOptionValues.append(value)
+        }
+        draft.customAnswer = ""
+        drafts[question.id] = draft
+    }
+
+    public mutating func setCustomAnswer(_ text: String) {
+        guard let question = activeQuestion, question.allowsCustom else { return }
+        var draft = drafts[question.id] ?? T3QuestionDraft()
+        draft.customAnswer = text
+        if question.initialAnswer != nil || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            draft.selectedOptionValues = []
+        }
+        drafts[question.id] = draft
+    }
+
+    public mutating func goBack() -> Bool {
+        guard index > 0 else { return false }
+        index -= 1
+        return true
+    }
+
+    public mutating func confirm() -> Confirmation? {
+        guard canAdvance else { return nil }
+        if isLast {
+            return T3QuestionAnswerBuilder.build(questions: request.questions, drafts: drafts)
+                .map(Confirmation.submit)
+        }
+        index += 1
+        return .advanced
+    }
+}

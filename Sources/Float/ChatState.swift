@@ -43,7 +43,7 @@ final class ChatState: ObservableObject {
     @Published private(set) var noticeDetail: String?
     @Published private(set) var needsT3 = false
     @Published private(set) var canLaunchT3 = false
-    @Published private(set) var pendingQuestion: T3PendingQuestionRequest?
+    @Published private var questionFlow: T3QuestionFlow?
     @Published private(set) var approvalPreview: String?
     @Published private(set) var approvalAccessEnabled = false
     @Published private(set) var approvalAccessBusy = false
@@ -55,8 +55,6 @@ final class ChatState: ObservableObject {
     private var approvalMaintenance: Task<Void, Never>?
     private var nextApprovalRead = Date.distantPast
     private var answeredApprovalIDs: Set<String> = []
-    @Published private(set) var questionIndex = 0
-    @Published private(set) var questionDrafts: [String: T3QuestionDraft] = [:]
     @Published private(set) var questionError: String?
     @Published private(set) var answeringQuestion = false
     @Published private(set) var answeredQuestionSummary: String?
@@ -146,26 +144,16 @@ final class ChatState: ObservableObject {
     var hasConversation: Bool { reference != nil || submitting }
     var hasTrayNotice: Bool { notice != nil && noticeKind != .input }
     var statusNoticeDismissed: Bool { dismissedStatusNotice == status }
-    var activeQuestion: T3Question? {
-        guard let questions = pendingQuestion?.questions, questions.indices.contains(questionIndex) else {
-            return nil
-        }
-        return questions[questionIndex]
-    }
+    var pendingQuestion: T3PendingQuestionRequest? { questionFlow?.request }
+    var questionIndex: Int { questionFlow?.index ?? 0 }
+    var activeQuestion: T3Question? { questionFlow?.activeQuestion }
     var activeApproval: ApprovalRequest? { pendingApprovals.first }
 
-    var questionCanAdvance: Bool {
-        guard let question = activeQuestion else { return false }
-        return T3QuestionAnswerBuilder.resolve(question, draft: questionDrafts[question.id]) != nil
-    }
-    var isLastQuestion: Bool {
-        guard let count = pendingQuestion?.questions.count else { return true }
-        return questionIndex >= count - 1
-    }
+    var questionCanAdvance: Bool { questionFlow?.canAdvance == true }
+    var isLastQuestion: Bool { questionFlow?.isLast ?? true }
     var composerText: String {
-        guard let question = activeQuestion else { return draft }
-        guard question.allowsCustom else { return "" }
-        return questionDrafts[question.id]?.customAnswer ?? ""
+        guard activeQuestion != nil else { return draft }
+        return questionFlow?.composerText ?? ""
     }
     var composerPlaceholder: String {
         if let question = activeQuestion {
@@ -761,31 +749,18 @@ final class ChatState: ObservableObject {
     }
 
     func isQuestionOptionSelected(_ option: T3Question.Option) -> Bool {
-        guard let question = activeQuestion else { return false }
-        return questionDrafts[question.id]?.selectedOptionValues.contains(option.answerValue) == true
+        questionFlow?.isSelected(option) == true
     }
 
     func selectQuestionOption(_ option: T3Question.Option) {
-        guard let question = activeQuestion, !answeringQuestion else { return }
-        var draft = questionDrafts[question.id] ?? T3QuestionDraft()
-        let value = option.answerValue
-        if question.allowsMultiple {
-            if let index = draft.selectedOptionValues.firstIndex(of: value) {
-                draft.selectedOptionValues.remove(at: index)
-            } else {
-                draft.selectedOptionValues.append(value)
-            }
-        } else {
-            draft.selectedOptionValues = [value]
-        }
-        draft.customAnswer = ""
-        questionDrafts[question.id] = draft
+        guard !answeringQuestion, activeQuestion != nil else { return }
+        questionFlow?.select(option)
         questionError = nil
         focusRequest += 1
     }
 
     func selectQuestionOption(at index: Int) -> Bool {
-        guard composerText.isEmpty, let question = activeQuestion,
+        guard !answeringQuestion, composerText.isEmpty, let question = activeQuestion,
             question.options.indices.contains(index) else { return false }
         selectQuestionOption(question.options[index])
         return true
@@ -797,13 +772,15 @@ final class ChatState: ObservableObject {
             return
         }
         guard question.allowsCustom, !answeringQuestion else { return }
-        var answer = questionDrafts[question.id] ?? T3QuestionDraft()
-        answer.customAnswer = text
-        if question.initialAnswer != nil || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            answer.selectedOptionValues = []
-        }
-        questionDrafts[question.id] = answer
+        questionFlow?.setCustomAnswer(text)
         questionError = nil
+    }
+
+    @discardableResult func goBackQuestion() -> Bool {
+        guard !answeringQuestion, questionFlow?.goBack() == true else { return false }
+        questionError = nil
+        focusRequest += 1
+        return true
     }
 
     func confirmOrSend() {
@@ -815,39 +792,38 @@ final class ChatState: ObservableObject {
     }
 
     func confirmQuestion() {
-        guard !answeringQuestion, let request = pendingQuestion, let question = activeQuestion else {
-            return
-        }
-        guard T3QuestionAnswerBuilder.resolve(
-            question, draft: questionDrafts[question.id]
-        ) != nil else {
+        guard !answeringQuestion, var flow = questionFlow, flow.activeQuestion != nil else { return }
+        switch flow.confirm() {
+        case nil:
             questionError = "Pick an answer to continue."
-            return
-        }
-        if !isLastQuestion {
-            questionIndex += 1
+        case .advanced:
+            questionFlow = flow
             questionError = nil
             focusRequest += 1
-            return
-        }
-        guard let answers = T3QuestionAnswerBuilder.build(
-            questions: request.questions, drafts: questionDrafts
-        ), let reference else { return }
-        let summary = Self.questionSummary(request.questions, drafts: questionDrafts)
-        answeringQuestion = true
-        questionError = nil
-        Task {
-            do {
-                try await client.answer(request, answers: answers, thread: reference)
-                answeredQuestionSummary = summary
-                resetQuestion()
-                status = .running
-                dismissedStatusNotice = nil
-                focusRequest += 1
-                refresh(reference, force: true)
-            } catch {
-                answeringQuestion = false
-                questionError = "Float couldn't send that answer. Try again."
+        case .submit(let answers):
+            guard let reference else { return }
+            let request = flow.request
+            let summary = Self.questionSummary(request.questions, drafts: flow.drafts)
+            let version = generation
+            answeringQuestion = true
+            questionError = nil
+            Task {
+                do {
+                    try await client.answer(request, answers: answers, thread: reference)
+                    guard generation == version else { return }
+                    answeredQuestionSummary = summary
+                    if pendingQuestion?.requestId == request.requestId {
+                        resetQuestion()
+                        status = .running
+                        dismissedStatusNotice = nil
+                        focusRequest += 1
+                    }
+                    refresh(reference, force: true)
+                } catch {
+                    guard generation == version, pendingQuestion?.requestId == request.requestId else { return }
+                    answeringQuestion = false
+                    questionError = "Float couldn't send that answer. Try again."
+                }
             }
         }
     }
@@ -1148,19 +1124,14 @@ final class ChatState: ObservableObject {
             resetQuestion()
             return
         }
-        pendingQuestion = question
-        questionIndex = 0
-        questionDrafts = Dictionary(uniqueKeysWithValues: question.questions.map {
-            ($0.id, T3QuestionDraft(customAnswer: $0.allowsCustom ? $0.initialAnswer : nil))
-        })
+        questionFlow = T3QuestionFlow(request: question)
+        answeringQuestion = false
         questionError = nil
         focusRequest += 1
     }
 
     private func resetQuestion() {
-        pendingQuestion = nil
-        questionIndex = 0
-        questionDrafts = [:]
+        questionFlow = nil
         questionError = nil
         answeringQuestion = false
     }

@@ -57,6 +57,7 @@ final class FloatPanel: EditingPanel {
     var openMachinePicker: (() -> Void)?
     var stopRun: (() -> Void)?
     var allowApproval: (() -> Bool)?
+    var goBackQuestion: (() -> Bool)?
 
     var sizing: PanelSizing?
     var resizeEnabled = false {
@@ -97,6 +98,10 @@ final class FloatPanel: EditingPanel {
         case (".", .command):
             if !event.isARepeat { stopRun?() }
             return true
+        case ("[", .command):
+            if !event.isARepeat, (firstResponder as? NSTextView)?.hasMarkedText() != true,
+               goBackQuestion?() == true { return true }
+            return super.performKeyEquivalent(with: event)
         case ("\r", .command), ("\u{3}", .command):
             if !event.isARepeat, (firstResponder as? NSTextView)?.hasMarkedText() != true,
                allowApproval?() == true { return true }
