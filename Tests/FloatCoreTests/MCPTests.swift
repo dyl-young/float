@@ -30,6 +30,25 @@ import Testing
     #expect(thread.desktopURL?.absoluteString == "t3code://threads/env-1/mcp%3Alaunch%3A1")
 }
 
+@Test(arguments: [
+    "[Remote](t3-thread://v2/env-1/mcp:launch:1)",
+    nil,
+] as [String?])
+func buildsDesktopLinkFromLinkedThreadIDs(link: String?) throws {
+    let json = try JSONSerialization.data(withJSONObject: [
+        "threadId": "mcp:launch:1",
+        "environmentID": "env-1",
+        "link": link as Any,
+    ])
+    let thread = try JSONDecoder().decode(ThreadReference.self, from: json)
+    #expect(thread.desktopURL?.absoluteString == "t3code://threads/env-1/mcp%3Alaunch%3A1")
+}
+
+@Test func encodesLinkedThreadIDsAsSeparatePathSegments() {
+    let thread = ThreadReference(threadId: "thread/1?%", link: nil, environmentID: "env/1.")
+    #expect(thread.desktopURL?.absoluteString == "t3code://threads/env%2F1%2E/thread%2F1%3F%25")
+}
+
 @Test func parsesT3Timestamps() {
     #expect(t3Date("2026-11-17T21:30:26.456Z") != nil)
     #expect(t3Date("2026-11-17T21:30:26Z") != nil)

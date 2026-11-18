@@ -58,19 +58,37 @@ public struct ThreadReference: Codable, Equatable, Sendable {
     }
 
     public var desktopURL: URL? {
+        // A linked server can return a Markdown thread link. The same IDs
+        // used to address it over MCP identify the thread in the desktop app.
+        if let environmentID, !environmentID.isEmpty,
+            let environment = environmentID.addingPercentEncoding(withAllowedCharacters: Self.threadPathCharacters) {
+            return desktopURL(encodedEnvironment: environment)
+        }
+
         guard let link else { return nil }
         if link.scheme == "t3code", link.host == "threads" { return link }
         guard let parts = URLComponents(url: link, resolvingAgainstBaseURL: false) else { return nil }
         let path = parts.percentEncodedPath.split(separator: "/")
         if link.scheme == "t3-thread", parts.host == "v2", path.count >= 2 {
-            let id = threadId.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
-            return URL(string: "t3code://threads/\(path[0])/\(id)")
+            return desktopURL(encodedEnvironment: String(path[0]))
         }
         if ["https", "http"].contains(link.scheme ?? ""),
             path.count == 3, path[0] == "threads" {
             return URL(string: "t3code://threads/\(path[1])/\(path[2])")
         }
         return nil
+    }
+
+    private static let threadPathCharacters = CharacterSet.alphanumerics.union(
+        CharacterSet(charactersIn: "-_~")
+    )
+
+    private func desktopURL(encodedEnvironment: String) -> URL? {
+        guard !threadId.isEmpty,
+            let id = threadId.addingPercentEncoding(withAllowedCharacters: Self.threadPathCharacters) else {
+            return nil
+        }
+        return URL(string: "t3code://threads/\(encodedEnvironment)/\(id)")
     }
 }
 

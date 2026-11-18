@@ -236,9 +236,11 @@ Every later MCP call must keep the same `environmentId` as well as the remote
 it. The same applies to paged reads. An environment ID equal to the local
 top-level ID is treated as local.
 
-The MCP thread link is
-`t3-thread://v2/<environmentId>/<threadId>`. Float opens it in the desktop app
-as `t3code://threads/<environmentId>/<threadId>`, percent-encoding both IDs.
+The MCP response can wrap
+`t3-thread://v2/<environmentId>/<threadId>` in a Markdown link. Float uses the
+linked environment ID and returned thread ID to open
+`t3code://threads/<environmentId>/<threadId>` in the desktop app,
+percent-encoding both IDs.
 The machine-linking settings route is `/settings/connections`, so the desktop
 deep link is `t3code://app/settings/connections`; launching T3 Code is the
 fallback.
