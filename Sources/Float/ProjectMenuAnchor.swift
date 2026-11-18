@@ -43,16 +43,12 @@ struct ProjectMenuAnchor: NSViewRepresentable {
     }
 }
 
-private final class ProjectPickerPanel: EditingPanel {
-    override var canBecomeKey: Bool { true }
-}
-
 @MainActor
 private final class ProjectPickerPanelController {
     private weak var anchor: NSView?
     private weak var parent: NSWindow?
     private weak var chat: ChatState?
-    private let panel: ProjectPickerPanel
+    private let panel: PickerPanel
     private let keyboard = ProjectPickerKeyboard()
     private var localMonitor: Any?
     private var globalMonitor: Any?
@@ -62,10 +58,11 @@ private final class ProjectPickerPanelController {
         self.anchor = anchor
         self.parent = parent
         self.chat = chat
-        panel = ProjectPickerPanel(
+        panel = PickerPanel(
             contentRect: NSRect(x: 0, y: 0, width: 250, height: 180),
-            styleMask: [.borderless], backing: .buffered, defer: false
+            styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false
         )
+        panel.dismiss = { [weak self] in self?.close() }
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
@@ -99,7 +96,7 @@ private final class ProjectPickerPanelController {
     }
 
     func close() {
-        guard panel.isVisible else { return }
+        guard onClose != nil else { return }
         removeMonitors()
         if let parent {
             parent.removeChildWindow(panel)
@@ -117,11 +114,8 @@ private final class ProjectPickerPanelController {
             matching: [.leftMouseDown, .rightMouseDown, .keyDown]
         ) { [weak self] event in
             guard let self else { return event }
-            if event.type == .keyDown, event.keyCode == 53 {
-                close()
-                return nil
-            }
-            if event.type == .keyDown {
+            if event.type == .keyDown, event.window === panel,
+               (panel.firstResponder as? NSTextView)?.hasMarkedText() != true {
                 let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
                 if modifiers.isEmpty {
                     switch event.keyCode {

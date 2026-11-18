@@ -71,6 +71,7 @@ private final class FloatApp: NSObject, NSApplicationDelegate, NSWindowDelegate 
     }
 
     private func hide() {
+        _ = panel?.closePicker()
         panel?.orderOut(nil)
         logger.info("Hid panel")
         chat.hidden()

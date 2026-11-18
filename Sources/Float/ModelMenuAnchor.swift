@@ -45,23 +45,12 @@ struct ModelMenuAnchor: NSViewRepresentable {
     }
 }
 
-private final class ModelPickerPanel: EditingPanel {
-    override var canBecomeKey: Bool { true }
-    var handleKey: ((NSEvent) -> Bool)?
-
-    override func sendEvent(_ event: NSEvent) {
-        if event.type == .keyDown, (firstResponder as? NSTextView)?.hasMarkedText() != true,
-           handleKey?(event) == true { return }
-        super.sendEvent(event)
-    }
-}
-
 @MainActor
 private final class ModelPickerPanelController {
     private weak var anchor: NSView?
     private weak var parent: NSWindow?
     private weak var chat: ChatState?
-    private let panel: ModelPickerPanel
+    private let panel: PickerPanel
     private let keyboard = ModelPickerKeyboard()
     private var localMonitor: Any?
     private var globalMonitor: Any?
@@ -71,11 +60,12 @@ private final class ModelPickerPanelController {
         self.anchor = anchor
         self.parent = parent
         self.chat = chat
-        panel = ModelPickerPanel(
+        panel = PickerPanel(
             contentRect: NSRect(x: 0, y: 0, width: 300, height: 360),
             styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false
         )
         panel.handleKey = { [weak self] in self?.handleKey($0) == true }
+        panel.dismiss = { [weak self] in self?.close() }
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
@@ -100,7 +90,7 @@ private final class ModelPickerPanelController {
     }
 
     func close() {
-        guard panel.isVisible else { return }
+        guard onClose != nil else { return }
         removeMonitors()
         if let parent {
             parent.removeChildWindow(panel)
@@ -114,14 +104,10 @@ private final class ModelPickerPanelController {
     }
 
     private func installMonitors() {
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .keyDown]) {
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) {
             [weak self] event in
             guard let self else { return event }
-            if event.type == .keyDown, event.keyCode == 53 {
-                close()
-                return nil
-            }
-            if event.type != .keyDown, event.window !== panel {
+            if event.window !== panel {
                 close()
             }
             return event

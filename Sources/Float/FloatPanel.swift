@@ -21,6 +21,32 @@ class EditingPanel: NSPanel {
 }
 
 @MainActor
+final class PickerPanel: EditingPanel {
+    override var canBecomeKey: Bool { true }
+    var dismiss: (() -> Void)?
+    var handleKey: ((NSEvent) -> Bool)?
+
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown, (firstResponder as? NSTextView)?.hasMarkedText() != true {
+            if event.isPlainEscape {
+                if !event.isARepeat { dismiss?() }
+                return
+            }
+            if handleKey?(event) == true { return }
+        }
+        super.sendEvent(event)
+    }
+
+    override func cancelOperation(_ sender: Any?) { dismiss?() }
+}
+
+private extension NSEvent {
+    var isPlainEscape: Bool {
+        keyCode == 53 && modifierFlags.intersection([.command, .shift, .option, .control]).isEmpty
+    }
+}
+
+@MainActor
 final class FloatPanel: EditingPanel {
     var dismiss: (() -> Void)?
     var startNewChat: (() -> Void)?
@@ -55,13 +81,22 @@ final class FloatPanel: EditingPanel {
         }
     }
 
-    override func cancelOperation(_ sender: Any?) { dismiss?() }
+    func closePicker() -> Bool {
+        guard let picker = childWindows?.compactMap({ $0 as? PickerPanel }).first else { return false }
+        picker.dismiss?()
+        return true
+    }
 
-    override func keyDown(with event: NSEvent) {
-        if event.keyCode == 53 {
-            dismiss?()
-        } else {
-            super.keyDown(with: event)
+    override func cancelOperation(_ sender: Any?) {
+        if !closePicker() { dismiss?() }
+    }
+
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown, event.isPlainEscape,
+           (firstResponder as? NSTextView)?.hasMarkedText() != true {
+            if !event.isARepeat { cancelOperation(nil) }
+            return
         }
+        super.sendEvent(event)
     }
 }
