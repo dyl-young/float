@@ -279,7 +279,7 @@ private struct ChatSwitcherView: View {
             HStack(spacing: 8) {
                 Group {
                     if entry.project == nil && entry.reference.projectName == nil {
-                        Image(systemName: "pencil").font(.system(size: 11))
+                        NoProjectIcon(size: 13)
                     } else {
                         ProjectIconView(
                             project: entry.project, environmentID: entry.id.environmentID,

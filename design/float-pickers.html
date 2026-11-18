@@ -261,7 +261,7 @@ code{font-family:var(--font-mono);font-size:11.5px;background:var(--code-backgro
 <symbol id="p-server" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></symbol>
 <symbol id="p-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></symbol>
 <symbol id="p-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></symbol>
-<symbol id="p-scratch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16Z"/></symbol>
+<symbol id="p-scratch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19h.01"/><path d="M12 3h.01"/><path d="M16 19h.01"/><path d="M16 3h.01"/><path d="M2 13h.01"/><path d="M2 17v4.286a.71.71 0 0 0 1.212.502l2.202-2.202A2 2 0 0 1 6.828 19H8"/><path d="M2 5a2 2 0 0 1 2-2"/><path d="M2 9h.01"/><path d="M20 3a2 2 0 0 1 2 2"/><path d="M22 13h.01"/><path d="M22 17a2 2 0 0 1-2 2"/><path d="M22 9h.01"/><path d="M8 3h.01"/></symbol>
 <symbol id="p-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
 <symbol id="p-star" viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9Z"/></symbol>
 <symbol id="p-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></symbol>
@@ -311,7 +311,7 @@ function shell({tray='',input,footOpts={}}){
   return `<div class="shell">${tray}<div class="input">${input}</div>${foot(footOpts)}</div>`;
 }
 const ph=t=>`<span class="ph">${t}</span>`;
-function ctx({dev='This Mac',devIcon='p-laptop',proj='No project',projIcon='p-folder',devOpen=false,projOpen=false,devPop='',projPop=''}={}){
+function ctx({dev='This Mac',devIcon='p-laptop',proj='No project',projIcon='p-scratch',devOpen=false,projOpen=false,devPop='',projPop=''}={}){
   return `<div class="ctx">
     <span class="anchor"><span class="cx ${devOpen?'on':''}">${ic(devIcon)}${dev}<svg class="cv"><use href="#p-chev"/></svg></span>${devPop}</span>
     <span class="anchor"><span class="cx ${projOpen?'on':''}">${ic(projIcon)}${proj}<svg class="cv"><use href="#p-chev"/></svg></span>${projPop}</span>

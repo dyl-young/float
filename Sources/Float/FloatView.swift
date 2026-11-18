@@ -174,7 +174,7 @@ struct FloatView: View {
             ContextChip(
                 title: chat.projectLabel,
                 icon: chat.selectedProject.map { .project($0, environmentID: chat.selectedMachineEnvironmentID) }
-                    ?? .symbol("pencil"),
+                    ?? .noProject,
                 isOpen: isProjectPickerOpen,
                 action: chat.requestProjectPicker
             )
@@ -370,11 +370,13 @@ struct FloatView: View {
 
             if let machine = chat.threadMachineName {
                 // The thread's machine, outside the switcher button: its Run on glyph, named on hover.
+                // Not a button, so it drags like the rest of the header; the drag view carries the tooltip.
                 Image(systemName: "server.rack")
                     .font(.system(size: 10.5))
                     .foregroundStyle(Theme.muted)
                     .frame(width: 13, height: 13)
-                    .help("On \(machine)")
+                    .overlay(PanelDragHandle(toolTip: "On \(machine)"))
+                    .accessibilityElement()
                     .accessibilityLabel("On \(machine)")
             }
 
@@ -700,8 +702,9 @@ struct FloatView: View {
                 .frame(height: 30)
                 .accessibilityHidden(true)
             modelPicker
-            if chat.canFollowUp, chat.canSend { followUpButton }
-            sendButton
+            // While a run is going, typing turns the stop ring into the send button for the
+            // follow-up; with the input empty it's the stop ring again. ⌘. always stops.
+            if chat.canFollowUp, chat.canSend { followUpButton } else { sendButton }
         }
         .padding(.horizontal, Self.footerButtonInset)
         .frame(height: 40)
@@ -720,12 +723,19 @@ struct FloatView: View {
             chat.send(alternate: NSApp.currentEvent?.modifierFlags.contains(.command) == true)
         } label: {
             sendRing(tint: Theme.accent) {
-                FollowUpGlyph(mode: mode).frame(width: 14, height: 14)
+                if mode == .steer {
+                    sendGlyph(stopping: false)
+                } else {
+                    FollowUpGlyph(mode: mode).frame(width: 14, height: 14)
+                }
             }
         }
         .floatButtonStyle(in: Circle())
-        .accessibilityLabel(mode == .steer ? "Steer" : "Queue")
-        .help(standard == alternate ? "\(standard) · Return" : "\(standard) · Return  /  \(alternate) · ⌘Return")
+        .accessibilityLabel(mode == .steer ? "Send now (steer)" : "Queue")
+        .help(
+            (standard == alternate ? "\(standard) · Return" : "\(standard) · Return  /  \(alternate) · ⌘Return")
+                + "  ·  Stop · ⌘."
+        )
     }
 
     private func sendRing<Glyph: View>(tint: Color, @ViewBuilder glyph: () -> Glyph) -> some View {
@@ -1003,6 +1013,7 @@ private struct ContextChip: View {
     enum Icon {
         case symbol(String)
         case project(T3Project, environmentID: String?)
+        case noProject
     }
 
     let title: String
@@ -1021,6 +1032,8 @@ private struct ContextChip: View {
                         .frame(width: 12, height: 12)
                 case .project(let project, let environmentID):
                     ProjectIconView(project: project, environmentID: environmentID, size: 12)
+                case .noProject:
+                    NoProjectIcon(size: 12)
                 }
                 Text(title)
                     .font(.system(size: 11.5, weight: .regular))
@@ -1375,13 +1388,15 @@ private struct NoticeCard: View {
 }
 
 private struct PanelDragHandle: NSViewRepresentable {
+    var toolTip = "Drag to move Float"
+
     func makeNSView(context: Context) -> DragView {
         let view = DragView()
-        view.toolTip = "Drag to move Float"
+        view.toolTip = toolTip
         return view
     }
 
-    func updateNSView(_ view: DragView, context: Context) {}
+    func updateNSView(_ view: DragView, context: Context) { view.toolTip = toolTip }
 
     final class DragView: NSView {
         override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }

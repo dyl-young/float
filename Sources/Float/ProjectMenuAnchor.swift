@@ -306,10 +306,8 @@ private struct ProjectPickerView: View {
             if let project {
                 ProjectIconView(project: project, environmentID: chat.selectedMachineEnvironmentID, size: 13)
             } else {
-                Image(systemName: "pencil")
-                    .font(.system(size: 11, weight: .medium))
+                NoProjectIcon(size: 13)
                     .foregroundStyle(Theme.muted)
-                    .frame(width: 13, height: 13)
             }
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
