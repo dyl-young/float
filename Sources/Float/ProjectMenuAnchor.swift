@@ -75,7 +75,7 @@ private final class ProjectPickerPanelController {
         self.onClose = onClose
         let rows = 65 + CGFloat(chat.projects.count * 38)
             + (chat.loadingProjects || chat.projectCatalogFailed ? 38 : 0)
-        let height = 71 + min(228, rows)
+        let height = 42 + min(228, rows)
         let host = NSHostingView(rootView: ProjectPickerView(
             chat: chat, keyboard: keyboard, height: height, close: { [weak self] in self?.close() }
         ))
@@ -193,8 +193,6 @@ private struct ProjectPickerView: View {
         VStack(spacing: 0) {
             searchField
             projectList.frame(maxHeight: .infinity)
-            Divider().overlay(Theme.border)
-            hintRow
         }
         .padding(4)
         .frame(width: 250, height: height, alignment: .top)
@@ -315,29 +313,6 @@ private struct ProjectPickerView: View {
             chat.selectProject(project)
             close()
         }
-    }
-
-    private var hintRow: some View {
-        HStack(spacing: 6) {
-            keyCap("↑↓")
-            Text("move")
-            keyCap("↵")
-            Text("pick")
-            Spacer()
-        }
-        .font(.system(size: 10.5))
-        .foregroundStyle(Theme.muted)
-        .padding(.horizontal, 8)
-        .frame(height: 28)
-    }
-
-    private func keyCap(_ value: String) -> some View {
-        Text(value)
-            .font(.system(size: 10))
-            .foregroundStyle(Theme.text)
-            .padding(.horizontal, 4)
-            .frame(height: 18)
-            .background(Theme.text.opacity(0.08), in: RoundedRectangle(cornerRadius: 4))
     }
 
     private func handle(_ command: ProjectPickerKeyboard.Command) {

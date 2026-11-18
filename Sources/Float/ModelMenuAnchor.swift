@@ -119,11 +119,6 @@ private final class ModelPickerPanelController {
 
     private func handleKey(_ event: NSEvent) -> Bool {
         let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
-        if modifiers == .command, let value = event.charactersIgnoringModifiers,
-           let number = Int(value), (1...9).contains(number) {
-            keyboard.send(.tab(number - 1))
-            return true
-        }
         guard modifiers.isEmpty else { return false }
         switch event.keyCode {
         case 125: keyboard.send(.move(1))
@@ -146,7 +141,6 @@ private final class ModelPickerPanelController {
 @MainActor
 private final class ModelPickerKeyboard {
     enum Command {
-        case tab(Int)
         case move(Int)
         case pick
     }
@@ -275,11 +269,6 @@ private struct ModelPickerView: View {
         return current
     }
 
-    private var showsHint: Bool {
-        search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && selectedTab == Self.favourites
-    }
-
     var body: some View {
         VStack(spacing: 0) {
             searchField
@@ -297,7 +286,6 @@ private struct ModelPickerView: View {
                 Divider().overlay(Theme.border)
                 effortRow(model: model, option: option)
             }
-            if showsHint { hintRow }
         }
         .padding(4)
         .frame(width: 300, height: 360, alignment: .top)
@@ -597,20 +585,6 @@ private struct ModelPickerView: View {
         .frame(height: 32)
     }
 
-    private var hintRow: some View {
-        HStack(spacing: 6) {
-            keyCap("⌘1–\(min(9, providers.count + 1))")
-            Text("switch tab")
-            keyCap("↵")
-            Text("pick")
-            Spacer()
-        }
-        .font(.system(size: 10.5))
-        .foregroundStyle(Theme.muted)
-        .padding(.horizontal, 8)
-        .frame(height: 28)
-    }
-
     private func keyCap(_ value: String) -> some View {
         Text(value)
             .font(.system(size: 10))
@@ -630,12 +604,6 @@ private struct ModelPickerView: View {
 
     private func handle(_ command: ModelPickerKeyboard.Command) {
         switch command {
-        case .tab(let index):
-            let tabs = [Self.favourites] + providers.map(\.instanceId)
-            guard tabs.indices.contains(index) else { return }
-            search = ""
-            selectedTab = tabs[index]
-            highlighted = rows.first
         case .move(let direction):
             hovered = nil
             let rows = rows
