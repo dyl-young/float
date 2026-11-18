@@ -184,6 +184,50 @@ private final class ModelPickerKeyboard: ObservableObject {
     }
 }
 
+private struct ModelRowTrailingIcons: View {
+    let isCurrent: Bool
+    let isFavourite: Bool
+    let isHovered: Bool
+    let isFavouritesTab: Bool
+    let toggleFavourite: () -> Void
+
+    private var state: T3ModelRowTrailingState {
+        T3ModelRowTrailingState(
+            isCurrent: isCurrent, isFavourite: isFavourite,
+            isHovered: isHovered, isFavouritesTab: isFavouritesTab
+        )
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            if state.showsFavouriteToggle {
+                Button(action: toggleFavourite) {
+                    Image(systemName: isFavourite ? "star.fill" : "star")
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundStyle(Theme.muted)
+                        .frame(width: 18, height: 22)
+                }
+                .buttonStyle(.plain)
+                .help(isFavourite ? "Remove from Favourites" : "Add to Favourites")
+            } else if state.showsRestingFavourite {
+                Image(systemName: "star.fill")
+                    .font(.system(size: 9.5, weight: .medium))
+                    .foregroundStyle(Theme.muted)
+                    .frame(width: 18)
+            }
+
+            if state.showsCheckmark {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 10.5, weight: .bold))
+                    .foregroundStyle(Theme.accent)
+                    .frame(width: 18)
+            } else if state.showsFavouriteToggle {
+                Color.clear.frame(width: 18)
+            }
+        }
+    }
+}
+
 private struct ModelPickerView: View {
     private static let favourites = "favourites"
 
@@ -294,7 +338,8 @@ private struct ModelPickerView: View {
         }
         .preferredColorScheme(.dark)
         .onAppear {
-            if !providers.contains(where: { $0.instanceId == selectedTab }) {
+            if selectedTab != Self.favourites,
+                !providers.contains(where: { $0.instanceId == selectedTab }) {
                 selectedTab = providers.first?.instanceId ?? Self.favourites
             }
             searchFocused = true
@@ -529,23 +574,13 @@ private struct ModelPickerView: View {
                 }
             }
             Spacer()
-            if hovered == model.selection || isFavourite {
-                Button {
-                    chat.toggleFavourite(model)
-                } label: {
-                    Image(systemName: isFavourite ? "star.fill" : "star")
-                        .font(.system(size: 10.5, weight: .medium))
-                        .foregroundStyle(isFavourite ? Theme.accent : Theme.muted)
-                        .frame(width: 18, height: 22)
-                }
-                .buttonStyle(.plain)
-                .help(isFavourite ? "Remove from Favourites" : "Add to Favourites")
-            } else if isCurrent {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 10.5, weight: .bold))
-                    .foregroundStyle(Theme.accent)
-                    .frame(width: 18)
-            }
+            ModelRowTrailingIcons(
+                isCurrent: isCurrent,
+                isFavourite: isFavourite,
+                isHovered: hovered == model.selection,
+                isFavouritesTab: selectedTab == Self.favourites && search.isEmpty,
+                toggleFavourite: { chat.toggleFavourite(model) }
+            )
         }
         .padding(.horizontal, 8)
         .frame(minHeight: selectedTab == Self.favourites && search.isEmpty ? 36 : 28)

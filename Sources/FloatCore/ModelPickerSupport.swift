@@ -1,5 +1,19 @@
 import Foundation
 
+public struct T3ModelRowTrailingState: Equatable, Sendable {
+    public let showsFavouriteToggle: Bool
+    public let showsRestingFavourite: Bool
+    public let showsCheckmark: Bool
+
+    public init(
+        isCurrent: Bool, isFavourite: Bool, isHovered: Bool, isFavouritesTab: Bool
+    ) {
+        showsFavouriteToggle = isHovered
+        showsRestingFavourite = !isHovered && !isCurrent && isFavourite && !isFavouritesTab
+        showsCheckmark = isCurrent
+    }
+}
+
 public struct T3ModelKey: Codable, Hashable, Sendable {
     public let instanceId: String
     public let model: String

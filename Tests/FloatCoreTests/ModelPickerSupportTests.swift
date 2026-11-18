@@ -23,6 +23,38 @@ private func provider(
     )
 }
 
+@Test func modelRowTrailingIconsKeepCurrentCheckmark() {
+    let currentFavourite = T3ModelRowTrailingState(
+        isCurrent: true, isFavourite: true, isHovered: false, isFavouritesTab: false
+    )
+    #expect(currentFavourite.showsCheckmark)
+    #expect(!currentFavourite.showsRestingFavourite)
+    #expect(!currentFavourite.showsFavouriteToggle)
+
+    let hoveredCurrent = T3ModelRowTrailingState(
+        isCurrent: true, isFavourite: true, isHovered: true, isFavouritesTab: true
+    )
+    #expect(hoveredCurrent.showsCheckmark)
+    #expect(hoveredCurrent.showsFavouriteToggle)
+}
+
+@Test func modelRowTrailingIconsRespectTabAndHover() {
+    let providerFavourite = T3ModelRowTrailingState(
+        isCurrent: false, isFavourite: true, isHovered: false, isFavouritesTab: false
+    )
+    #expect(providerFavourite.showsRestingFavourite)
+
+    let favouritesRow = T3ModelRowTrailingState(
+        isCurrent: false, isFavourite: true, isHovered: false, isFavouritesTab: true
+    )
+    #expect(!favouritesRow.showsRestingFavourite)
+
+    let hoveredUnstarred = T3ModelRowTrailingState(
+        isCurrent: false, isFavourite: false, isHovered: true, isFavouritesTab: false
+    )
+    #expect(hoveredUnstarred.showsFavouriteToggle)
+}
+
 @Test func modelSearchIgnoresCaseSpacesAndPunctuation() {
     let sonnet = model(
         "claude-sonnet-5-5", label: "Sonnet 5.5", instanceId: "claudeAgent",
