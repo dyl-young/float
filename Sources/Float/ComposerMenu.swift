@@ -86,8 +86,11 @@ final class ComposerMenuState: ObservableObject {
     }
 
     func handle(_ event: NSEvent, chat: ChatState) -> Bool {
+        // macOS sets .function and .numericPad on every arrow key from a real keyboard,
+        // so only the modifiers a person holds down decide whether the menu takes the key.
+        // ⇧/⌥/⌃/⌘ arrows still reach the text view for selection and word movement.
         guard trigger != nil,
-              event.modifierFlags.intersection([.command, .shift, .option, .control, .function]).isEmpty else {
+              event.modifierFlags.intersection([.command, .shift, .option, .control]).isEmpty else {
             return false
         }
         let items = sections(for: chat).flatMap(\.items)
