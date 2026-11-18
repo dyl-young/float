@@ -31,7 +31,7 @@ private func timelineItem(
     ]
     #expect(timeline.compactMap { $0.chatText() } == ["Here is an example.", code, "It prints the name."])
     #expect(timeline.filter(\.isChatMessageCandidate).map(\.position) == [0, 2, 4])
-    #expect(MarkdownBlockParser.parse(code) == [.code(language: "python", text: "name = \"Float\"\nprint(name)")])
+    #expect(ChatMarkdown.parse(code) == [.code(language: "python", text: "name = \"Float\"\nprint(name)")])
 }
 
 @Test func expandsOnlyRelevantTruncatedToolsAndHidesFailedCalls() throws {

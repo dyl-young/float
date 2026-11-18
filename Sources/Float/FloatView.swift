@@ -388,11 +388,7 @@ struct FloatView: View {
             VStack(alignment: .trailing, spacing: 6) {
                 if !message.previews.isEmpty { previewRow(message.previews) }
                 if !message.text.isEmpty {
-                    Text(message.text)
-                        .font(.system(size: 13.5))
-                        .lineSpacing(2)
-                        .foregroundStyle(Theme.text)
-                        .textSelection(.enabled)
+                    MessageMarkdown(source: message.text, isUser: true)
                         .padding(.horizontal, 11)
                         .padding(.vertical, 8)
                         .background(Theme.message, in: UnevenRoundedRectangle(
@@ -405,7 +401,7 @@ struct FloatView: View {
             .padding(.leading, 48)
         } else {
             VStack(alignment: .leading, spacing: 4) {
-                MarkdownReply(text: message.text)
+                MessageMarkdown(source: message.text)
                 HStack(spacing: 6) {
                     Button { copy(message) } label: {
                         Image(systemName: copiedMessage == message.id ? "checkmark" : "doc.on.doc")
@@ -592,69 +588,7 @@ struct FloatView: View {
 
 // MARK: - Pieces
 
-private struct MarkdownReply: View {
-    let text: String
-
-    var body: some View {
-        let blocks = MarkdownBlockParser.parse(text)
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(blocks.indices, id: \.self) { index in
-                block(blocks[index])
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    @ViewBuilder private func block(_ block: MarkdownBlock) -> some View {
-        switch block {
-        case .paragraph(let text):
-            inlineText(text)
-        case .heading(let text):
-            Text(inlineMarkdown(text))
-                .font(.system(size: 13.5, weight: .semibold))
-                .lineSpacing(3)
-                .foregroundStyle(Theme.text)
-                .tint(Theme.accent)
-                .textSelection(.enabled)
-        case .unorderedList(let items):
-            VStack(alignment: .leading, spacing: 4) {
-                ForEach(items.indices, id: \.self) { index in
-                    listRow(marker: "•", text: items[index])
-                }
-            }
-        case .orderedList(let items):
-            VStack(alignment: .leading, spacing: 4) {
-                ForEach(items.indices, id: \.self) { index in
-                    listRow(marker: "\(items[index].number).", text: items[index].text)
-                }
-            }
-        case .code(let language, let text):
-            MarkdownCodeBlock(language: language, text: text)
-        }
-    }
-
-    private func inlineText(_ text: String) -> some View {
-        Text(inlineMarkdown(text))
-            .font(.system(size: 13.5))
-            .lineSpacing(3)
-            .foregroundStyle(Theme.text)
-            .tint(Theme.accent)
-            .textSelection(.enabled)
-            .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func listRow(marker: String, text: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text(marker)
-                .font(.system(size: 13.5))
-                .foregroundStyle(Theme.muted)
-                .frame(width: 20, alignment: .trailing)
-            inlineText(text)
-        }
-    }
-}
-
-private struct MarkdownCodeBlock: View {
+struct MarkdownCodeBlock: View {
     let language: String?
     let text: String
     @State private var wrapped = true
@@ -741,17 +675,6 @@ private struct MarkdownCodeBlock: View {
             copied = false
         }
     }
-}
-
-private func inlineMarkdown(_ text: String) -> AttributedString {
-    var attributed = (try? AttributedString(
-        markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-    )) ?? AttributedString(text)
-    for run in attributed.runs where run.inlinePresentationIntent?.contains(.code) == true {
-        attributed[run.range].font = .system(size: 12.5, design: .monospaced)
-        attributed[run.range].backgroundColor = Theme.code
-    }
-    return attributed
 }
 
 private struct RightAlignedFlowLayout: Layout {
