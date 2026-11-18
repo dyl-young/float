@@ -261,3 +261,118 @@ layer:
 
 Float should use the selected machine's known label for the friendly notice
 rather than exposing those transport messages.
+
+## Questions
+
+### Reading pending questions
+
+The MCP tool is `t3_pending_request`. Its `list` action accepts an optional
+`threadId` and `environmentId` and returns `{ "requestIds": [...] }` for
+pending user-input requests only; approvals are deliberately omitted. `read`
+adds a required `requestId` and returns:
+
+```json
+{
+  "requestId": "<runtime-request-id>",
+  "questions": [
+    {
+      "id": "scope",
+      "header": "Scope",
+      "question": "Which folders should I delete?",
+      "options": [
+        {
+          "label": "Untouched for 30+ days",
+          "description": "14 folders, 3.1 GB",
+          "value": "stale",
+          "preview": "..."
+        }
+      ],
+      "multiSelect": false,
+      "allowCustomAnswer": true,
+      "initialAnswer": "stale",
+      "required": true
+    }
+  ]
+}
+```
+
+Only `id`, `header`, `question`, and `options` are guaranteed. An option always
+has `label` and `description`; `value` and `preview` are optional. The remaining
+question flags are optional too. Missing `multiSelect` is false. Missing
+`allowCustomAnswer` is treated as allowing custom text by T3's client runtime.
+Missing `required` is treated as required.
+
+`thread.pendingRequestCount` counts every pending runtime request, including
+approvals, while a question can leave `thread.status` and the active run status
+as `running`. Float therefore cannot distinguish questions from approvals using
+the thread read alone. When the count is positive, it must call
+`t3_pending_request` with `action: "list"` on the same thread and environment.
+A non-empty `requestIds` array means Float can render a question. An empty
+array means the pending request is an approval or another request that still
+uses the existing Open in T3 handoff.
+
+### Building and sending answers
+
+`ProviderUserInputAnswers` is a JSON object keyed by question ID. Each value is
+either a string for single-select or custom text, or an array of strings for
+multi-select:
+
+```json
+{
+  "scope": "stale",
+  "areas": ["server", "web"],
+  "notes": "Only remove generated folders"
+}
+```
+
+For an offered option, send its exact `value` when present, including any
+whitespace. If `value` is absent, send the trimmed `label`. Multi-select keeps
+the selected values in selection order and removes duplicates. Custom text is
+a string and takes precedence over selected options. T3's client runtime
+prevents custom text when `allowCustomAnswer` is explicitly false. A question
+is incomplete until it has an answer, except an optional
+`required: false` question with no options, which is represented by an empty
+string.
+
+Send the completed map with:
+
+```json
+{
+  "action": "respond",
+  "threadId": "<thread-id>",
+  "environmentId": "<linked-environment-id-if-needed>",
+  "requestId": "<runtime-request-id>",
+  "answers": {
+    "scope": "stale"
+  }
+}
+```
+
+The same `environmentId` used for the remote thread read is required for
+`list`, `read`, and `respond`. `respond` only handles user-input requests and
+cannot approve permission requests.
+
+### Resume behavior and live proof
+
+`respond` dispatches `runtime-request.respond`. It resolves the request, records
+the answers, and forwards them to the provider session; the existing run
+continues without a separate send or wake call. During the question, the
+November 18 live read showed `thread.status: "running"`,
+`pendingRequestCount: 1`, and a running recent run. After `respond`, the same
+run completed, `pendingRequestCount` became zero, and the assistant's
+continuation appeared in the normal thread messages.
+
+The end-to-end check used one scratch thread through the streamable HTTP MCP
+endpoint with `curl`. Antigravity's advertised `gemini-3.8-flash` with
+`thinking_level: low` failed before it could ask because that publisher model
+was unavailable to the configured Google project. The same scratch thread was
+then configured to the cheapest usable fallback, Claude Haiku 5.5 with
+`effort: low`. It asked a two-option Red/Blue question. `list` returned one
+request ID, `read` returned the question, and this answer:
+
+```json
+{ "Choose a color": "Blue" }
+```
+
+was accepted by `respond`. The run resumed automatically and completed with
+`You picked Blue.`
