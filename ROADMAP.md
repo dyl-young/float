@@ -1,19 +1,53 @@
 # Float roadmap
 
-The designs live in `design/`. Work is planned in batches; items move from "Next" into a batch when they're scheduled.
+The designs live in `design/`. Work is planned in batches. Items move from "Next" into a batch when they're scheduled. Testing rules for agents are in `docs/testing.md`.
 
-## In progress
-- **Batch 2:** an opaque panel with messages scrolling behind the frosted input, plus the input rim; a stop button (⌘.); dragging from the header; scroll bars and follow-while-streaming; alignment fixes; image preview wrapping; error states; smooth resize; Markdown blocks.
+## Done (2026-11-17 to 2026-11-18)
+- **Shell:**
+  - opaque panel with a frosted input and rim
+  - stop (⌘.)
+  - header crumb `<project> / <title>`, the ×, and Quit
+  - drag strip
+  - fixed-size panel with top-edge and corner resize
+  - knob-only scroll bars
+  - error and offline cards
+  - T3's thinking shimmer
+- **Replies:**
+  - no bubble, one copy-and-time row per turn
+  - `send_to_user` messages
+  - T3-style code blocks
+  - full GitHub-flavoured Markdown with tables, in replies and your own messages
+- **Model picker v2:**
+  - favourites from T3
+  - provider tabs and search across providers
+  - effort for every provider
+  - disabled providers that explain themselves
+  - ↑↓ and Return
+- **Context row:** project selection (⇧⌘P) and machine selection (Run on, ⇧⌘H) for new chats. Never a branch or checkout picker.
+- **Answering agent questions in Float** (state 6).
+- **Approvals in Float:** opt-in, with a revocable Keychain credential. Allow (⌘↵) and Deny for threads on this Mac. Threads on other machines hand off to T3.
+- **Auto mode:** new threads on this Mac start in T3's Auto mode, or the broadest mode the provider offers below it. Float gets Auto by signing in through T3's MCP app sign-in, which it approves itself with a five-minute session from the local `t3` CLI. Threads on linked machines start Supervised.
+- Editing keys behave like any macOS text field.
 
 ## Next
 In this order:
-1. **Model picker v2 (multi-provider model selection):** see `design/pickers.png`, items 5–8. Favourites, provider tabs, search across providers, an effort control, and disabled providers that explain themselves.
-2. **Project selection on this Mac:** see `design/pickers.png`. A Project menu in the context row for new chats, listing the T3 projects on the local machine, with "No project" as the default. The project locks into the header subtitle after the first send. Never a branch or checkout picker.
-3. **Machine selection:** the Run on menu in the same context row, for starting a chat on another T3 environment, such as the Mac mini. Comes after local project selection works.
-4. **UI polish against T3 Code:** run the same workflows side by side in Float and in T3 Code (a quick question, a long streamed reply, pasting images, stopping a run, a failed run, switching models, an approval, reopening a thread) and note where T3 feels better. Decide which of those details are worth porting so Float feels as native as possible, such as T3's shimmering "Thinking" text next to the pixel loader. Each port gets a mockup in `design/` first; a change to a fixed rule in `design/README.md`, like "the loader is the only progress indicator", is Dylan's call.
-5. **Answer questions in Float:** when an agent calls T3's ask-user-question tool, show the question and its options in Float and send the answer back through T3's API, so you don't have to switch to T3 Code to reply. See state 6 in `design/shell-states.png` and the "Questions and approvals" rule. Tool approvals still hand off to T3.
-6. **Resizable height:** drag the panel's top edge to set how tall the conversation can grow. Height only, never width, within sensible limits. See "Panel height" in `design/README.md`. Small enough to ride along with an earlier batch.
+1. **Fixes from Dylan's testing:**
+   - chat titles show raw Markdown (for example backticks)
+   - one failing Markdown test (`providesWebAutolinksAndImageLinksAndDisplaysHTMLLiterally`)
+   - anything else found in use
+2. **UI polish against T3 Code:** run the same workflows side by side in Float and in T3 Code and note where T3 feels better:
+   - a quick question
+   - a long streamed reply
+   - pasting images
+   - stopping a run
+   - a failed run
+   - switching models
+   - an approval
+   - reopening a thread
+
+   Then decide which of those details are worth porting. Each port gets a mockup in `design/` first. A change to a fixed rule in `design/README.md` is Dylan's call.
+3. **Auto mode on linked machines:** today they start Supervised, because the link caps Float's access. Find out whether a linked machine can grant Auto the same way, and if so, use it.
 
 ## Later
-- **Skills support** (after item 5): use T3 skills from the composer, as T3's "$ skills" does. This covers a `$` trigger with a skill picker, a skill chip in the input, and sending the skill with the prompt through T3's API. Not scheduled yet.
-- Voice input (the mic button in the T3 composer).
+- **Skills support:** use T3 skills from the composer, as T3's "$ skills" does. That means a `$` trigger with a skill picker, a skill chip in the input, and sending the skill with the prompt through T3's API.
+- **Voice input:** the mic button in the T3 composer.
