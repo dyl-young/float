@@ -13,6 +13,29 @@ private struct FloatButtonStyle<Highlight: Shape>: ButtonStyle {
     }
 }
 
+private struct FloatPillButtonStyle: ButtonStyle {
+    let tint: Color?
+    @Environment(\.isEnabled) private var enabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        let fill = enabled ? tint : nil
+        let pill = Capsule()
+        configuration.label
+            .font(.system(size: 11.5, weight: .medium))
+            .foregroundStyle(fill == nil ? Theme.muted : Theme.canvas)
+            .padding(.horizontal, 10)
+            .frame(height: 24)
+            .background(fill ?? .clear, in: pill)
+            .overlay {
+                if fill == nil {
+                    pill.strokeBorder(Theme.hairline, lineWidth: 1)
+                }
+            }
+            .contentShape(pill)
+            .modifier(ButtonHighlight(shape: pill, placement: .overlay))
+    }
+}
+
 private struct ButtonHighlight<Highlight: Shape>: ViewModifier {
     let shape: Highlight
     let placement: FloatButtonHighlight
@@ -35,6 +58,11 @@ private struct ButtonHighlight<Highlight: Shape>: ViewModifier {
 }
 
 extension View {
+    func floatPillButtonStyle(tint: Color? = Theme.accent) -> some View {
+        buttonStyle(FloatPillButtonStyle(tint: tint))
+            .focusEffectDisabled()
+    }
+
     func floatButtonStyle(
         in shape: some Shape = RoundedRectangle(cornerRadius: 6),
         highlight: FloatButtonHighlight = .overlay

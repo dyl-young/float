@@ -616,10 +616,10 @@ struct FloatView: View {
             }
         } label: {
             sendGlyph(stopping: stopping)
-                .foregroundStyle(tint.opacity(stopping || chat.canSend ? 1 : 0.7))
+                .foregroundStyle(tint)
                 .frame(width: Self.footerButtonSize, height: Self.footerButtonSize)
                 .overlay {
-                    Circle().strokeBorder(tint.opacity(stopping || chat.canSend ? 1 : 0.45), lineWidth: 1.5)
+                    Circle().strokeBorder(tint, lineWidth: 1.5)
                 }
                 .contentShape(Rectangle())
         }
@@ -963,17 +963,9 @@ private struct QuestionCard: View {
             }
 
             HStack(spacing: 8) {
-                Button(action: chat.confirmQuestion) {
-                    Text(chat.isLastQuestion ? "Send answer" : "Next")
-                        .font(.system(size: 11.5, weight: .medium))
-                        .foregroundStyle(Theme.canvas)
-                        .padding(.horizontal, 10)
-                        .frame(height: 24)
-                        .background(Theme.accent, in: Capsule())
-                }
-                .floatButtonStyle(in: Capsule())
-                .disabled(!chat.questionCanAdvance || chat.answeringQuestion)
-                .opacity(chat.questionCanAdvance && !chat.answeringQuestion ? 1 : 0.45)
+                Button(chat.isLastQuestion ? "Send answer" : "Next", action: chat.confirmQuestion)
+                    .floatPillButtonStyle()
+                    .disabled(!chat.questionCanAdvance || chat.answeringQuestion)
 
                 Text("1–\(min(9, question.options.count)) pick · ↵ confirm")
                     .font(.system(size: 10.5))
@@ -1141,19 +1133,9 @@ private struct NoticeCard: View {
                     OpenInT3Glyph(size: 12)
                 }
                 Text(action.title)
-                    .font(.system(size: 11.5, weight: .medium))
-            }
-            .foregroundStyle(primary ? Theme.canvas : Theme.muted)
-            .padding(.horizontal, 10)
-            .frame(height: 24)
-            .background(primary ? tint : Color.clear, in: Capsule())
-            .overlay {
-                if !primary {
-                    Capsule().strokeBorder(Theme.hairline, lineWidth: 1)
-                }
             }
         }
-        .floatButtonStyle(in: Capsule())
+        .floatPillButtonStyle(tint: primary ? tint : nil)
     }
 }
 
@@ -1217,7 +1199,6 @@ private struct PanelButton: View {
     let glyphSize: CGFloat?
     let action: () -> Void
 
-    @Environment(\.isEnabled) private var enabled
 
     init(
         _ title: String, accessibilityLabel: String? = nil,
@@ -1248,7 +1229,7 @@ private struct PanelButton: View {
     var body: some View {
         Button(action: action) {
             glyphView
-                .foregroundStyle(Theme.muted.opacity(enabled ? 1 : 0.4))
+                .foregroundStyle(Theme.muted)
                 .frame(width: size, height: size)
                 .contentShape(Rectangle())
         }

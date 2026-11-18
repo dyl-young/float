@@ -370,6 +370,7 @@ private struct ModelPickerView: View {
                     Image(systemName: systemImage).font(.system(size: 10.5, weight: .medium))
                 } else {
                     ProviderGlyph(driverKind: driverKind)
+                        .opacity(enabled || selected ? 1 : 0.65)
                 }
                 if selected {
                     Text(name)
@@ -382,7 +383,6 @@ private struct ModelPickerView: View {
             .frame(height: 26)
             .background(selected ? Theme.text.opacity(0.09) : .clear,
                 in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-            .opacity(enabled || selected ? 1 : 0.4)
             .contentShape(Rectangle())
         }
         .floatButtonStyle()
@@ -397,18 +397,11 @@ private struct ModelPickerView: View {
                 Text("\(provider.pickerName) is turned off in T3.")
                     .font(.system(size: 11.5))
                     .foregroundStyle(Theme.muted)
-                Button {
+                Button("Open T3 settings") {
                     chat.openProviderSettings(provider.instanceId)
                     close()
-                } label: {
-                    Text("Open T3 settings")
-                        .font(.system(size: 11.5, weight: .medium))
-                        .foregroundStyle(Theme.canvas)
-                        .padding(.horizontal, 10)
-                        .frame(height: 24)
-                        .background(Theme.accent, in: Capsule())
                 }
-                .floatButtonStyle(in: Capsule())
+                .floatPillButtonStyle()
             }
             .padding(.horizontal, 8)
             .padding(.top, 10)

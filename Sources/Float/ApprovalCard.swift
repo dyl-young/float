@@ -124,18 +124,7 @@ struct ApprovalCard: View {
     }
 
     private func pill(_ title: String, primary: Bool = true, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 11.5, weight: .medium))
-                .foregroundStyle(primary ? Theme.canvas : Theme.muted)
-                .padding(.horizontal, 10)
-                .frame(height: 24)
-                .background(primary ? Theme.accent : Color.clear, in: Capsule())
-                .overlay {
-                    if !primary { Capsule().strokeBorder(Theme.border, lineWidth: 1) }
-                }
-                .opacity(busy ? 0.55 : 1)
-        }
-        .floatButtonStyle(in: Capsule())
+        Button(title, action: action)
+            .floatPillButtonStyle(tint: primary ? Theme.accent : nil)
     }
 }

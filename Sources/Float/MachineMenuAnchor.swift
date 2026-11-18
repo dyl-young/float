@@ -243,7 +243,7 @@ private struct MachinePickerView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(machine.name)
                     .font(.system(size: 12))
-                    .foregroundStyle(Theme.text)
+                    .foregroundStyle(machine.isOnline ? Theme.text : Theme.muted)
                     .lineLimit(1)
                 Text(subtitle(machine))
                     .font(.system(size: 10.5))
@@ -258,7 +258,6 @@ private struct MachinePickerView: View {
         }
         .padding(.horizontal, 8)
         .frame(height: 40)
-        .opacity(machine.isOnline ? 1 : 0.45)
         .background(
             machine.isOnline && (highlightedID == machine.id || hoveredID == machine.id) ? Theme.text.opacity(0.06) : .clear,
             in: RoundedRectangle(cornerRadius: 8, style: .continuous)
