@@ -47,4 +47,10 @@ public enum T3MachinePicker {
         }
         return machines.first(where: \.isLocal)?.id
     }
+
+    public static func projectIDAfterSwitch(
+        _ currentID: String?, projectsOnSelectedMachine: [T3Project]
+    ) -> String? {
+        T3ProjectPreference.resolvedID(currentID, projects: projectsOnSelectedMachine)
+    }
 }

@@ -44,15 +44,17 @@ public struct ThreadReference: Codable, Equatable, Sendable {
     public let link: URL?
     public let environmentID: String?
     public let machineName: String?
+    public let projectName: String?
 
     public init(
         threadId: String, link: URL?, environmentID: String? = nil,
-        machineName: String? = nil
+        machineName: String? = nil, projectName: String? = nil
     ) {
         self.threadId = threadId
         self.link = link
         self.environmentID = environmentID
         self.machineName = machineName
+        self.projectName = projectName
     }
 
     public var desktopURL: URL? {

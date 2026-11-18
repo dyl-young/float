@@ -158,7 +158,11 @@ final class ChatState: ObservableObject {
         projects.first { $0.id == threadProjectID }
     }
 
-    var threadProjectLabel: String { threadProject?.title ?? "No project" }
+    var hasThreadProject: Bool { threadProject != nil || reference?.projectName != nil }
+
+    var threadProjectLabel: String {
+        threadProject?.title ?? reference?.projectName ?? "No project"
+    }
 
     var threadMachineName: String? { reference?.machineName }
 
@@ -237,8 +241,8 @@ final class ChatState: ObservableObject {
                 let loaded = try await client.projects(environmentID: environmentID)
                 guard selectedMachine?.id == machineID else { return }
                 projects = loaded
-                selectedProjectID = T3ProjectPreference.resolvedID(
-                    selectedProjectID, projects: projects
+                selectedProjectID = T3MachinePicker.projectIDAfterSwitch(
+                    selectedProjectID, projectsOnSelectedMachine: projects
                 )
                 defaults.set(selectedProjectID, forKey: "preferredProjectID")
             } catch {
@@ -509,7 +513,8 @@ final class ChatState: ObservableObject {
                     text, images: attachments, thread: target, requestId: request,
                     modelSelection: selection, projectID: projectID,
                     environmentID: environmentID,
-                    machineName: launchMachine?.isLocal == false ? launchMachine?.name : nil
+                    machineName: launchMachine?.isLocal == false ? launchMachine?.name : nil,
+                    projectName: target == nil ? selectedProject?.title : nil
                 )
                 reference = receipt.reference
                 if target == nil { threadProjectID = receipt.projectID }

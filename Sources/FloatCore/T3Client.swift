@@ -127,7 +127,8 @@ public struct T3Client: Sendable {
     public func send(
         _ text: String, images: [ImageAttachment], thread: ThreadReference?, requestId: UUID,
         modelSelection: T3ModelSelection? = nil, projectID: String? = nil,
-        environmentID: String? = nil, machineName: String? = nil
+        environmentID: String? = nil, machineName: String? = nil,
+        projectName: String? = nil
     ) async throws -> ThreadReceipt {
         let selection: T3ModelSelection?
         if thread == nil, modelSelection == nil {
@@ -209,7 +210,8 @@ public struct T3Client: Sendable {
             let reference = ThreadReference(
                 threadId: id, link: result.link ?? thread?.link,
                 environmentID: thread?.environmentID ?? environmentID,
-                machineName: thread?.machineName ?? machineName
+                machineName: thread?.machineName ?? machineName,
+                projectName: thread?.projectName ?? projectName
             )
             return ThreadReceipt(
                 reference: reference, runId: result.runId, status: result.status,

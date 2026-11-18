@@ -264,7 +264,7 @@ struct FloatView: View {
                         .lineLimit(1)
                         .accessibilityAddTraits(.isHeader)
                     HStack(spacing: 4) {
-                        if chat.threadProject != nil {
+                        if chat.hasThreadProject {
                             Image(systemName: "folder")
                                 .font(.system(size: 10, weight: .medium))
                         }
