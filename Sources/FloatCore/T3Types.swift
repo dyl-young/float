@@ -340,6 +340,11 @@ public struct ThreadSnapshot: Decodable, Sendable {
     }
 
     public struct Thread: Decodable, Sendable {
+        public struct TitleRegeneration: Decodable, Sendable {
+            public let requestId: String
+        }
+
+        public let titleRegeneration: TitleRegeneration?
         public let projectId: String
         public let title: String
         public let status: RunStatus

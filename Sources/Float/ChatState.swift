@@ -64,6 +64,15 @@ final class ChatState: ObservableObject {
     @Published private(set) var selectedProjectID: String?
     @Published private(set) var threadProjectID: String?
     @Published private var loadedThreadProject: T3Project?
+    @Published private var cachedProjectName: String?
+    private var projectsEnvironmentID: String?
+    private var pendingLaunchMachine: T3Machine?
+
+    struct ProjectLookup: Equatable {
+        let threadID: String
+        let projectID: String
+        let environmentID: String?
+    }
     @Published private(set) var threadMachineDisconnected = false
     @Published private(set) var machines: [T3Machine] = []
     @Published private(set) var loadingMachines = false
@@ -111,6 +120,10 @@ final class ChatState: ObservableObject {
         if let data = defaults.data(forKey: "thread"),
             let stored = try? JSONDecoder().decode(ThreadReference.self, from: data) {
             reference = stored
+            threadProjectID = defaults.string(forKey: "threadProjectID")
+            cachedProjectName = defaults.string(forKey: "threadProjectName")
+                ?? (threadProjectID == nil ? stored.projectName : nil)
+            title = defaults.string(forKey: "threadTitle")
             if let encoded = defaults.data(forKey: "previews") {
                 previews = (try? PropertyListDecoder().decode([String: [Data]].self, from: encoded)) ?? [:]
             }
@@ -187,30 +200,50 @@ final class ChatState: ObservableObject {
 
     var projectLabel: String { selectedProject?.title ?? "No project" }
 
+    var threadHeaderEnvironmentID: String? {
+        if let reference { return reference.environmentID }
+        return pendingLaunchMachine.flatMap { $0.isLocal ? nil : $0.id }
+    }
+
     var threadProject: T3Project? {
         if let loadedThreadProject, loadedThreadProject.id == threadProjectID {
             return loadedThreadProject
         }
-        guard reference?.environmentID == selectedMachineEnvironmentID else { return nil }
+        guard threadHeaderEnvironmentID == projectsEnvironmentID else { return nil }
         return projects.first { $0.id == threadProjectID }
     }
 
     var threadProjectLabel: String? {
-        let name = threadProject?.title ?? reference?.projectName
-        return name == "No project" ? nil : name
+        if let project = threadProject {
+            return client.isScratchProject(project, environmentID: threadHeaderEnvironmentID) ? nil : project.title
+        }
+        return cachedProjectName
     }
 
     var threadMachineName: String? {
-        guard let environmentID = reference?.environmentID else { return nil }
-        return machines.first { $0.id == environmentID }?.name ?? reference?.machineName
+        guard let environmentID = threadHeaderEnvironmentID else { return nil }
+        return machines.first { $0.id == environmentID }?.name ?? reference?.machineName ?? pendingLaunchMachine?.name
+    }
+
+    var threadProjectLookup: ProjectLookup? {
+        guard let reference, let projectID = threadProjectID, !needsT3, !threadMachineDisconnected else { return nil }
+        return ProjectLookup(threadID: reference.threadId, projectID: projectID, environmentID: reference.environmentID)
     }
 
     func loadThreadProject() async {
-        guard let id = threadProjectID, let reference, loadedThreadProject?.id != id,
-              threadProject?.faviconPath == nil, threadProject?.projectIcon == nil,
-              let project = try? await client.project(id, environmentID: reference.environmentID),
-              reference == self.reference, id == threadProjectID, !Task.isCancelled else { return }
-        loadedThreadProject = project
+        guard let lookup = threadProjectLookup, loadedThreadProject?.id != lookup.projectID,
+              threadProject?.faviconPath == nil, threadProject?.projectIcon == nil else { return }
+        for attempt in 0..<3 {
+            guard !Task.isCancelled, lookup == threadProjectLookup else { return }
+            if let project = try? await client.project(lookup.projectID, environmentID: lookup.environmentID) {
+                guard !Task.isCancelled, lookup == threadProjectLookup else { return }
+                loadedThreadProject = project
+                cachedProjectName = threadProjectLabel
+                persistThreadMetadata()
+                return
+            }
+            if attempt < 2 { try? await Task.sleep(for: .seconds(1)) }
+        }
     }
 
     var canChooseProject: Bool {
@@ -300,6 +333,7 @@ final class ChatState: ObservableObject {
             do {
                 let loaded = try await client.projects(environmentID: environmentID)
                 guard selectedMachine?.id == machineID else { return }
+                projectsEnvironmentID = environmentID
                 projects = loaded
                 selectedProjectID = T3MachinePicker.projectIDAfterSwitch(
                     selectedProjectID, projectsOnSelectedMachine: projects
@@ -427,6 +461,8 @@ final class ChatState: ObservableObject {
         reference = nil
         threadProjectID = nil
         loadedThreadProject = nil
+        cachedProjectName = nil
+        pendingLaunchMachine = nil
         threadMachineDisconnected = false
         threadModel = nil
         nextModel = nil
@@ -555,13 +591,18 @@ final class ChatState: ObservableObject {
         let attachments = images
         let request = UUID()
         let target = reference
-        let projectID = target == nil ? selectedProject?.id : nil
+        let launchProject = target == nil ? selectedProject : nil
+        let projectID = launchProject?.id
         let selection = selectedModel.map(selectionForSend)
         clearNotice()
         answeredQuestionSummary = nil
         needsT3 = false
         retrySendAfterLaunch = false
         thinkingStartedAt = .now
+        if target == nil {
+            prepareLaunchHeader(project: launchProject, machine: launchMachine, text: text,
+                                attachmentName: attachments.first?.name)
+        }
         submitting = true
         stopAcknowledged = false
         watcher?.cancel()
@@ -574,10 +615,14 @@ final class ChatState: ObservableObject {
                     modelSelection: selection, projectID: projectID,
                     environmentID: environmentID,
                     machineName: launchMachine?.isLocal == false ? launchMachine?.name : nil,
-                    projectName: target == nil ? selectedProject?.title : nil
+                    projectName: launchProject?.title
                 )
                 reference = receipt.reference
-                if target == nil { threadProjectID = receipt.projectID }
+                pendingLaunchMachine = nil
+                if target == nil, receipt.projectID != threadProjectID {
+                    threadProjectID = receipt.projectID
+                    loadedThreadProject = nil
+                }
                 threadModel = receipt.modelSelection ?? threadModel
                 nextModel = nil
                 if !attachments.isEmpty {
@@ -603,6 +648,13 @@ final class ChatState: ObservableObject {
                 }
             } catch {
                 stopping = false
+                if target == nil {
+                    threadProjectID = nil
+                    loadedThreadProject = nil
+                    cachedProjectName = nil
+                    pendingLaunchMachine = nil
+                    title = nil
+                }
                 if case T3Error.serverUnavailable = error { retrySendAfterLaunch = true }
                 showError(error)
                 if case T3Error.uncertainDelivery = error, let target { refresh(target, force: true) }
@@ -610,6 +662,14 @@ final class ChatState: ObservableObject {
             submitting = false
             focusRequest += 1
         }
+    }
+
+    private func prepareLaunchHeader(project: T3Project?, machine: T3Machine?, text: String, attachmentName: String?) {
+        pendingLaunchMachine = machine
+        threadProjectID = project?.id
+        loadedThreadProject = project
+        cachedProjectName = project?.title
+        title = T3Client.launchTitle(for: text, attachmentName: attachmentName)
     }
 
     func stop() {
@@ -816,6 +876,7 @@ final class ChatState: ObservableObject {
                 do {
                     let page = try await client.read(reference)
                     try Task.checkCancellation()
+                    applyThreadMetadata(page.thread)
                     try await expandLongMessages(page, reference: reference, generation: version)
                     guard generation == version, !Task.isCancelled else { return }
                     merge(page)
@@ -829,9 +890,6 @@ final class ChatState: ObservableObject {
                     activeRunId = page.recentRuns?.first { $0.status == .running }?.runId
                     updateFailure(from: page)
                     if status != .running { stopAcknowledged = false }
-                    title = page.thread.title
-                    threadProjectID = page.thread.projectId
-                    threadModel = page.thread.modelSelection ?? threadModel
                     loading = false
                     connectionFailures = 0
                     threadMachineDisconnected = false
@@ -839,7 +897,7 @@ final class ChatState: ObservableObject {
                         clearNotice()
                         needsT3 = false
                     }
-                    if status != .running && status != .waiting { return }
+                    if status != .running && status != .waiting && page.thread.titleRegeneration == nil { return }
                 } catch {
                     guard generation == version && !Task.isCancelled else { return }
                     showError(error)
@@ -863,6 +921,22 @@ final class ChatState: ObservableObject {
                 try? await Task.sleep(for: delay)
             } while !Task.isCancelled
         }
+    }
+
+    private func applyThreadMetadata(_ thread: ThreadSnapshot.Thread) {
+        let projectChanged = threadProjectID != thread.projectId
+        let serverTitle = thread.title.isEmpty ? nil : thread.title
+        let titleChanged = serverTitle.map { $0 != title } ?? false
+        if projectChanged {
+            // A scratch thread can move to a project. Avoid carrying the
+            // previous project's identity over to the new workspace.
+            if threadProjectID != nil { cachedProjectName = nil }
+            threadProjectID = thread.projectId
+            loadedThreadProject = nil
+        }
+        if let serverTitle, titleChanged { title = serverTitle }
+        threadModel = thread.modelSelection ?? threadModel
+        if projectChanged || titleChanged { persistThreadMetadata() }
     }
 
     private func merge(_ snapshot: ThreadSnapshot) {
@@ -1101,7 +1175,14 @@ final class ChatState: ObservableObject {
 
     private func persist() {
         defaults.set(reference.flatMap { try? JSONEncoder().encode($0) }, forKey: "thread")
+        persistThreadMetadata()
         defaults.set(previews.isEmpty ? nil : try? PropertyListEncoder().encode(previews), forKey: "previews")
+    }
+
+    private func persistThreadMetadata() {
+        defaults.set(threadProjectID, forKey: "threadProjectID")
+        defaults.set(threadProjectLabel, forKey: "threadProjectName")
+        defaults.set(title, forKey: "threadTitle")
     }
 
     private func selectionForSend(_ selection: T3ModelSelection) -> T3ModelSelection {

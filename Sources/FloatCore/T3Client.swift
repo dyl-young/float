@@ -133,6 +133,16 @@ public struct T3Client: Sendable {
         return try await transport.call("t3_project_read", arguments, result: T3Project.self, retryExpiredSession: true)
     }
 
+    public static func launchTitle(for text: String, attachmentName: String?) -> String {
+        text.split(whereSeparator: \.isNewline).first.map { String($0.prefix(80)) }
+            ?? attachmentName ?? "Float chat"
+    }
+
+    public func isScratchProject(_ project: T3Project, environmentID: String?) -> Bool {
+        if environmentID != nil { return project.title == "No project" }
+        return URL(fileURLWithPath: project.workspaceRoot).resolvingSymlinksInPath() == scratchRoot
+    }
+
     public func send(
         _ text: String, images: [ImageAttachment], thread: ThreadReference?, requestId: UUID,
         modelSelection: T3ModelSelection? = nil, projectID: String? = nil,
@@ -196,8 +206,7 @@ public struct T3Client: Sendable {
                 }
             } else {
                 guard let selection else { throw T3Error.invalidResponse }
-                let title = text.split(whereSeparator: \.isNewline).first.map { String($0.prefix(80)) }
-                    ?? images.first?.name ?? "Float chat"
+                let title = Self.launchTitle(for: text, attachmentName: images.first?.name)
                 var arguments: [String: any Sendable] = [
                     "title": title, "message": text, "attachments": uploads,
                     "runtimeMode": "approval-required", "interactionMode": "default",

@@ -41,3 +41,20 @@ private func project(
     #expect(T3ProjectPreference.resolvedID("old", projects: [current, archived]) == nil)
     #expect(T3ProjectPreference.resolvedID(nil, projects: [current]) == nil)
 }
+
+@Test func distinguishesScratchFromARegularLocalProject() {
+    let base = URL(fileURLWithPath: "/tmp/float-test-home", isDirectory: true)
+    let client = T3Client(base: base)
+    let scratch = T3Project(id: "scratch", title: "No project", workspaceRoot: base.appending(path: "scratch").path)
+    let project = T3Project(id: "regular", title: "No project", workspaceRoot: "/tmp/regular")
+    #expect(client.isScratchProject(scratch, environmentID: nil))
+    #expect(!client.isScratchProject(project, environmentID: nil))
+    #expect(client.isScratchProject(scratch, environmentID: "remote"))
+}
+
+@Test func derivesFirstSendTitleFromTheMessageOrAttachment() {
+    #expect(T3Client.launchTitle(for: "First line\nSecond line", attachmentName: "Screenshot.png") == "First line")
+    #expect(T3Client.launchTitle(for: "", attachmentName: "Screenshot.png") == "Screenshot.png")
+    #expect(T3Client.launchTitle(for: "", attachmentName: nil) == "Float chat")
+    #expect(T3Client.launchTitle(for: String(repeating: "a", count: 81), attachmentName: nil).count == 80)
+}

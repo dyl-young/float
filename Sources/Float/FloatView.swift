@@ -245,27 +245,28 @@ struct FloatView: View {
                         .fill(Theme.muted)
                         .frame(width: 6, height: 6)
                         .accessibilityHidden(true)
-                    headerTitle("Float")
+                    .help(offlineLabel)
+                }
+                if let project = chat.threadProjectLabel {
+                    HStack(spacing: 5) {
+                        HeaderProjectIcon(project: chat.threadProject, isLocal: chat.threadHeaderEnvironmentID == nil)
+                        Text(chat.threadMachineName.map { "\(project) · \($0)" } ?? project)
+                            .lineLimit(1)
+                    }
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.muted)
+                    .frame(maxWidth: 210, alignment: .leading)
+                    .fixedSize(horizontal: true, vertical: false)
+                    Text("/")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.muted.opacity(0.55))
+                }
+                headerTitle(chat.title ?? "Float")
+                if !chat.hasConversation, let offlineLabel {
                     Text(offlineLabel)
                         .font(.system(size: 11))
                         .foregroundStyle(Theme.muted)
                         .lineLimit(1)
-                } else {
-                    if let project = chat.threadProjectLabel {
-                        HStack(spacing: 5) {
-                            HeaderProjectIcon(project: chat.threadProject, isLocal: chat.reference?.environmentID == nil)
-                            Text(chat.threadMachineName.map { "\(project) · \($0)" } ?? project)
-                                .lineLimit(1)
-                        }
-                        .font(.system(size: 12))
-                        .foregroundStyle(Theme.muted)
-                        .frame(maxWidth: 210, alignment: .leading)
-                        .fixedSize(horizontal: true, vertical: false)
-                        Text("/")
-                            .font(.system(size: 12))
-                            .foregroundStyle(Theme.muted.opacity(0.55))
-                    }
-                    headerTitle(chat.title ?? "Float")
                 }
                 Spacer(minLength: 8)
             }
@@ -290,7 +291,7 @@ struct FloatView: View {
         }
         .padding(.horizontal, Self.headerButtonInset)
         .frame(height: Self.headerHeight)
-        .task(id: chat.threadProjectID) { await chat.loadThreadProject() }
+        .task(id: chat.threadProjectLookup) { await chat.loadThreadProject() }
     }
 
     private func headerTitle(_ title: String) -> some View {
