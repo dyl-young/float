@@ -7,7 +7,6 @@ import SwiftUI
 
 @MainActor
 private final class FloatApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
-    private static let panelWidth = CGFloat(PanelWidthLimits.defaultWidth)
     private let logger = Logger(subsystem: "com.dylyoung.float", category: "panel")
     private let chat: ChatState
     private let sizing: PanelSizing
@@ -83,7 +82,7 @@ private final class FloatApp: NSObject, NSApplicationDelegate, NSWindowDelegate 
 
     private func makePanel() -> FloatPanel {
         let panel = FloatPanel(
-            contentRect: NSRect(x: 0, y: 0, width: Self.panelWidth, height: compactHeight),
+            contentRect: NSRect(x: 0, y: 0, width: sizing.width + 2 * FloatView.contextShadowSides, height: compactHeight),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered, defer: false
         )
@@ -146,7 +145,7 @@ private final class FloatApp: NSObject, NSApplicationDelegate, NSWindowDelegate 
         let wasExpanded = previousTrayVisible ?? trayVisible
         let previousSideInset = wasExpanded ? 0 : FloatView.contextShadowSides
         let previousBottomInset = wasExpanded ? 0 : FloatView.contextRowHeight
-        let width = min(trayVisible ? sizing.width : Self.panelWidth + 2 * sideInset, visible.width)
+        let width = min(sizing.width + 2 * sideInset, visible.width)
         let height = min(trayVisible ? trayHeight : compactHeight, visible.height)
         // Anchor the composer itself as the strip's transparent window margins come and go.
         let x = positioned ? panel.frame.minX + previousSideInset - sideInset : visible.midX - width / 2
