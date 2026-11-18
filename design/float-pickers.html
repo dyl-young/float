@@ -272,7 +272,7 @@ const projPop=`<div class="pop" style="left:-96px;min-width:250px">
   <div class="lab">On Dylan’s Mac mini</div>
   <div class="it sel">${ic('p-folder')}<span>float<span class="sub">~/dev/float</span></span></div>
   <div class="it">${ic('p-folder')}<span>flow-reports<span class="sub">~/dev/flow-reports</span></span></div>
-  <hr><div class="ft"><span class="kbd2">↑↓</span> move <span class="kbd2">↵</span> pick</div></div>`;
+</div>`;
 
 document.getElementById('g1').innerHTML=[
   cell(shell({input:`<span class="caret"></span>${ph(' Ask anything, or paste a screenshot…')}`})+ctx(),
@@ -293,7 +293,7 @@ const favPop=`<div class="pop right" style="min-width:290px">
   <div class="it">${ic('g-cursor')}<span>Composer 2.5<span class="sub">Cursor</span></span></div>
   <div class="it">${ic('g-anti')}<span>Gemini 4 Carbon<span class="sub">Antigravity</span></span></div>
   <hr><div class="ft">Effort<span class="seg"><span>Low</span><span class="on">Med</span><span>High</span><span>Max</span></span></div>
-  <div class="ft"><span class="kbd2">⌘1–5</span> switch tab <span class="kbd2">↵</span> pick</div></div>`;
+</div>`;
 
 const tabPop=`<div class="pop right" style="min-width:290px">
   <div class="srch">${ic('p-search')}<span>Search models</span></div>
@@ -322,7 +322,7 @@ document.getElementById('g2').innerHTML=[
   cell(shell({input:ph('Ask anything…'),footOpts:{open:true,pop:favPop}}),
     `<b>5 · Favorites first.</b> Opens on the models you starred in T3, mixing providers. That’s the fastest way to jump. Effort sits in the footer for models that support it.`,250),
   cell(shell({input:ph('Ask anything…'),footOpts:{model:'GPT-5.6 Sol',prov:'cursor',open:true,pop:tabPop}}),
-    `<b>6 · Provider tabs.</b> One tab per enabled provider, icons from T3. <span class="kbd">⌘</span><span class="kbd">1</span>–<span class="kbd">5</span> switch tabs. Star a model to pin it to Favorites.`,230),
+    `<b>6 · Provider tabs.</b> One tab per enabled provider, icons from T3. ↑↓ move through the list, Return picks, Esc closes. Star a model to pin it to Favorites. No hint row.`,230),
   cell(shell({input:ph('Ask anything…'),footOpts:{open:true,pop:searchPop}}),
     `<b>7 · Type to search everything.</b> Typing searches every provider at once, grouped by provider. Return picks the top hit. The fastest path: <span class="kbd">⇧</span><span class="kbd">⌘</span><span class="kbd">M</span>, “son”, <span class="kbd">↵</span>.`,200),
   cell(shell({input:ph('Ask anything…'),footOpts:{open:true,pop:offPop}}),
