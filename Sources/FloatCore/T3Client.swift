@@ -8,6 +8,8 @@ public struct T3Client: Sendable {
 
     private struct Delivery: Decodable {
         let threadId: String?
+        let messageId: String?
+        let delivery: String?
         let link: URL?
         let projectId: String?
         let runId: String
@@ -39,6 +41,9 @@ public struct T3Client: Sendable {
 
     private let transport: MCPTransport
     private let scratchRoot: URL
+    private let followUpSettings: URL
+    private let rpc: LocalRPC
+    private let cli: LocalCLI
 
     public let approvals: ApprovalAccess
     private let approvalRPC: ApprovalRPC
@@ -50,11 +55,14 @@ public struct T3Client: Sendable {
         let standardBase = home.appending(path: ".t3")
         let resolvedBase = base ?? standardBase
         scratchRoot = resolvedBase.appending(path: "scratch").resolvingSymlinksInPath()
+        followUpSettings = resolvedBase.appending(path: "userdata/client-settings.json")
         let cli = LocalCLI(base: resolvedBase, executable: executable, desktopApp: desktopApp)
+        self.cli = cli
         transport = MCPTransport(cli: cli)
         let approvals = ApprovalAccess(cli: cli)
         self.approvals = approvals
         let rpc = LocalRPC(base: resolvedBase)
+        self.rpc = rpc
         approvalRPC = ApprovalRPC(rpc: rpc, access: approvals)
         inventoryRPC = ComposerInventoryRPC(rpc: rpc, cli: cli)
         faviconRPC = ProjectFaviconRPC(rpc: rpc, cli: cli)
@@ -72,10 +80,11 @@ public struct T3Client: Sendable {
         return try await faviconRPC.data(cwd: project.workspaceRoot, path: project.faviconPath)
     }
 
-    public func modelCatalogue(search: String? = nil) async throws -> T3ModelCatalogue {
+    public func modelCatalogue(search: String? = nil, environmentID: String? = nil) async throws -> T3ModelCatalogue {
         do {
             var arguments: [String: any Sendable] = [:]
             arguments["search"] = search
+            arguments["environmentId"] = environmentID
             return try await transport.call(
                 "orchestrator_capabilities", arguments,
                 result: T3ModelCatalog.self, retryExpiredSession: true
@@ -85,6 +94,51 @@ public struct T3Client: Sendable {
         ].contains(error.code) {
             throw T3Error.serverUnavailable
         }
+    }
+
+    public func followUpMode() -> FollowUpMode {
+        FollowUpMode.setting(in: try? Data(contentsOf: followUpSettings))
+    }
+
+    public func followUpProjection(_ thread: ThreadReference) async throws -> T3FollowUpProjection {
+        struct Input: Encodable { let threadId: String }
+        let credential = try await cli.issueFollowUpReader()
+        do {
+            let result: T3FollowUpProjection = try await rpc.call(
+                "orchestration.getThreadProjection", Input(threadId: thread.threadId), credential: credential
+            )
+            await cli.revoke(credential)
+            return result
+        } catch {
+            await cli.revoke(credential)
+            throw error
+        }
+    }
+
+    public func queuedFollowUps(_ thread: ThreadReference) async throws -> [T3QueuedFollowUp] {
+        struct Page: Decodable, Sendable {
+            let items: [T3QueuedFollowUp]
+            let nextCursor: Int?
+        }
+        var arguments: [String: any Sendable] = ["threadId": thread.threadId, "action": "list", "limit": 100]
+        arguments["environmentId"] = thread.environmentID
+        var items: [T3QueuedFollowUp] = []
+        var cursor: Int?
+        repeat {
+            arguments["cursor"] = cursor
+            let page = try await transport.call("t3_queue", arguments, result: Page.self, retryExpiredSession: true)
+            items.append(contentsOf: page.items)
+            cursor = page.nextCursor
+        } while cursor != nil && !Task.isCancelled
+        return items
+    }
+
+    public func cancelQueuedFollowUp(_ runID: String, in thread: ThreadReference) async throws {
+        var arguments: [String: any Sendable] = [
+            "threadId": thread.threadId, "action": "cancel", "queuedRunId": runID,
+        ]
+        arguments["environmentId"] = thread.environmentID
+        _ = try await transport.call("t3_queue", arguments, result: Empty.self)
     }
 
     public func composerInventory(instanceID: String, cwd: String?) async throws -> T3ComposerInventory {
@@ -170,7 +224,7 @@ public struct T3Client: Sendable {
         _ text: String, images: [ImageAttachment], thread: ThreadReference?, requestId: UUID,
         modelSelection: T3ModelSelection? = nil, projectID: String? = nil,
         environmentID: String? = nil, machineName: String? = nil,
-        projectName: String? = nil
+        projectName: String? = nil, followUp: FollowUpMode? = nil
     ) async throws -> ThreadReceipt {
         let selection: T3ModelSelection?
         var catalogue: T3ModelCatalogue?
@@ -182,6 +236,12 @@ public struct T3Client: Sendable {
             selection = preferred.selection
         } else {
             selection = modelSelection
+        }
+        if followUp == .queue, !images.isEmpty {
+            throw T3Error.tool("Queueing images from Float is unavailable. Your draft and images are still here.")
+        }
+        if thread?.environmentID != nil, !images.isEmpty {
+            throw T3Error.tool("Attachments cannot be sent to a linked machine yet.")
         }
         var uploads: [[String: any Sendable]] = []
         var submitted = false
@@ -214,17 +274,19 @@ public struct T3Client: Sendable {
                 submitted = true
                 if uploads.isEmpty {
                     var arguments: [String: any Sendable] = [
-                        "threadId": thread.threadId, "message": text, "mode": "queue",
+                        "threadId": thread.threadId, "message": text, "mode": (followUp ?? .queue).rawValue,
                         "clientRequestId": requestId.uuidString,
                     ]
                     arguments["environmentId"] = thread.environmentID
-                    result = try await transport.call(
-                        "t3_thread_send", arguments, result: Delivery.self
-                    )
-                } else {
-                    guard thread.environmentID == nil else {
-                        throw T3Error.tool("Attachments cannot be sent to a linked machine yet.")
+                    do {
+                        result = try await transport.call("t3_thread_send", arguments, result: Delivery.self)
+                    } catch T3Error.tool(let message) where followUp == .steer && Self.steerWasRejected(message) {
+                        // T3 rejected before accepting the message. Keep the request ID
+                        // when the active turn stopped, became unavailable or compacted.
+                        arguments["mode"] = FollowUpMode.queue.rawValue
+                        result = try await transport.call("t3_thread_send", arguments, result: Delivery.self)
                     }
+                } else {
                     result = try await transport.call("t3_thread_send_attachments", [
                         "threadId": thread.threadId, "message": text, "attachments": uploads,
                     ], result: Delivery.self)
@@ -265,7 +327,8 @@ public struct T3Client: Sendable {
             return ThreadReceipt(
                 reference: reference, runId: result.runId, status: result.status,
                 modelSelection: result.modelSelection ?? selection,
-                projectID: thread == nil && projectID != nil ? result.projectId ?? projectID : nil
+                projectID: thread == nil && projectID != nil ? result.projectId ?? projectID : nil,
+                messageID: result.messageId, delivery: result.delivery
             )
         } catch {
             if submitted {
@@ -287,6 +350,16 @@ public struct T3Client: Sendable {
             }
             throw error
         }
+    }
+
+    static func steerWasRejected(_ message: String) -> Bool {
+        let message = message.lowercased()
+        return message.contains("no running turn that can be steered")
+            || message.contains("cannot be steered")
+            || message.contains("no active provider session for steering")
+            || message.contains("wait for context compaction to finish before steering")
+            || message.contains("cannot steer active turns directly")
+            || message.contains("does not support active steering")
     }
 
     public func read(_ thread: ThreadReference, before: Int? = nil) async throws -> ThreadSnapshot {

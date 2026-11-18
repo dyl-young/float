@@ -8,10 +8,11 @@ public struct ChatMessage: Identifiable, Equatable, Sendable {
     public private(set) var text: String
     public private(set) var date: Date?
     public let previews: [Data]
+    public let followUp: FollowUpState?
 
     public init(
         id: String, runId: String?, position: Int, isUser: Bool,
-        text: String, date: Date?, previews: [Data]
+        text: String, date: Date?, previews: [Data], followUp: FollowUpState? = nil
     ) {
         self.id = id
         self.runId = runId
@@ -20,6 +21,7 @@ public struct ChatMessage: Identifiable, Equatable, Sendable {
         self.text = text
         self.date = date
         self.previews = previews
+        self.followUp = followUp
     }
 
     /// Group the visible messages in timeline order. The original items stay available

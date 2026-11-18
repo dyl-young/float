@@ -116,6 +116,18 @@ final class ChatState: ObservableObject {
     private var visible = false
     private var expandedText: [String: (timestamp: String, text: String)] = [:]
     private var pendingMessage: ChatMessage?
+    @Published private var pendingFollowUp: ChatMessage?
+    @Published private var queuedMessages: [ChatMessage] = []
+    @Published private var sendingFollowUp = false
+    @Published private var queueAvailable = false
+    @Published private var cancellingQueue: Set<String> = []
+    @Published private var steeringCapabilities: T3FollowUpCapabilities?
+    @Published private var runCompacting = false
+    @Published private var followUpPreference: FollowUpMode = .steer
+    private var followUpContextLoaded = false
+    private var followUpContextRun: String?
+    private var followUpContextTask: Task<Void, Never>?
+    private var steeredMessageIDs: Set<String> = []
     private var activeRunId: String?
     private var retrySendAfterLaunch = false
 
@@ -125,6 +137,7 @@ final class ChatState: ObservableObject {
     ) {
         self.defaults = defaults
         self.client = client
+        followUpPreference = client.followUpMode()
         projectFaviconCache = ProjectFaviconCache(client: client)
         self.favouritesStore = favouritesStore ?? T3ModelFavouritesStore(
             settingsURL: FileManager.default.homeDirectoryForCurrentUser
@@ -148,6 +161,7 @@ final class ChatState: ObservableObject {
         if let data = defaults.data(forKey: "thread"),
             let stored = try? JSONDecoder().decode(ThreadReference.self, from: data) {
             reference = stored
+            steeredMessageIDs = Set(defaults.stringArray(forKey: "steeredMessageIDs") ?? [])
             threadProjectID = defaults.string(forKey: "threadProjectID")
             cachedProjectName = defaults.string(forKey: "threadProjectName")
                 ?? (threadProjectID == nil ? stored.projectName : nil)
@@ -162,7 +176,29 @@ final class ChatState: ObservableObject {
         }
     }
 
-    var groupedMessages: [ChatMessage] { ChatMessage.groupReplies(in: messages) }
+    var groupedMessages: [ChatMessage] {
+        ChatMessage.groupReplies(in: messages) + (pendingFollowUp.map { [$0] } ?? []) + queuedMessages
+    }
+
+    var canFollowUp: Bool {
+        reference != nil && status == .running && !stopAcknowledged
+            && activeQuestion == nil && activeApproval == nil && approvalPreview == nil
+    }
+
+    func followUpMode(alternate: Bool = false) -> FollowUpMode {
+        let canSteer = steeringCapabilities?.supportsActiveSteering == true
+            && (!runCompacting || steeringCapabilities?.activeSteeringDuringCompaction == true)
+        return followUpPreference.resolved(alternate: alternate, canSteer: canSteer)
+    }
+
+    func canCancelQueue(_ message: ChatMessage) -> Bool {
+        queueAvailable && message.followUp == .queued
+            && queuedMessages.contains { $0.id == message.id }
+    }
+
+    func queueCancellationInFlight(_ message: ChatMessage) -> Bool {
+        message.runId.map(cancellingQueue.contains) ?? false
+    }
 
     var hasConversation: Bool { reference != nil || submitting }
     var hasTrayNotice: Bool { notice != nil && noticeKind != .input }
@@ -180,7 +216,9 @@ final class ChatState: ObservableObject {
     }
 
     func skillChips(in message: ChatMessage) -> [ComposerSkillChip] {
-        message.runId.flatMap { sentSkills[$0] } ?? []
+        if let chips = sentSkills[message.id] { return chips }
+        guard message.followUp == nil else { return [] }
+        return message.runId.flatMap { sentSkills[$0] } ?? []
     }
     var composerPlaceholder: String {
         if let question = activeQuestion {
@@ -193,7 +231,9 @@ final class ChatState: ObservableObject {
     var showsStop: Bool { submitting || stopping || (status.isInProgress && !stopAcknowledged) }
     var canStop: Bool { showsStop && !stopping }
     var canSend: Bool {
-        !submitting && !stopping && !loading && status != .running && status != .waiting &&
+        !submitting && !sendingFollowUp && !stopping && !loading && status != .waiting &&
+            (status != .running || canFollowUp || stopAcknowledged) &&
+            activeQuestion == nil && activeApproval == nil && approvalPreview == nil &&
             (reference != nil || (!loadingProjects && (!loadingModels || !models.isEmpty))) &&
             (!draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !images.isEmpty)
     }
@@ -492,6 +532,7 @@ final class ChatState: ObservableObject {
 
     func revealed() {
         visible = true
+        followUpPreference = client.followUpMode()
         focusRequest += 1
         if models.isEmpty {
             reloadModels()
@@ -607,6 +648,7 @@ final class ChatState: ObservableObject {
         hasOlderMessages = false
         loadingOlder = false
         pendingMessage = nil
+        resetFollowUps()
         earliest = nil
         receivedFirstPage = false
         expandedText = [:]
@@ -698,7 +740,7 @@ final class ChatState: ObservableObject {
         )
     }
 
-    func send() {
+    func send(alternate: Bool = false) {
         guard canSend else { return }
         let sentDraft = prompt
         let text = sentDraft.text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -715,6 +757,10 @@ final class ChatState: ObservableObject {
             ?? (launchMachine?.isLocal == false ? launchMachine?.id : nil)
         if environmentID != nil, !images.isEmpty {
             setNotice("Attachments can't be sent to a linked machine yet.", kind: .input)
+            return
+        }
+        if let reference, canFollowUp {
+            sendFollowUp(text, draft: sentDraft, in: reference, alternate: alternate)
             return
         }
         let attachments = images
@@ -794,6 +840,105 @@ final class ChatState: ObservableObject {
             submitting = false
             focusRequest += 1
         }
+    }
+
+    private func sendFollowUp(_ text: String, draft sentDraft: ComposerDraft,
+                              in target: ThreadReference, alternate: Bool) {
+        followUpPreference = client.followUpMode()
+        let mode = followUpMode(alternate: alternate)
+        let attachments = images
+        // The MCP attachment tool uses T3's automatic steering behavior,
+        // including an interrupt and restart when active steering is text-only.
+        guard mode != .queue || attachments.isEmpty else {
+            setNotice("Queueing images from Float is unavailable. Your draft is still here.", kind: .input)
+            return
+        }
+        let request = UUID()
+        let version = generation
+        let targetRun = activeRunId
+        let thumbnails = attachments.compactMap { Self.thumbnail($0.data) }
+        let timestamp = Date.now
+        clearNotice()
+        sendingFollowUp = true
+        pendingFollowUp = ChatMessage(
+            id: request.uuidString, runId: nil, position: .max, isUser: true, text: text, date: timestamp,
+            previews: thumbnails, followUp: mode == .steer ? .steerWaiting : .queued
+        )
+
+        Task {
+            do {
+                let receipt = try await client.send(
+                    text, images: attachments, thread: target, requestId: request, followUp: mode
+                )
+                guard generation == version else { return }
+                let id = receipt.messageID ?? request.uuidString
+                let queued = receipt.delivery == "queued"
+                let steered = receipt.delivery == "steered"
+                    || (receipt.delivery == nil && mode == .steer && targetRun == receipt.runId)
+                if steered {
+                    steeredMessageIDs.insert(id)
+                    defaults.set(Array(steeredMessageIDs), forKey: "steeredMessageIDs")
+                }
+                if !thumbnails.isEmpty { previews[id] = thumbnails }
+                if !sentDraft.chips.isEmpty { sentSkills[id] = Array(sentDraft.chips.values) }
+                let message = ChatMessage(
+                    id: id, runId: receipt.runId, position: .max, isUser: true, text: text, date: timestamp,
+                    previews: thumbnails, followUp: queued ? .queued : steered ? .steerWaiting : nil
+                )
+                if queued {
+                    if !queuedMessages.contains(where: { $0.runId == receipt.runId }) {
+                        queuedMessages.append(message)
+                    }
+                } else if !messages.contains(where: { $0.id == id }) {
+                    messages.append(message)
+                }
+                if prompt == sentDraft { draft = "" }
+                let sent = Set(attachments.map(\.id))
+                images.removeAll { sent.contains($0.id) }
+                persist()
+            } catch {
+                guard generation == version else { return }
+                showError(error)
+            }
+            pendingFollowUp = nil
+            sendingFollowUp = false
+            refresh(target, force: true)
+            focusRequest += 1
+        }
+    }
+
+    func cancelQueuedFollowUp(_ message: ChatMessage) {
+        guard canCancelQueue(message), let reference, let runID = message.runId,
+              cancellingQueue.insert(runID).inserted else { return }
+        let version = generation
+        Task {
+            do {
+                try await client.cancelQueuedFollowUp(runID, in: reference)
+                guard generation == version else { return }
+                queuedMessages.removeAll { $0.runId == runID }
+            } catch {
+                guard generation == version else { return }
+                setNotice(error.localizedDescription, kind: .input)
+            }
+            cancellingQueue.remove(runID)
+            refresh(reference, force: true)
+        }
+    }
+
+    private func resetFollowUps() {
+        followUpContextTask?.cancel()
+        followUpContextTask = nil
+        followUpContextLoaded = false
+        followUpContextRun = nil
+        pendingFollowUp = nil
+        sendingFollowUp = false
+        queuedMessages = []
+        queueAvailable = false
+        cancellingQueue = []
+        steeringCapabilities = nil
+        runCompacting = false
+        steeredMessageIDs = []
+        defaults.removeObject(forKey: "steeredMessageIDs")
     }
 
     private func prepareLaunchHeader(project: T3Project?, machine: T3Machine?, text: String, attachmentName: String?) {
@@ -1036,7 +1181,18 @@ final class ChatState: ObservableObject {
                         hasOlderMessages = earliest != nil
                     }
                     let nextStatus = page.thread.pendingRequestCount > 0 ? .waiting : page.thread.status
-                    let runID = page.thread.activeRunId ?? page.recentRuns?.first { $0.status.isInProgress }?.runId
+                    let runID = page.thread.activeRunId
+                        ?? page.recentRuns?.first { $0.status.isInProgress && !$0.isQueued }?.runId
+                    let run = page.recentRuns?.first { $0.runId == runID }
+                    runCompacting = page.items.contains {
+                        $0.runId == runID && $0.type == "compaction" && ["pending", "running"].contains($0.status)
+                    }
+                    loadFollowUpContext(in: reference, runID: runID, instanceID: run?.providerInstanceId ?? page.thread.providerInstanceId)
+                    let hasQueuedRun = page.recentRuns?.contains(where: \.isQueued) == true
+                    if hasQueuedRun || !queuedMessages.isEmpty {
+                        await refreshQueuedFollowUps(in: reference, generation: version)
+                        guard generation == version, !Task.isCancelled else { return }
+                    }
                     if !nextStatus.isInProgress || (runID != nil && activeRunId != nil && runID != activeRunId) {
                         stopAcknowledged = false
                     }
@@ -1049,6 +1205,7 @@ final class ChatState: ObservableObject {
                         guard generation == version, !Task.isCancelled else { return }
                     }
                     status = nextStatus
+                    if let startedAt = run?.startDate { thinkingStartedAt = startedAt }
                     if nextStatus != .stopped, !stopAcknowledged {
                         await updateApprovals(from: page, thread: reference, generation: version)
                         guard generation == version, !Task.isCancelled else { return }
@@ -1061,7 +1218,8 @@ final class ChatState: ObservableObject {
                         clearNotice()
                         needsT3 = false
                     }
-                    if status != .running && status != .waiting && page.thread.titleRegeneration == nil { return }
+                    if !status.isInProgress, page.thread.titleRegeneration == nil,
+                        status == .stopped || !hasQueuedRun { return }
                 } catch {
                     guard generation == version && !Task.isCancelled else { return }
                     showError(error)
@@ -1084,6 +1242,63 @@ final class ChatState: ObservableObject {
                 }
                 try? await Task.sleep(for: delay)
             } while !Task.isCancelled
+        }
+    }
+
+    private func loadFollowUpContext(in reference: ThreadReference, runID: String?, instanceID: String?) {
+        guard !followUpContextLoaded || (runID != nil && followUpContextRun != runID) else { return }
+        followUpContextLoaded = true
+        followUpContextRun = runID
+        followUpContextTask?.cancel()
+        steeringCapabilities = nil
+        let version = generation
+        let localDriver = modelProviders.first { $0.instanceId == instanceID }?.driverKind ?? instanceID
+        followUpContextTask = Task {
+            let driver: String?
+            if let environmentID = reference.environmentID {
+                let catalogue = try? await client.modelCatalogue(environmentID: environmentID)
+                driver = catalogue?.providers.first { $0.instanceId == instanceID }?.driverKind ?? instanceID
+            } else {
+                driver = localDriver
+            }
+            guard generation == version, !Task.isCancelled else { return }
+            steeringCapabilities = Self.baselineSteeringCapabilities(driver: driver)
+            guard reference.environmentID == nil,
+                  let projection = try? await client.followUpProjection(reference),
+                  generation == version, !Task.isCancelled else { return }
+            if let runID, let capabilities = projection.capabilities(for: runID) {
+                steeringCapabilities = capabilities
+            }
+            let added = Set(projection.steeredMessageIDs).subtracting(steeredMessageIDs)
+            guard !added.isEmpty else { return }
+            steeredMessageIDs.formUnion(added)
+            defaults.set(Array(steeredMessageIDs), forKey: "steeredMessageIDs")
+            // An idle thread has stopped polling by the time this read finishes.
+            if !status.isInProgress { refresh(reference, force: true) }
+        }
+    }
+
+    private static func baselineSteeringCapabilities(driver: String?) -> T3FollowUpCapabilities {
+        // Linked MCP catalogues identify the driver but omit its runtime session capabilities.
+        let nativeSteeringDrivers: Set<String> = [
+            "claudeAgent", "codex", "cursor", "grok", "kiro", "muse", "opencode", "pi",
+        ]
+        return T3FollowUpCapabilities(supportsActiveSteering: driver.map(nativeSteeringDrivers.contains) == true)
+    }
+
+    private func refreshQueuedFollowUps(in reference: ThreadReference, generation version: Int) async {
+        let queue = try? await client.queuedFollowUps(reference)
+        guard generation == version, !Task.isCancelled else { return }
+        queueAvailable = queue != nil
+        guard let queue else { return }
+        let previous = Dictionary(uniqueKeysWithValues: queuedMessages.compactMap { message in
+            message.runId.map { ($0, message) }
+        })
+        queuedMessages = queue.map { entry in
+            previous[entry.queuedRunId] ?? ChatMessage(
+                id: "queued-\(entry.queuedRunId)", runId: entry.queuedRunId, position: .max,
+                isUser: true, text: entry.text, date: nil, previews: [], followUp: .queued
+            )
         }
     }
 
@@ -1111,15 +1326,21 @@ final class ChatState: ObservableObject {
             let expanded = expandedText[item.id]
             let raw = expanded?.timestamp == item.updatedAt ? expanded?.text : nil
             let text = item.chatText(expandedText: raw) ?? ""
-            let attachments = isUser ? item.runId.flatMap { previews[$0] } ?? [] : []
+            let id = isUser ? item.messageId ?? item.id : item.id
+            let followUp = isUser ? FollowUpState(
+                inputIntent: item.inputIntent, status: item.status, knownSteer: steeredMessageIDs.contains(id)
+            ) : nil
+            let attachments = isUser
+                ? previews[id] ?? (followUp == nil ? item.runId.flatMap { previews[$0] } ?? [] : [])
+                : []
             guard !text.isEmpty || !attachments.isEmpty else { continue }
-            if isUser, let pending = pendingMessage, pending.runId == item.runId {
+            if isUser, followUp == nil, let pending = pendingMessage, pending.runId == item.runId {
                 merged.removeValue(forKey: pending.id)
                 pendingMessage = nil
             }
-            merged[item.id] = ChatMessage(
-                id: item.id, runId: item.runId, position: item.position, isUser: isUser, text: text,
-                date: item.date, previews: attachments
+            merged[id] = ChatMessage(
+                id: id, runId: item.runId, position: item.position, isUser: isUser, text: text,
+                date: item.date, previews: attachments, followUp: followUp
             )
         }
         let updated = merged.values.sorted {

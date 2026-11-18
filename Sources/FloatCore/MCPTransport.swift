@@ -62,6 +62,13 @@ struct LocalCLI: Sendable {
         )
     }
 
+    func issueFollowUpReader() async throws -> LocalCredential {
+        try await issue(
+            subject: "float-follow-up-reader", label: "Float follow-ups", ttl: "5m",
+            scopes: ["orchestration:read"]
+        )
+    }
+
     func issueInventoryReader() async throws -> LocalCredential {
         try await issue(
             subject: "float-provider-inventory", label: "Float provider inventory", ttl: "5m",

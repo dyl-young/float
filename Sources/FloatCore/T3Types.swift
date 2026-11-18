@@ -332,6 +332,8 @@ public struct ThreadReceipt: Sendable {
     public let status: RunStatus
     public let modelSelection: T3ModelSelection?
     public let projectID: String?
+    public let messageID: String?
+    public let delivery: String?
 }
 
 public enum RunStatus: Equatable, Sendable {
@@ -363,6 +365,24 @@ public struct ThreadSnapshot: Decodable, Sendable {
         public let runId: String
         public let status: RunStatus
         public let failureReason: String?
+        public let startedAt: String?
+        public let providerInstanceId: String?
+        public let isQueued: Bool
+
+        private enum CodingKeys: String, CodingKey { case runId, status, failureReason, startedAt, providerInstanceId }
+
+        public init(from decoder: Decoder) throws {
+            let values = try decoder.container(keyedBy: CodingKeys.self)
+            runId = try values.decode(String.self, forKey: .runId)
+            let rawStatus = try values.decode(String.self, forKey: .status)
+            status = RunStatus(rawStatus)
+            isQueued = rawStatus == "queued"
+            failureReason = try values.decodeIfPresent(String.self, forKey: .failureReason)
+            startedAt = try values.decodeIfPresent(String.self, forKey: .startedAt)
+            providerInstanceId = try values.decodeIfPresent(String.self, forKey: .providerInstanceId)
+        }
+
+        public var startDate: Date? { startedAt.flatMap(t3Date) }
     }
 
     public struct Thread: Decodable, Sendable {
@@ -391,6 +411,7 @@ public struct ThreadSnapshot: Decodable, Sendable {
         public var id: String { itemId }
         public let itemId: String
         public let messageId: String?
+        public let inputIntent: String?
         public let runId: String?
         public let position: Int
         public let type: String
