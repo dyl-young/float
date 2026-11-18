@@ -5,6 +5,7 @@ import SwiftUI
 struct MessageMarkdown: View {
     let source: String
     var isUser = false
+    var chips: [ComposerSkillChip] = []
 
     @State private var lastBlocks: [MarkdownBlock] = []
 
@@ -13,6 +14,7 @@ struct MessageMarkdown: View {
         let blocks = isLong ? lastBlocks : Self.cache.blocks(source, isUser: isUser)
         MarkdownBlocks(blocks: blocks, isUser: isUser)
             .tint(Theme.accent)
+            .environment(\.markdownSkillChips, chips)
             .task(id: source) {
                 if isLong {
                     let source = source
@@ -169,39 +171,68 @@ private struct MarkdownBlocks: View {
     }
 }
 
+private struct MarkdownSkillChips: EnvironmentKey {
+    static let defaultValue: [ComposerSkillChip] = []
+}
+
+private extension EnvironmentValues {
+    var markdownSkillChips: [ComposerSkillChip] {
+        get { self[MarkdownSkillChips.self] }
+        set { self[MarkdownSkillChips.self] = newValue }
+    }
+}
+
 private struct MarkdownText: View {
     let spans: [MarkdownSpan]
     let size: CGFloat
     var weight: Font.Weight = .regular
     var color = Theme.text
 
+    @Environment(\.markdownSkillChips) private var chips
+
     var body: some View {
-        Text(attributed)
+        rendered
             .foregroundStyle(color)
             .lineSpacing(3)
             .fixedSize(horizontal: false, vertical: true)
             .textSelection(.enabled)
     }
 
-    private var attributed: AttributedString {
-        var text = AttributedString()
+    private var rendered: Text {
+        var tail = AttributedString()
+        var result: Text?
         for span in spans {
-            var run = AttributedString(span.text)
-            let font = span.code
-                ? Font.system(size: max(10.5, size * 0.85), weight: weight, design: .monospaced)
-                : Font.system(size: size, weight: weight)
-            var styled = span.bold ? font.bold() : font
-            if span.italic { styled = styled.italic() }
-            run.font = styled
-            if span.code { run.backgroundColor = Theme.text.opacity(0.10) }
-            if span.struck { run.strikethroughStyle = .single }
-            if let link = span.link {
-                run.link = link
-                run.foregroundColor = Theme.accent
+            let matches = span.code || span.link != nil ? [] : ComposerSkillChip.matches(in: span.text, chips: chips)
+            var start = span.text.startIndex
+            for (range, chip) in matches {
+                tail += styled(String(span.text[start..<range.lowerBound]), like: span)
+                let prefix = Text(tail)
+                let glyph = Text(Image(nsImage: SkillChip.image(for: chip))).baselineOffset(-3)
+                result = result.map { Text("\($0)\(prefix)\(glyph)") } ?? Text("\(prefix)\(glyph)")
+                tail = AttributedString()
+                start = range.upperBound
             }
-            text += run
+            tail += styled(String(span.text[start...]), like: span)
         }
-        return text
+        let suffix = Text(tail)
+        return result.map { Text("\($0)\(suffix)") } ?? suffix
+    }
+
+    private func styled(_ value: String, like span: MarkdownSpan) -> AttributedString {
+        var run = AttributedString(value)
+        let font = span.code
+            ? Font.system(size: max(10.5, size * 0.85), weight: weight, design: .monospaced)
+            : Font.system(size: size, weight: weight)
+        var styled = span.bold ? font.bold() : font
+        if span.italic { styled = styled.italic() }
+        run.font = styled
+        if span.code { run.backgroundColor = Theme.text.opacity(0.10) }
+        if span.struck { run.strikethroughStyle = .single }
+        if let link = span.link {
+            run.link = link
+            run.foregroundColor = Theme.accent
+        }
+        return run
     }
 }
 

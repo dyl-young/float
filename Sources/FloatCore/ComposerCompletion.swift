@@ -92,7 +92,7 @@ public struct T3ComposerSkill: Decodable, Equatable, Sendable {
         return label.isEmpty ? name : label
     }
 
-    public var token: String { "$" + name }
+    public var chip: ComposerSkillChip { ComposerSkillChip(name: name, label: label) }
 }
 
 public struct T3ComposerCommand: Decodable, Equatable, Sendable {
@@ -164,7 +164,7 @@ public enum ComposerCompletion: Equatable, Identifiable, Sendable {
         switch self {
         case .builtin: ""
         case .command(let command): "/" + command.name + " "
-        case .skill(let skill): skill.token + " "
+        case .skill(let skill): skill.chip.token + " "
         }
     }
 

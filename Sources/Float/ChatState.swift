@@ -12,11 +12,16 @@ enum NoticeKind {
 
 @MainActor
 final class ChatState: ObservableObject {
-    @Published var draft: String {
+    @Published private var prompt: ComposerDraft {
         didSet {
-            defaults.set(draft, forKey: "draft")
+            defaults.set(try? PropertyListEncoder().encode(prompt), forKey: "composerDraft")
+            defaults.set(prompt.text, forKey: "draft")
             if noticeKind == .input { clearNotice() }
         }
+    }
+    var draft: String {
+        get { prompt.text }
+        set { prompt = ComposerDraft(newValue) }
     }
     @Published private(set) var images: [ImageAttachment] = []
     @Published private(set) var reference: ThreadReference?
@@ -103,6 +108,7 @@ final class ChatState: ObservableObject {
     private var pickedCatalogModel: T3Model?
     private var watcher: Task<Void, Never>?
     private var previews: [String: [Data]] = [:]
+    private var sentSkills: [String: [ComposerSkillChip]] = [:]
     private var earliest: Int?
     private var receivedFirstPage = false
     private var generation = 0
@@ -123,7 +129,15 @@ final class ChatState: ObservableObject {
                 .appending(path: ".t3/userdata/settings.json")
         )
         modelEfforts = T3ModelEfforts(values: defaults.dictionary(forKey: "modelEfforts") as? [String: String] ?? [:])
-        draft = defaults.string(forKey: "draft") ?? ""
+        let legacyDraft = defaults.string(forKey: "draft") ?? ""
+        let restoredDraft = defaults.data(forKey: "composerDraft").flatMap {
+            try? PropertyListDecoder().decode(ComposerDraft.self, from: $0)
+        }
+        if let restoredDraft, restoredDraft.text == legacyDraft {
+            prompt = restoredDraft
+        } else {
+            prompt = ComposerDraft(legacyDraft)
+        }
         selectedProjectID = defaults.string(forKey: "preferredProjectID")
         selectedMachineID = defaults.string(forKey: "preferredMachineID")
         if let data = defaults.data(forKey: "preferredModel") {
@@ -136,6 +150,10 @@ final class ChatState: ObservableObject {
             cachedProjectName = defaults.string(forKey: "threadProjectName")
                 ?? (threadProjectID == nil ? stored.projectName : nil)
             title = defaults.string(forKey: "threadTitle")
+            if let encoded = defaults.data(forKey: "sentSkills") {
+                sentSkills = (try? PropertyListDecoder().decode([String: [ComposerSkillChip]].self,
+                                                               from: encoded)) ?? [:]
+            }
             if let encoded = defaults.data(forKey: "previews") {
                 previews = (try? PropertyListDecoder().decode([String: [Data]].self, from: encoded)) ?? [:]
             }
@@ -154,9 +172,13 @@ final class ChatState: ObservableObject {
 
     var questionCanAdvance: Bool { questionFlow?.canAdvance == true }
     var isLastQuestion: Bool { questionFlow?.isLast ?? true }
-    var composerText: String {
-        guard activeQuestion != nil else { return draft }
-        return questionFlow?.composerText ?? ""
+    var composerDraft: ComposerDraft {
+        guard activeQuestion != nil else { return prompt }
+        return ComposerDraft(questionFlow?.composerText ?? "")
+    }
+
+    func skillChips(in message: ChatMessage) -> [ComposerSkillChip] {
+        message.runId.flatMap { sentSkills[$0] } ?? []
     }
     var composerPlaceholder: String {
         if let question = activeQuestion {
@@ -587,6 +609,7 @@ final class ChatState: ObservableObject {
         receivedFirstPage = false
         expandedText = [:]
         previews = [:]
+        sentSkills = [:]
         persist()
         focusRequest += 1
     }
@@ -675,7 +698,12 @@ final class ChatState: ObservableObject {
 
     func send() {
         guard canSend else { return }
-        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sentDraft = prompt
+        let text = sentDraft.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.lowercased() == "/clear", images.isEmpty {
+            newChat()
+            return
+        }
         guard text.utf16.count <= 120_000 else {
             setNotice("T3 accepts up to 120,000 characters per message.", kind: .input)
             return
@@ -727,6 +755,9 @@ final class ChatState: ObservableObject {
                 if !attachments.isEmpty {
                     previews[receipt.runId] = attachments.compactMap { Self.thumbnail($0.data) }
                 }
+                if !sentDraft.chips.isEmpty {
+                    sentSkills[receipt.runId] = Array(sentDraft.chips.values)
+                }
                 let message = ChatMessage(
                     id: request.uuidString, runId: receipt.runId, position: .max, isUser: true, text: text, date: .now,
                     previews: previews[receipt.runId] ?? []
@@ -736,7 +767,7 @@ final class ChatState: ObservableObject {
                 status = receipt.status
                 activeRunId = receipt.runId
                 retrySendAfterLaunch = false
-                if draft.trimmingCharacters(in: .whitespacesAndNewlines) == text { draft = "" }
+                if prompt == sentDraft { draft = "" }
                 let sent = Set(attachments.map(\.id))
                 images.removeAll { sent.contains($0.id) }
                 persist()
@@ -793,19 +824,19 @@ final class ChatState: ObservableObject {
     }
 
     func selectQuestionOption(at index: Int) -> Bool {
-        guard !answeringQuestion, composerText.isEmpty, let question = activeQuestion,
+        guard !answeringQuestion, composerDraft.editorText.isEmpty, let question = activeQuestion,
             question.options.indices.contains(index) else { return false }
         selectQuestionOption(question.options[index])
         return true
     }
 
-    func setComposerText(_ text: String) {
+    func setComposerDraft(_ draft: ComposerDraft) {
         guard let question = activeQuestion else {
-            draft = text
+            prompt = draft
             return
         }
         guard question.allowsCustom, !answeringQuestion else { return }
-        questionFlow?.setCustomAnswer(text)
+        questionFlow?.setCustomAnswer(draft.text)
         questionError = nil
     }
 
@@ -1399,6 +1430,7 @@ final class ChatState: ObservableObject {
         defaults.set(reference.flatMap { try? JSONEncoder().encode($0) }, forKey: "thread")
         persistThreadMetadata()
         defaults.set(previews.isEmpty ? nil : try? PropertyListEncoder().encode(previews), forKey: "previews")
+        defaults.set(sentSkills.isEmpty ? nil : try? PropertyListEncoder().encode(sentSkills), forKey: "sentSkills")
     }
 
     private func persistThreadMetadata() {

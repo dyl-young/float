@@ -3,7 +3,7 @@ import FloatCore
 import SwiftUI
 
 struct ComposerEditor: NSViewRepresentable {
-    @Binding var text: String
+    @Binding var draft: ComposerDraft
     @Binding var height: CGFloat
     let focusRequest: Int
     let editable: Bool
@@ -27,7 +27,7 @@ struct ComposerEditor: NSViewRepresentable {
         let editor = PromptTextView(frame: NSRect(x: 0, y: 0, width: 460, height: 24))
         editor.backgroundColor = .clear
         editor.focusRingType = .none
-        editor.isRichText = false
+        editor.isRichText = true
         editor.importsGraphics = false
         editor.allowsUndo = true
         editor.textColor = NSColor(Theme.text)
@@ -58,12 +58,12 @@ struct ComposerEditor: NSViewRepresentable {
         editor.pickOption = pickOption
         editor.pasteImages = pasteImages
         editor.isEditable = editable
-        if editor.string != text, !editor.hasMarkedText() {
+        if !editor.hasMarkedText(), editor.composerDraft != draft {
             // Undo ranges belong to the previous draft when Float replaces
             // the text after a send, chat change, or question change.
             editor.breakUndoCoalescing()
             context.coordinator.editorUndoManager.removeAllActions()
-            editor.string = text
+            editor.restore(draft)
         }
         let shouldFocus = context.coordinator.focusedRequest != focusRequest
         if shouldFocus { context.coordinator.focusedRequest = focusRequest }
@@ -87,7 +87,7 @@ struct ComposerEditor: NSViewRepresentable {
 
         func textDidChange(_ notification: Notification) {
             guard let editor = notification.object as? PromptTextView else { return }
-            parent.text = editor.string
+            parent.draft = editor.composerDraft
             updateTrigger(editor, edited: true)
             measure(editor)
         }
@@ -109,14 +109,16 @@ struct ComposerEditor: NSViewRepresentable {
                   let trigger = parent.menu.trigger,
                   trigger == ComposerTrigger.detect(in: editor.string, selection: editor.selectedRange())
             else { return }
-            let replacement = item.replacement
-            let range = replacement.hasSuffix(" ") ? trigger.replacementRange(in: editor.string) : trigger.range
-            guard editor.shouldChangeText(in: range, replacementString: replacement) else { return }
             parent.menu.close()
             editor.breakUndoCoalescing()
-            editor.replaceCharacters(in: range, with: replacement)
-            editor.setSelectedRange(NSRange(location: range.location + replacement.utf16.count, length: 0))
-            editor.didChangeText()
+            if case .skill(let skill) = item {
+                editor.insertSkill(skill.chip,
+                                   replacing: trigger.replacementRange(in: editor.string))
+            } else {
+                let replacement = item.replacement
+                let range = replacement.hasSuffix(" ") ? trigger.replacementRange(in: editor.string) : trigger.range
+                editor.insertText(replacement, replacementRange: range)
+            }
             editor.breakUndoCoalescing()
             if case .builtin(let command) = item { parent.chat.runComposerCommand(command) }
         }
@@ -160,6 +162,62 @@ final class PromptTextView: NSTextView {
     var menuKey: ((NSEvent) -> Bool)?
     var pickOption: ((Int) -> Bool)?
     var pasteImages: ((NSPasteboard) -> Bool)?
+
+    private var plainAttributes: [NSAttributedString.Key: Any] {
+        [.font: NSFont.systemFont(ofSize: 14), .foregroundColor: NSColor(Theme.text)]
+    }
+
+    var composerDraft: ComposerDraft {
+        guard let textStorage else { return ComposerDraft(string) }
+        var chips: [Int: ComposerSkillChip] = [:]
+        textStorage.enumerateAttribute(.attachment, in: NSRange(location: 0, length: textStorage.length)) {
+            value, range, _ in
+            if let attachment = value as? SkillChipAttachment { chips[range.location] = attachment.chip }
+        }
+        return ComposerDraft(textStorage.string, chips: chips)
+    }
+
+    func restore(_ draft: ComposerDraft) {
+        let contents = NSMutableAttributedString(string: draft.editorText, attributes: plainAttributes)
+        for (location, chip) in draft.chips {
+            contents.addAttribute(.attachment, value: SkillChipAttachment(chip: chip),
+                                  range: NSRange(location: location, length: 1))
+        }
+        textStorage?.setAttributedString(contents)
+        typingAttributes = plainAttributes
+    }
+
+    func insertSkill(_ chip: ComposerSkillChip, replacing range: NSRange) {
+        let contents = NSMutableAttributedString(attachment: SkillChipAttachment(chip: chip))
+        contents.addAttributes(plainAttributes, range: NSRange(location: 0, length: contents.length))
+        contents.append(NSAttributedString(string: " ", attributes: plainAttributes))
+        insertText(contents, replacementRange: range)
+        typingAttributes = plainAttributes
+    }
+
+    override func deleteBackward(_ sender: Any?) {
+        let selection = selectedRange()
+        if isEditable, !hasMarkedText(), selection.length == 0,
+           let range = composerDraft.chipDeletionRange(before: selection.location) {
+            insertText("", replacementRange: range)
+        } else {
+            super.deleteBackward(sender)
+        }
+    }
+
+    override func copy(_ sender: Any?) {
+        let selection = selectedRange()
+        guard selection.length > 0 else { return }
+        let board = NSPasteboard.general
+        board.clearContents()
+        board.setString(composerDraft.sendText(in: selection), forType: .string)
+    }
+
+    override func cut(_ sender: Any?) {
+        guard isEditable, selectedRange().length > 0 else { return }
+        copy(sender)
+        delete(sender)
+    }
 
     override func keyDown(with event: NSEvent) {
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)

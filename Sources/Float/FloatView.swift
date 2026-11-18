@@ -469,7 +469,7 @@ struct FloatView: View {
             VStack(alignment: .trailing, spacing: 6) {
                 if !message.previews.isEmpty { previewRow(message.previews) }
                 if !message.text.isEmpty {
-                    MessageMarkdown(source: message.text, isUser: true)
+                    MessageMarkdown(source: message.text, isUser: true, chips: chat.skillChips(in: message))
                         .padding(.horizontal, 11)
                         .padding(.vertical, 8)
                         .background(Theme.message, in: UnevenRoundedRectangle(
@@ -530,7 +530,7 @@ struct FloatView: View {
         VStack(alignment: .leading, spacing: 8) {
             if !chat.images.isEmpty { draftImages }
             ZStack(alignment: .topLeading) {
-                if chat.composerText.isEmpty {
+                if chat.composerDraft.editorText.isEmpty {
                     Text(chat.composerPlaceholder)
                         .font(.system(size: 14))
                         .foregroundStyle(Theme.placeholder)
@@ -539,7 +539,7 @@ struct FloatView: View {
                         .accessibilityHidden(true)
                 }
                 ComposerEditor(
-                    text: Binding(get: { chat.composerText }, set: chat.setComposerText),
+                    draft: Binding(get: { chat.composerDraft }, set: chat.setComposerDraft),
                     height: $editorHeight, focusRequest: chat.focusRequest,
                     editable: chat.composerEditable, chat: chat, menu: composerMenu,
                     submit: chat.confirmOrSend,
