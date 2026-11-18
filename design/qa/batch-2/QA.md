@@ -27,3 +27,17 @@ Screen session status: `CGSSessionScreenIsLocked: 1` (locked). Items requiring l
 | `qa-11-resize-minimum-240.png` | Panel resized to minimum height (240pt) | Mockup state 4 / panel height rules | **Pass** | Window correctly clamps to exact minimum height of 240pt (header, conversation, composer). Compact state has no resize handle and does not resize. |
 | `qa-11-resize-tall-750.png` | Panel resized to tall height (750pt) and persisted | Mockup state 4 / panel height rules | **Pass** | Window expands to 750pt maximum and persists across app restarts via `panelMaximumHeight`. Double-click reset and live resize cursor are Not checked (locked). |
 | N/A (Item 12) | Batch 1 shortcut verification and menu bar cloud | Batch 1 checklist | **Not checked (locked)** | Screen is locked by loginwindow; skipped per instructions. |
+
+## Batch 2e
+
+Conducted on macOS 14.x with Float debug build at commit `3ed0939 fix: match Open in T3 icon to design`.
+Screen session status: `CGSSessionScreenIsLocked: 1` (locked).
+
+| Screenshot | State Shown | Mockup State | Result | Specific Reason |
+| --- | --- | --- | --- | --- |
+| `qa2e-01-notice-only-tray.png` | Notice-only tray (T3 offline, fresh chat draft) | Mockup state 7 | **Fail** | Bottom action buttons ("Launch T3" and "Not now") are partially clipped and obscured underneath the frosted composer input because timeline lacks compensating bottom clear height when `hasConversation` is false while tray applies negative bottom padding. Spacing above and below card is uneven. Header correctly shows title "Float", subtitle "T3 not running", grey dot, close ×, and hides New chat and Open in T3 buttons. |
+| `qa2e-02-card-details.png` | Notice card elements & draft persistence | Mockup state 7 | **Pass** | Matches mockup state 7: SF Symbol power icon in accent colour; info style with accent tint and border; bold title "T3 Code isn't running"; body "Your draft is saved. Launch T3 and Float sends it."; filled "Launch T3" capsule button and ghost "Not now" hairline button; no ✕ dismiss button; and saved draft remains intact in input field. |
+| `qa2e-03-notice-with-conversation.png` | Notice in active conversation | Mockup state 7 | **Pass** | When conversation is present (`hasConversation` is true), the timeline bottom spacer clears composer overlap so the connection notice card renders completely unobscured above the composer with proper spacing. Header displays "Float", "T3 not running", grey dot, close ×, New chat, and Open in T3. |
+| `qa2e-04-open-in-t3-icon.png` | Open in T3 glyph (2× crop) | Mockup state 4 / `i-open` symbol | **Pass** | Open in T3 glyph is an arrow leaving top-right corner of open box matching design's `i-open` symbol, matching stroke weight and 12pt size of adjacent New chat glyph, aligned to send ring centre line within 1.0px at 2× (glyph midpoint x=988.5px vs send ring midpoint x=987.5px). |
+| N/A (Item 5) | Launch T3 sends draft after reconnection | Mockup state 7 / retry draft | **Not checked (T3 running)** | Skipped because T3 Code is actively running as the host session and cannot be safely quit/relaunched during evaluation. |
+
