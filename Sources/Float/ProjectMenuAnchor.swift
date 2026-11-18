@@ -43,7 +43,7 @@ struct ProjectMenuAnchor: NSViewRepresentable {
     }
 }
 
-private final class ProjectPickerPanel: NSPanel {
+private final class ProjectPickerPanel: EditingPanel {
     override var canBecomeKey: Bool { true }
 }
 

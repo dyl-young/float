@@ -125,15 +125,6 @@ final class PromptTextView: NSTextView {
         super.keyDown(with: event)
     }
 
-    override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        let modifiers = event.modifierFlags.intersection([.command, .shift, .control, .option])
-        if modifiers == .command, event.charactersIgnoringModifiers?.lowercased() == "v" {
-            paste(nil)
-            return true
-        }
-        return super.performKeyEquivalent(with: event)
-    }
-
     override func cancelOperation(_ sender: Any?) { window?.cancelOperation(sender) }
 
     override func paste(_ sender: Any?) {

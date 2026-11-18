@@ -1,7 +1,27 @@
 import AppKit
 
 @MainActor
-final class FloatPanel: NSPanel {
+class EditingPanel: NSPanel {
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard let editor = firstResponder as? NSTextView else {
+            return super.performKeyEquivalent(with: event)
+        }
+        let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
+        switch (event.charactersIgnoringModifiers?.lowercased(), modifiers) {
+        case ("a", .command): editor.selectAll(nil)
+        case ("c", .command): editor.copy(nil)
+        case ("x", .command): editor.cut(nil)
+        case ("v", .command): editor.paste(nil)
+        case ("z", .command): editor.undoManager?.undo()
+        case ("z", [.command, .shift]): editor.undoManager?.redo()
+        default: return super.performKeyEquivalent(with: event)
+        }
+        return true
+    }
+}
+
+@MainActor
+final class FloatPanel: EditingPanel {
     var dismiss: (() -> Void)?
     var startNewChat: (() -> Void)?
     var openModelPicker: (() -> Void)?

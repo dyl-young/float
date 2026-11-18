@@ -44,7 +44,7 @@ struct ModelMenuAnchor: NSViewRepresentable {
     }
 }
 
-private final class ModelPickerPanel: NSPanel {
+private final class ModelPickerPanel: EditingPanel {
     override var canBecomeKey: Bool { true }
 }
 
