@@ -156,31 +156,39 @@ private struct Converter {
         return url
     }
 
-    private static let linkDetector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+    // swift-markdown does not enable cmark-gfm's bare autolink extension.
+    // Match bare links in text spans so code, HTML and explicit links keep their own handling.
+    private static let bareLinks = try? NSRegularExpression(pattern: #"""
+        (?ix)
+        (?<web> (?<![^\s*_~(]) (?:https?://|www\.) [\p{L}\p{N}][^\s<]* )
+        |
+        (?<![a-z0-9_.+@-]) [a-z0-9_.+-]+@ (?:[a-z0-9_-]+\.)+ [a-z0-9_-]*[a-z0-9]
+        (?![a-z0-9_-]|\.[a-z0-9_-])
+        """#)
 
-    // swift-markdown attaches table, strikethrough and task-list extensions.
-    // Angle autolinks already arrive as Link nodes. Detect GFM bare links in text spans.
     private func autolinks(in span: MarkdownSpan) -> [MarkdownSpan] {
         let text = span.text
-        guard span.link == nil, text.contains(".") || text.contains("@"),
-              let linkDetector = Self.linkDetector else { return [span] }
+        guard span.link == nil, text.contains(".") || text.contains("@") || text.contains("://"),
+              let bareLinks = Self.bareLinks else { return [span] }
         var result: [MarkdownSpan] = []
         var start = text.startIndex
-        for match in linkDetector.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
-            guard let range = Range(match.range, in: text), let url = webURL(match.url?.absoluteString) else { continue }
-            let label = text[range].lowercased()
-            let isEmail = url.scheme == "mailto" && !label.hasPrefix("mailto:")
-            guard isEmail || ["https://", "http://", "www."].contains(where: label.hasPrefix) else { continue }
+        for match in bareLinks.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
+            guard let range = Range(match.range, in: text) else { continue }
+            let candidate = text[range]
+            let isWeb = match.range(withName: "web").location != NSNotFound
+            let label = isWeb ? trimWebLink(candidate) : candidate
+            let prefix = isWeb ? (label.lowercased().hasPrefix("www.") ? "http://" : "") : "mailto:"
+            guard let url = webURL(prefix + label) else { continue }
             if start < range.lowerBound {
-                var prefix = span
-                prefix.text = String(text[start..<range.lowerBound])
-                result.append(prefix)
+                var preceding = span
+                preceding.text = String(text[start..<range.lowerBound])
+                result.append(preceding)
             }
             var link = span
-            link.text = String(text[range])
+            link.text = String(label)
             link.link = url
             result.append(link)
-            start = range.upperBound
+            start = label.endIndex
         }
         if start == text.startIndex { return [span] }
         if start < text.endIndex {
@@ -189,5 +197,22 @@ private struct Converter {
             result.append(suffix)
         }
         return result
+    }
+
+    private func trimWebLink(_ candidate: Substring) -> Substring {
+        var link = candidate
+        var excessClosers = candidate.reduce(into: 0) { balance, character in
+            if character == ")" { balance += 1 }
+            if character == "(" { balance -= 1 }
+        }
+        while let last = link.last {
+            if last == ")", excessClosers > 0 {
+                excessClosers -= 1
+            } else if !"?!.:,*_~'\"".contains(last) {
+                break
+            }
+            link = link.dropLast()
+        }
+        return link
     }
 }

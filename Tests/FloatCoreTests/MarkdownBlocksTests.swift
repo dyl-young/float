@@ -140,7 +140,28 @@ import Testing
         "https://example.org", "https://example.org/logo.png",
     ])
     #expect(spans.last?.text == "Image")
-    #expect(details.map(\.text).joined().contains("<summary>Plain text</summary>\n$x^2$"))
+    #expect(details == [MarkdownSpan("""
+    <details>
+    <summary>Plain text</summary>
+    $x^2$
+    </details>
+    """)])
+}
+
+@Test func keepsBareWebAutolinkQueriesAndBalancedParentheses() {
+    let source = "Visit www.example.com?mode=demo, then (https://example.org/Reference_(API))."
+    guard case .paragraph(let spans) = ChatMarkdown.parse(source).first else {
+        Issue.record("Expected a paragraph with two bare autolinks")
+        return
+    }
+
+    #expect(spans.map(\.text).joined() == source)
+    #expect(spans.filter { $0.link != nil }.map(\.text) == [
+        "www.example.com?mode=demo", "https://example.org/Reference_(API)",
+    ])
+    #expect(spans.compactMap { $0.link?.absoluteString } == [
+        "http://www.example.com?mode=demo", "https://example.org/Reference_(API)",
+    ])
 }
 
 private func paragraph(_ text: String) -> [MarkdownBlock] { [.paragraph([MarkdownSpan(text)])] }
