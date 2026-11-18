@@ -66,7 +66,7 @@ private final class ModelPickerPanelController {
         self.parent = parent
         self.chat = chat
         panel = ModelPickerPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 290, height: 300),
+            contentRect: NSRect(x: 0, y: 0, width: 300, height: 300),
             styleMask: [.borderless], backing: .buffered, defer: false
         )
         panel.isOpaque = false
@@ -118,7 +118,7 @@ private final class ModelPickerPanelController {
         if origin.y + height > visibleFrame.maxY {
             origin.y = anchorFrame.minY - height - 6
         }
-        panel.setFrame(NSRect(origin: origin, size: NSSize(width: 290, height: height)), display: true)
+        panel.setFrame(NSRect(origin: origin, size: NSSize(width: 300, height: height)), display: true)
     }
 
     private func installMonitors() {
@@ -284,8 +284,11 @@ private struct ModelPickerView: View {
     }
 
     private var effortModel: T3Model? {
-        let target = highlighted ?? chat.selectedModel
-        return chat.modelProviders.flatMap(\.models).first { $0.selection.matches(target) }
+        guard search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            !chat.usesDefaultModel, selectedProvider?.enabled != false,
+            let current = chat.selectedModel
+        else { return nil }
+        return displayedModels.first { $0.selection.matches(current) }
     }
 
     private var showsEffort: Bool {
@@ -329,7 +332,7 @@ private struct ModelPickerView: View {
             if showsHint { hintRow }
         }
         .padding(4)
-        .frame(width: 290, height: pickerHeight, alignment: .top)
+        .frame(width: 300, height: pickerHeight, alignment: .top)
         .background(Theme.raised)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
@@ -614,12 +617,14 @@ private struct ModelPickerView: View {
                             .foregroundStyle(selected == value ? Theme.text : Theme.muted)
                             .padding(.horizontal, 7)
                             .frame(height: 20)
+                            .fixedSize(horizontal: true, vertical: false)
                             .background(selected == value ? Theme.text.opacity(0.12) : .clear,
                                 in: RoundedRectangle(cornerRadius: 5, style: .continuous))
                     }
                     .buttonStyle(.plain)
                 }
             }
+            .fixedSize(horizontal: true, vertical: false)
             .padding(2)
             .background(Theme.text.opacity(0.06), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
         }

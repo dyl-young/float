@@ -1077,15 +1077,11 @@ final class ChatState: ObservableObject {
     private func selectionForSend(_ selection: T3ModelSelection) -> T3ModelSelection {
         guard let model = modelProviders.flatMap(\.models).first(where: {
             $0.selection.matches(selection)
-        }), let option = model.effortOption, let effort = effort(for: model),
-            effort != "default"
+        })
         else {
             return T3ModelSelection(instanceId: selection.instanceId, model: selection.model)
         }
-        return T3ModelSelection(
-            instanceId: selection.instanceId, model: selection.model,
-            options: [T3ModelOptionSelection(id: option.id, value: effort)]
-        )
+        return model.selection(withEffort: effort(for: model))
     }
 
     private func reloadFavourites() async {

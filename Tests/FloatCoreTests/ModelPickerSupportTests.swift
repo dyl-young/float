@@ -4,11 +4,12 @@ import Testing
 @testable import FloatCore
 
 private func model(
-    _ id: String, label: String, instanceId: String, provider: String, driver: String
+    _ id: String, label: String, instanceId: String, provider: String, driver: String,
+    options: [T3ModelOption] = []
 ) -> T3Model {
     T3Model(
         selection: T3ModelSelection(instanceId: instanceId, model: id),
-        label: label, provider: provider, driverKind: driver, options: []
+        label: label, provider: provider, driverKind: driver, options: options
     )
 }
 
@@ -53,6 +54,36 @@ private func provider(
         isCurrent: false, isFavourite: false, isHovered: true, isFavouritesTab: false
     )
     #expect(hoveredUnstarred.showsFavouriteToggle)
+}
+
+@Test func effortOptionRecognizesEveryT3ProviderID() {
+    for id in ["effort", "reasoningEffort", "reasoning_effort", "thinking_level"] {
+        let option = T3ModelOption(
+            id: id, values: [.string("low"), .string("high")],
+            defaultValue: .string("low")
+        )
+        #expect(option.isEffort, "Expected \(id) to be treated as effort")
+    }
+    #expect(!T3ModelOption(id: "thinking", values: [], defaultValue: nil).isEffort)
+}
+
+@Test func effortSelectionUsesTheProvidersOwnOptionID() {
+    for id in ["effort", "reasoningEffort", "reasoning_effort", "thinking_level"] {
+        let effortModel = model(
+            "model", label: "Model", instanceId: "provider", provider: "Provider",
+            driver: "custom",
+            options: [
+                T3ModelOption(
+                    id: id, values: [.string("low"), .string("high")],
+                    defaultValue: .string("low")
+                ),
+            ]
+        )
+        #expect(effortModel.selection(withEffort: "high").options == [
+            T3ModelOptionSelection(id: id, value: "high"),
+        ])
+        #expect(effortModel.selection(withEffort: "default").options == nil)
+    }
 }
 
 @Test func modelSearchIgnoresCaseSpacesAndPunctuation() {

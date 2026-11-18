@@ -153,7 +153,7 @@ public struct T3ModelOption: Codable, Equatable, Sendable {
 
     public var isEffort: Bool {
         let normalized = id.lowercased().filter(\.isLetter)
-        return normalized == "effort" || normalized == "reasoningeffort"
+        return ["effort", "reasoningeffort", "thinkinglevel"].contains(normalized)
     }
 
     public var stringValues: [String] { values.compactMap(\.string) }
@@ -169,6 +169,20 @@ public struct T3Model: Identifiable, Equatable, Sendable {
     public let options: [T3ModelOption]
 
     public var effortOption: T3ModelOption? { options.first(where: \.isEffort) }
+
+    public func selection(withEffort effort: String?) -> T3ModelSelection {
+        guard let option = effortOption, let effort,
+            effort != "default", option.stringValues.contains(effort)
+        else {
+            return T3ModelSelection(
+                instanceId: selection.instanceId, model: selection.model
+            )
+        }
+        return T3ModelSelection(
+            instanceId: selection.instanceId, model: selection.model,
+            options: [T3ModelOptionSelection(id: option.id, value: effort)]
+        )
+    }
 
     public var shortLabel: String {
         let brand: String?
