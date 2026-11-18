@@ -48,7 +48,13 @@ struct ComposerEditor: NSViewRepresentable {
         editor.pickOption = pickOption
         editor.pasteImages = pasteImages
         editor.isEditable = editable
-        if editor.string != text, !editor.hasMarkedText() { editor.string = text }
+        if editor.string != text, !editor.hasMarkedText() {
+            // Undo ranges belong to the previous draft when Float replaces
+            // the text after a send, chat change, or question change.
+            editor.breakUndoCoalescing()
+            context.coordinator.editorUndoManager.removeAllActions()
+            editor.string = text
+        }
         let shouldFocus = context.coordinator.focusedRequest != focusRequest
         if shouldFocus { context.coordinator.focusedRequest = focusRequest }
         DispatchQueue.main.async { [weak editor, weak coordinator = context.coordinator] in
@@ -58,11 +64,14 @@ struct ComposerEditor: NSViewRepresentable {
         }
     }
 
-    final class Coordinator: NSObject, NSTextViewDelegate {
+    @MainActor final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: ComposerEditor
         var focusedRequest: Int?
+        let editorUndoManager = UndoManager()
 
         init(_ parent: ComposerEditor) { self.parent = parent }
+
+        func undoManager(for view: NSTextView) -> UndoManager? { editorUndoManager }
 
         func textDidChange(_ notification: Notification) {
             guard let editor = notification.object as? NSTextView else { return }
@@ -70,7 +79,7 @@ struct ComposerEditor: NSViewRepresentable {
             measure(editor)
         }
 
-        @MainActor func measure(_ editor: NSTextView) {
+        func measure(_ editor: NSTextView) {
             guard let container = editor.textContainer, let layout = editor.layoutManager else { return }
             if let width = editor.enclosingScrollView?.contentSize.width,
                 width > 0, abs(editor.frame.width - width) > 0.5 {
