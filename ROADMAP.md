@@ -48,6 +48,8 @@ In this order:
    Then decide which of those details are worth porting. Each port gets a mockup in `design/` first. A change to a fixed rule in `design/README.md` is Dylan's call.
 3. **Auto mode on linked machines:** today they start Supervised, because the link caps Float's access. Find out whether a linked machine can grant Auto the same way, and if so, use it.
 
+## In progress
+- **Skills and commands (`$` and `/`):** see `design/pickers.png` states 9–11 and the "Skills and commands" rule in `design/README.md`.
+
 ## Later
-- **Skills support:** use T3 skills from the composer, as T3's "$ skills" does. That means a `$` trigger with a skill picker, a skill chip in the input, and sending the skill with the prompt through T3's API.
 - **Voice input:** the mic button in the T3 composer.
