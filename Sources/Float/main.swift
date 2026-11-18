@@ -14,12 +14,17 @@ private final class FloatApp: NSObject, NSApplicationDelegate, NSWindowDelegate 
     private var statusItem: NSStatusItem?
     private var statusMenu: NSMenu?
     private var approvalMenuItem: NSMenuItem?
+    private var screenSharingMenuItem: NSMenuItem?
+    private var hideFromScreenSharing = ProcessInfo.processInfo.environment["FLOAT_ALLOW_CAPTURE"] != "1"
     private var hotKey: EventHotKeyRef?
     private var hotKeyHandler: EventHandlerRef?
     private var compactHeight: CGFloat = 86 + FloatView.contextRowHeight
     private var trayVisible = false
     private var positioned = false
     private var shuttingDown = false
+    /// The app that was frontmost before Float was summoned, to hand focus back on hide.
+    private var previousApp: NSRunningApplication?
+
 
     override init() {
         let env = ProcessInfo.processInfo.environment
@@ -67,6 +72,10 @@ private final class FloatApp: NSObject, NSApplicationDelegate, NSWindowDelegate 
             if panel.screen != screen { positioned = false }
             layout(on: screen)
         }
+        // Activate while shown so window managers (Raycast, Rectangle) see Float as the
+        // frontmost app and act on its panel rather than the window behind it.
+        if let front = NSWorkspace.shared.frontmostApplication, front != .current { previousApp = front }
+        NSApp.activate(ignoringOtherApps: true)
         panel.orderFrontRegardless()
         panel.makeKey()
         chat.revealed()
@@ -76,6 +85,10 @@ private final class FloatApp: NSObject, NSApplicationDelegate, NSWindowDelegate 
     private func hide() {
         _ = panel?.closePicker()
         panel?.orderOut(nil)
+        if NSApp.isActive, let previousApp, !previousApp.isTerminated {
+            previousApp.activate()
+        }
+        previousApp = nil
         logger.info("Hid panel")
         chat.hidden()
     }
@@ -87,6 +100,7 @@ private final class FloatApp: NSObject, NSApplicationDelegate, NSWindowDelegate 
             backing: .buffered, defer: false
         )
         panel.title = "Float"
+        panel.setScreenSharingHidden(hideFromScreenSharing)
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
         panel.becomesKeyOnlyIfNeeded = false
@@ -110,6 +124,7 @@ private final class FloatApp: NSObject, NSApplicationDelegate, NSWindowDelegate 
         panel.goBackQuestion = { [weak self] in self?.chat.goBackQuestion() ?? false }
         panel.closeQuestionSteps = { [weak self] in self?.chat.closeQuestionSteps() ?? false }
         panel.sizing = sizing
+        panel.adoptAccessibilitySize = { [weak self] size in self?.adoptAccessibilitySize(size) }
         let host = FloatPanelHostingView(rootView: FloatView(chat: chat, resize: {
             [weak self] height, trayVisible in
             // SwiftUI may update its preferred size while the window is laying out.
@@ -168,6 +183,29 @@ private final class FloatApp: NSObject, NSApplicationDelegate, NSWindowDelegate 
         positioned = true
     }
 
+    /// A window manager (Raycast, Rectangle) asked for a new size through Accessibility. Keep it
+    /// within Float's limits, keep the top-left where the manager put it, and remember the size
+    /// so the next layout doesn't snap it back. The compact state keeps its own height.
+    private func adoptAccessibilitySize(_ requested: NSSize) {
+        guard let panel, let screen = panel.screen ?? NSScreen.main else { return }
+        let sideInset = trayVisible ? 0 : FloatView.contextShadowSides
+        let width = CGFloat(PanelWidthLimits.clamp(Double(requested.width - 2 * sideInset)))
+        let height: CGFloat
+        if trayVisible {
+            height = sizing.clampHeight(Double(requested.height), on: screen.visibleFrame.height)
+            sizing.save(CGSize(width: width, height: height))
+        } else {
+            height = min(compactHeight, screen.visibleFrame.height)
+            sizing.saveWidth(width)
+        }
+        let top = panel.frame.maxY
+        panel.setFrame(
+            NSRect(x: panel.frame.minX, y: top - height, width: width + 2 * sideInset, height: height),
+            display: true
+        )
+        positioned = true
+    }
+
     func windowDidChangeScreen(_ notification: Notification) {
         guard !trayVisible, let screen = panel?.screen else { return }
         layout(on: screen)
@@ -193,6 +231,13 @@ private final class FloatApp: NSObject, NSApplicationDelegate, NSWindowDelegate 
         approvals.target = self
         menu.addItem(approvals)
         approvalMenuItem = approvals
+        let screenSharing = NSMenuItem(
+            title: "Hide from screen sharing", action: #selector(toggleScreenSharing), keyEquivalent: ""
+        )
+        screenSharing.target = self
+        screenSharing.state = hideFromScreenSharing ? .on : .off
+        menu.addItem(screenSharing)
+        screenSharingMenuItem = screenSharing
         menu.addItem(withTitle: "Quit Float", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         item.button?.target = self
         item.button?.action = #selector(statusItemClicked(_:))
@@ -219,6 +264,12 @@ private final class FloatApp: NSObject, NSApplicationDelegate, NSWindowDelegate 
         } else {
             show()
         }
+    }
+
+    @objc private func toggleScreenSharing() {
+        hideFromScreenSharing.toggle()
+        panel?.setScreenSharingHidden(hideFromScreenSharing)
+        screenSharingMenuItem?.state = hideFromScreenSharing ? .on : .off
     }
 
     private func installHotkey() {

@@ -73,8 +73,11 @@ final class FloatPanel: EditingPanel {
     var goBackQuestion: (() -> Bool)?
     var closeQuestionSteps: (() -> Bool)?
     var closeComposerMenu: (() -> Bool)?
+    private var captureSharingType: NSWindow.SharingType = .readOnly
 
     var sizing: PanelSizing?
+    /// Set by the app: applies a size a window manager requested through Accessibility.
+    var adoptAccessibilitySize: ((NSSize) -> Void)?
     var resizeEnabled = false {
         didSet {
             acceptsMouseMovedEvents = resizeEnabled
@@ -98,8 +101,38 @@ final class FloatPanel: EditingPanel {
     private var showingResizeCursor = false
     var isResizing: Bool { drag != nil || applyingResize }
 
+    // Window managers skip floating panels and dialogs, and need a settable size.
+    // Report a standard window and route Accessibility resizes through Float's limits.
+    override func accessibilitySubrole() -> NSAccessibility.Subrole? { .standardWindow }
+
+    override func accessibilityIsAttributeSettable(_ attribute: NSAccessibility.Attribute) -> Bool {
+        if attribute == .size, adoptAccessibilitySize != nil { return true }
+        return super.accessibilityIsAttributeSettable(attribute)
+    }
+
+    override func accessibilitySetValue(_ value: Any?, forAttribute attribute: NSAccessibility.Attribute) {
+        if attribute == .size, let adoptAccessibilitySize, let size = (value as? NSValue)?.sizeValue {
+            adoptAccessibilitySize(size)
+        } else {
+            super.accessibilitySetValue(value, forAttribute: attribute)
+        }
+    }
+
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+
+    func setScreenSharingHidden(_ hidden: Bool) {
+        captureSharingType = hidden ? .none : .readOnly
+        sharingType = captureSharingType
+        for child in childWindows ?? [] {
+            child.sharingType = captureSharingType
+        }
+    }
+
+    override func addChildWindow(_ childWin: NSWindow, ordered place: NSWindow.OrderingMode) {
+        childWin.sharingType = captureSharingType
+        super.addChildWindow(childWin, ordered: place)
+    }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])

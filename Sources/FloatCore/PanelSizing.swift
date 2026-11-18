@@ -40,6 +40,11 @@ public final class PanelSizing {
         defaults.set(Double(size.width), forKey: Self.widthKey)
     }
 
+    /// The compact state only owns the width; its height follows the composer.
+    public func saveWidth(_ width: CGFloat) {
+        defaults.set(Double(width), forKey: Self.widthKey)
+    }
+
     public func reset() {
         // Store the defaults so resetting cannot revive an older CLI preference.
         save(CGSize(width: PanelWidthLimits.defaultWidth, height: PanelHeightLimits.defaultMaximum))
