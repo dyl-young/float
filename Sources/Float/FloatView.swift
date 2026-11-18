@@ -123,14 +123,10 @@ struct FloatView: View {
     }
 
     private var projectContextRow: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 12) {
             if chat.showsMachinePicker {
                 MachineContextButton(chat: chat)
                     .background(MachineMenuAnchor(chat: chat, request: chat.machinePickerRequest))
-                Rectangle()
-                    .fill(Theme.border)
-                    .frame(width: 1, height: 12)
-                    .padding(.horizontal, 3)
             }
             ProjectContextButton(chat: chat)
                 .background(ProjectMenuAnchor(chat: chat, request: chat.projectPickerRequest))
