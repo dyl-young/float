@@ -179,3 +179,34 @@ public actor T3ModelFavouritesStore {
         return value
     }
 }
+
+public enum T3ModelPickerNavigation {
+    public static func move(from current: Int?, by direction: Int, count: Int) -> Int? {
+        guard count > 0 else { return nil }
+        guard let current, (0..<count).contains(current) else {
+            return direction < 0 ? count - 1 : 0
+        }
+        return (current + direction % count + count) % count
+    }
+}
+
+public struct T3ModelEfforts: Sendable {
+    public private(set) var values: [String: String]
+
+    public init(values: [String: String] = [:]) {
+        self.values = values
+    }
+
+    public func value(for model: T3Model) -> String? {
+        guard let option = model.effortOption else { return nil }
+        let saved = values[T3ModelKey(model.selection).storageKey]
+        if let saved, option.stringValues.contains(saved) { return saved }
+        return option.defaultString ?? option.stringValues.first
+    }
+
+    public mutating func set(_ value: String, for model: T3Model) -> Bool {
+        guard model.effortOption?.stringValues.contains(value) == true else { return false }
+        values[T3ModelKey(model.selection).storageKey] = value
+        return true
+    }
+}

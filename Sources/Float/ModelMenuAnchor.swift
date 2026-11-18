@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import FloatCore
 import SwiftUI
 
@@ -46,6 +47,13 @@ struct ModelMenuAnchor: NSViewRepresentable {
 
 private final class ModelPickerPanel: EditingPanel {
     override var canBecomeKey: Bool { true }
+    var handleKey: ((NSEvent) -> Bool)?
+
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown, (firstResponder as? NSTextView)?.hasMarkedText() != true,
+           handleKey?(event) == true { return }
+        super.sendEvent(event)
+    }
 }
 
 @MainActor
@@ -65,8 +73,9 @@ private final class ModelPickerPanelController {
         self.chat = chat
         panel = ModelPickerPanel(
             contentRect: NSRect(x: 0, y: 0, width: 300, height: 360),
-            styleMask: [.borderless], backing: .buffered, defer: false
+            styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false
         )
+        panel.handleKey = { [weak self] in self?.handleKey($0) == true }
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
@@ -112,22 +121,6 @@ private final class ModelPickerPanelController {
                 close()
                 return nil
             }
-            if event.type == .keyDown {
-                let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
-                if modifiers == .command, let value = event.charactersIgnoringModifiers,
-                    let number = Int(value), (1...9).contains(number) {
-                    keyboard.send(.tab(number - 1))
-                    return nil
-                }
-                if modifiers.isEmpty {
-                    switch event.keyCode {
-                    case 125: keyboard.send(.move(1)); return nil
-                    case 126: keyboard.send(.move(-1)); return nil
-                    case 36, 76: keyboard.send(.pick); return nil
-                    default: break
-                    }
-                }
-            }
             if event.type != .keyDown, event.window !== panel {
                 close()
             }
@@ -136,6 +129,23 @@ private final class ModelPickerPanelController {
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) {
             [weak self] _ in self?.close()
         }
+    }
+
+    private func handleKey(_ event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
+        if modifiers == .command, let value = event.charactersIgnoringModifiers,
+           let number = Int(value), (1...9).contains(number) {
+            keyboard.send(.tab(number - 1))
+            return true
+        }
+        guard modifiers.isEmpty else { return false }
+        switch event.keyCode {
+        case 125: keyboard.send(.move(1))
+        case 126: keyboard.send(.move(-1))
+        case 36, 76: keyboard.send(.pick)
+        default: return false
+        }
+        return true
     }
 
     private func removeMonitors() {
@@ -148,23 +158,16 @@ private final class ModelPickerPanelController {
 }
 
 @MainActor
-private final class ModelPickerKeyboard: ObservableObject {
+private final class ModelPickerKeyboard {
     enum Command {
         case tab(Int)
         case move(Int)
         case pick
     }
 
-    struct Event {
-        let id = UUID()
-        let command: Command
-    }
+    let events = PassthroughSubject<Command, Never>()
 
-    @Published private(set) var event: Event?
-
-    func send(_ command: Command) {
-        event = Event(command: command)
-    }
+    func send(_ command: Command) { events.send(command) }
 }
 
 private struct ModelRowTrailingIcons: View {
@@ -208,14 +211,19 @@ private struct ModelPickerView: View {
     private static let favourites = "favourites"
 
     @ObservedObject var chat: ChatState
-    @ObservedObject var keyboard: ModelPickerKeyboard
+    let keyboard: ModelPickerKeyboard
     let close: () -> Void
 
     @State private var search = ""
     @State private var defaultHovered = false
     @State private var selectedTab: String
     @State private var hovered: T3ModelSelection?
-    @State private var highlighted: T3ModelSelection?
+    private enum Row: Hashable {
+        case t3Default
+        case model(T3ModelKey)
+    }
+
+    @State private var highlighted: Row?
     @State private var searchProviders: [T3ModelProvider]
     @FocusState private var searchFocused: Bool
 
@@ -251,7 +259,8 @@ private struct ModelPickerView: View {
                 chat.favouriteModelKeys.contains(T3ModelKey($0.selection))
             }
         }
-        return selectedProvider?.models ?? []
+        guard let selectedProvider, selectedProvider.enabled else { return [] }
+        return selectedProvider.models
     }
 
     private var searchGroups: [T3ModelSearchGroup] {
@@ -264,16 +273,20 @@ private struct ModelPickerView: View {
         T3ModelSearch.turnedOffProviders(providers: chat.modelProviders, query: search)
     }
 
+    private var showsDefaultRow: Bool {
+        selectedTab == Self.favourites && search.isEmpty
+    }
+
+    private var rows: [Row] {
+        (showsDefaultRow ? [.t3Default] : []) + displayedModels.map { .model(T3ModelKey($0.selection)) }
+    }
+
     private var effortModel: T3Model? {
         guard search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             !chat.usesDefaultModel, selectedProvider?.enabled != false,
-            let current = chat.selectedModel
+            let current = chat.selectedCatalogModel
         else { return nil }
-        return displayedModels.first { $0.selection.matches(current) }
-    }
-
-    private var showsEffort: Bool {
-        effortModel?.effortOption?.stringValues.isEmpty == false
+        return current
     }
 
     private var showsHint: Bool {
@@ -287,7 +300,13 @@ private struct ModelPickerView: View {
             if search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 tabs
             }
-            list.frame(maxHeight: .infinity)
+            ScrollViewReader { scroll in
+                list
+                    .frame(maxHeight: .infinity)
+                    .onChange(of: highlighted) {
+                        if let highlighted { scroll.scrollTo(highlighted) }
+                    }
+            }
             if let model = effortModel, let option = model.effortOption, !option.stringValues.isEmpty {
                 Divider().overlay(Theme.border)
                 effortRow(model: model, option: option)
@@ -312,11 +331,9 @@ private struct ModelPickerView: View {
         }
         .onExitCommand(perform: close)
         .onChange(of: search) {
-            highlighted = displayedModels.first?.selection
+            highlighted = search.isEmpty ? nil : rows.first
         }
-        .onChange(of: keyboard.event?.id) {
-            if let command = keyboard.event?.command { handle(command) }
-        }
+        .onReceive(keyboard.events, perform: handle)
         .task(id: search) {
             let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !query.isEmpty else {
@@ -325,8 +342,10 @@ private struct ModelPickerView: View {
             }
             try? await Task.sleep(for: .milliseconds(120))
             guard !Task.isCancelled else { return }
-            searchProviders = await chat.searchModelProviders(query)
-            highlighted = displayedModels.first?.selection
+            let results = await chat.searchModelProviders(query)
+            guard !Task.isCancelled else { return }
+            searchProviders = results
+            if highlighted.map(rows.contains) != true { highlighted = rows.first }
         }
     }
 
@@ -429,7 +448,7 @@ private struct ModelPickerView: View {
         } else {
             ScrollView {
                 LazyVStack(spacing: 2) {
-                    if selectedTab == Self.favourites, search.isEmpty {
+                    if showsDefaultRow {
                         defaultRow
                     }
                     ForEach(displayedModels) { model in
@@ -495,9 +514,11 @@ private struct ModelPickerView: View {
         .padding(.horizontal, 8)
         .frame(height: 28)
         .background(
-            chat.usesDefaultModel ? Theme.selection : defaultHovered ? Theme.text.opacity(0.06) : .clear,
+            chat.usesDefaultModel ? Theme.selection
+                : defaultHovered || highlighted == .t3Default ? Theme.text.opacity(0.06) : .clear,
             in: RoundedRectangle(cornerRadius: 8, style: .continuous)
         )
+        .id(Row.t3Default)
         .onHover { defaultHovered = $0 }
         .contentShape(Rectangle())
         .onTapGesture {
@@ -507,6 +528,7 @@ private struct ModelPickerView: View {
     }
 
     private func modelRow(_ model: T3Model) -> some View {
+        let row = Row.model(T3ModelKey(model.selection))
         let isCurrent = !chat.usesDefaultModel && model.selection.matches(chat.selectedModel)
         let isFavourite = chat.isFavourite(model)
         return HStack(spacing: 8) {
@@ -525,7 +547,7 @@ private struct ModelPickerView: View {
             }
             Spacer()
             if !search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                model.selection.matches(highlighted) {
+                row == highlighted {
                 keyCap("↵")
             }
             ModelRowTrailingIcons(
@@ -541,11 +563,12 @@ private struct ModelPickerView: View {
         .padding(.horizontal, 8)
         .frame(minHeight: selectedTab == Self.favourites && search.isEmpty ? 36 : 28)
         .background(
-            isCurrent ? Theme.selection : highlighted == model.selection || hovered == model.selection
+            isCurrent ? Theme.selection : highlighted == row || hovered == model.selection
                 ? Theme.text.opacity(0.06) : .clear,
             in: RoundedRectangle(cornerRadius: 8, style: .continuous)
         )
         .contentShape(Rectangle())
+        .id(row)
         .onHover {
             hovered = $0 ? model.selection : nil
         }
@@ -574,7 +597,8 @@ private struct ModelPickerView: View {
                             .frame(height: 20)
                             .fixedSize(horizontal: true, vertical: false)
                             .background(selected == value ? Theme.text.opacity(0.12) : .clear,
-                                in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                                in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
@@ -625,28 +649,25 @@ private struct ModelPickerView: View {
             guard tabs.indices.contains(index) else { return }
             search = ""
             selectedTab = tabs[index]
-            highlighted = displayedModels.first?.selection
+            highlighted = rows.first
         case .move(let direction):
             hovered = nil
-            let models = displayedModels
-            guard !models.isEmpty else { return }
-            let current = models.firstIndex { $0.selection.matches(highlighted) }
-            let index: Int
-            if let current {
-                index = (current + direction + models.count) % models.count
-            } else {
-                index = direction > 0 ? 0 : models.count - 1
+            let rows = rows
+            let current = highlighted.flatMap { rows.firstIndex(of: $0) }
+            if let index = T3ModelPickerNavigation.move(from: current, by: direction, count: rows.count) {
+                highlighted = rows[index]
             }
-            highlighted = models[index].selection
         case .pick:
-            if let model = displayedModels.first(where: { $0.selection.matches(hovered ?? highlighted) })
-                ?? displayedModels.first {
-                chat.selectModel(model)
-                close()
-            } else if selectedTab == Self.favourites && search.isEmpty {
+            switch highlighted ?? rows.first {
+            case .t3Default:
                 chat.selectModel(nil)
-                close()
+            case .model(let key):
+                guard let model = displayedModels.first(where: { T3ModelKey($0.selection) == key }) else { return }
+                chat.selectModel(model)
+            case nil:
+                return
             }
+            close()
         }
     }
 }

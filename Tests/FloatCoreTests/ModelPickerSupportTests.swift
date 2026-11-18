@@ -234,3 +234,28 @@ private func provider(
         ["provider": "codex", "model": "gpt-5.6-sol"],
     ])
 }
+
+@Test func modelPickerHighlightMovesAcrossRowsAndWraps() {
+    #expect(T3ModelPickerNavigation.move(from: nil, by: 1, count: 3) == 0)
+    #expect(T3ModelPickerNavigation.move(from: nil, by: -1, count: 3) == 2)
+    #expect(T3ModelPickerNavigation.move(from: 1, by: 1, count: 3) == 2)
+    #expect(T3ModelPickerNavigation.move(from: 2, by: 1, count: 3) == 0)
+    #expect(T3ModelPickerNavigation.move(from: 0, by: -1, count: 3) == 2)
+    #expect(T3ModelPickerNavigation.move(from: nil, by: 1, count: 0) == nil)
+}
+
+@Test func effortStorageIsolatedByProviderInstanceAndUsedForSelection() {
+    let option = T3ModelOption(id: "effort", values: [.string("low"), .string("high")], defaultValue: .string("low"))
+    let first = model("model", label: "Model", instanceId: "first", provider: "Provider", driver: "custom", options: [option])
+    let second = model("model", label: "Model", instanceId: "second", provider: "Provider", driver: "custom", options: [option])
+    var efforts = T3ModelEfforts()
+    let saved = efforts.set("high", for: first)
+    let acceptedUnsupported = efforts.set("unsupported", for: first)
+    #expect(saved)
+    #expect(!acceptedUnsupported)
+    let reloaded = T3ModelEfforts(values: efforts.values)
+    #expect(reloaded.value(for: second) == "low")
+    #expect(first.selection(withEffort: reloaded.value(for: first)).options == [
+        T3ModelOptionSelection(id: "effort", value: "high"),
+    ])
+}

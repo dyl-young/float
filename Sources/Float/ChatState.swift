@@ -86,7 +86,8 @@ final class ChatState: ObservableObject {
     private let defaults: UserDefaults
     private let client: T3Client
     private let favouritesStore: T3ModelFavouritesStore
-    private var modelEfforts: [String: String]
+    @Published private var modelEfforts: T3ModelEfforts
+    private var pickedCatalogModel: T3Model?
     private var watcher: Task<Void, Never>?
     private var previews: [String: [Data]] = [:]
     private var earliest: Int?
@@ -108,7 +109,7 @@ final class ChatState: ObservableObject {
             settingsURL: FileManager.default.homeDirectoryForCurrentUser
                 .appending(path: ".t3/userdata/settings.json")
         )
-        modelEfforts = defaults.dictionary(forKey: "modelEfforts") as? [String: String] ?? [:]
+        modelEfforts = T3ModelEfforts(values: defaults.dictionary(forKey: "modelEfforts") as? [String: String] ?? [:])
         draft = defaults.string(forKey: "draft") ?? ""
         selectedProjectID = defaults.string(forKey: "preferredProjectID")
         selectedMachineID = defaults.string(forKey: "preferredMachineID")
@@ -163,6 +164,9 @@ final class ChatState: ObservableObject {
 
     var selectedModel: T3ModelSelection? {
         if reference != nil { return nextModel ?? threadModel }
+        if let pickedCatalogModel, pickedCatalogModel.selection.matches(savedModel) {
+            return pickedCatalogModel.selection
+        }
         return T3Model.preferred(in: models, saved: savedModel)?.selection
     }
 
@@ -172,7 +176,10 @@ final class ChatState: ObservableObject {
         savedModel == nil && defaultModel?.selection.matches(selectedModel) == true
     }
 
-    var selectedCatalogModel: T3Model? { models.first { $0.selection.matches(selectedModel) } }
+    var selectedCatalogModel: T3Model? {
+        models.first { $0.selection.matches(selectedModel) }
+            ?? pickedCatalogModel.flatMap { $0.selection.matches(selectedModel) ? $0 : nil }
+    }
 
     var modelLabel: String {
         selectedCatalogModel?.label
@@ -259,6 +266,7 @@ final class ChatState: ObservableObject {
 
     func selectModel(_ model: T3Model?) {
         guard canChooseModel, let selection = (model ?? defaultModel)?.selection else { return }
+        pickedCatalogModel = model
         savedModel = model?.selection
         if reference != nil { nextModel = selection.matches(threadModel) ? nil : selection }
         defaults.set(savedModel.flatMap { try? JSONEncoder().encode($0) }, forKey: "preferredModel")
@@ -359,16 +367,12 @@ final class ChatState: ObservableObject {
     }
 
     func effort(for model: T3Model) -> String? {
-        guard let option = model.effortOption else { return nil }
-        let saved = modelEfforts[T3ModelKey(model.selection).storageKey]
-        if let saved, option.stringValues.contains(saved) { return saved }
-        return option.defaultString ?? option.stringValues.first
+        modelEfforts.value(for: model)
     }
 
     func setEffort(_ value: String, for model: T3Model) {
-        guard model.effortOption?.stringValues.contains(value) == true else { return }
-        modelEfforts[T3ModelKey(model.selection).storageKey] = value
-        defaults.set(modelEfforts, forKey: "modelEfforts")
+        guard modelEfforts.set(value, for: model) else { return }
+        defaults.set(modelEfforts.values, forKey: "modelEfforts")
     }
 
     func searchModelProviders(_ query: String) async -> [T3ModelProvider] {
@@ -1080,10 +1084,7 @@ final class ChatState: ObservableObject {
     }
 
     private func selectionForSend(_ selection: T3ModelSelection) -> T3ModelSelection {
-        guard let model = modelProviders.flatMap(\.models).first(where: {
-            $0.selection.matches(selection)
-        })
-        else {
+        guard let model = selectedCatalogModel, model.selection.matches(selection) else {
             return T3ModelSelection(instanceId: selection.instanceId, model: selection.model)
         }
         return model.selection(withEffort: effort(for: model))
