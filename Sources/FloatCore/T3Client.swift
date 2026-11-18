@@ -292,7 +292,9 @@ public struct T3Client: Sendable {
         try await approvalRPC.respond(ApprovalCommand(threadId: thread.threadId, requestId: request.id, decision: decision))
     }
 
-    public func pendingQuestion(_ thread: ThreadReference) async throws -> T3PendingQuestionRequest? {
+    public func pendingQuestion(
+        _ thread: ThreadReference, excluding answeredIDs: Set<String> = []
+    ) async throws -> T3PendingQuestionRequest? {
         var listArguments: [String: any Sendable] = [
             "action": "list", "threadId": thread.threadId,
         ]
@@ -301,7 +303,7 @@ public struct T3Client: Sendable {
             "t3_pending_request", listArguments, result: PendingRequestList.self,
             retryExpiredSession: true
         )
-        guard let requestId = list.requestIds.first else { return nil }
+        guard let requestId = list.requestIds.first(where: { !answeredIDs.contains($0) }) else { return nil }
         var readArguments: [String: any Sendable] = [
             "action": "read", "threadId": thread.threadId, "requestId": requestId,
         ]

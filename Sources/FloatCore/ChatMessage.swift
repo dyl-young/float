@@ -27,6 +27,7 @@ public struct ChatMessage: Identifiable, Equatable, Sendable {
     public static func groupReplies(in messages: [Self]) -> [Self] {
         var grouped: [Self] = []
         for message in messages {
+            guard message.isUser || message.text.contains(where: { !$0.isWhitespace }) else { continue }
             if !message.isUser, let runId = message.runId, let last = grouped.indices.last,
                 !grouped[last].isUser, grouped[last].runId == runId {
                 grouped[last].text += "\n\n" + message.text

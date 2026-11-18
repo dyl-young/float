@@ -44,6 +44,7 @@ final class ChatState: ObservableObject {
     @Published private(set) var needsT3 = false
     @Published private(set) var canLaunchT3 = false
     @Published private var questionFlow: T3QuestionFlow?
+    private var answeredQuestionIDs: Set<String> = []
     var dismissQuestionSteps: (() -> Void)?
     @Published private(set) var approvalPreview: String?
     @Published private(set) var approvalAccessEnabled = false
@@ -536,6 +537,7 @@ final class ChatState: ObservableObject {
         failureReason = nil
         failureDetail = nil
         resetQuestion()
+        answeredQuestionIDs.removeAll()
         approvalPreview = nil
         approvalAccessError = nil
         approvalError = nil
@@ -827,6 +829,7 @@ final class ChatState: ObservableObject {
                 do {
                     try await client.answer(request, answers: answers, thread: reference)
                     guard generation == version, !stopAcknowledged, status != .stopped else { return }
+                    answeredQuestionIDs.insert(request.requestId)
                     answeredQuestionSummary = summary
                     if pendingQuestion?.requestId == request.requestId {
                         resetQuestion()
@@ -861,7 +864,6 @@ final class ChatState: ObservableObject {
     }
 
     private func clearStoppedRequests() {
-        closeQuestionSteps()
         resetQuestion()
         pendingApprovals = []
         approvalPreview = nil
@@ -1156,13 +1158,20 @@ final class ChatState: ObservableObject {
             resetQuestion()
             return
         }
-        let question = try await client.pendingQuestion(thread)
+        let question = try await client.pendingQuestion(thread, excluding: answeredQuestionIDs)
         try Task.checkCancellation()
+        applyQuestion(question)
+    }
+
+    private func applyQuestion(_ question: T3PendingQuestionRequest?) {
         guard question?.requestId != pendingQuestion?.requestId else { return }
         guard let question else {
             resetQuestion()
             return
         }
+        guard !answeredQuestionIDs.contains(question.requestId) else { return }
+
+        closeQuestionSteps()
         questionFlow = T3QuestionFlow(request: question)
         answeringQuestion = false
         questionError = nil
@@ -1170,6 +1179,7 @@ final class ChatState: ObservableObject {
     }
 
     private func resetQuestion() {
+        closeQuestionSteps()
         questionFlow = nil
         questionError = nil
         answeringQuestion = false

@@ -100,3 +100,14 @@ private func timelineItem(
     #expect(updated.last?.date == time)
     #expect(updated.last?.text == "Starting.\n\nStopped.")
 }
+
+@Test func omitsBlankAssistantTurnsAndKeepsImageOnlyUserMessages() {
+    let user = ChatMessage(id: "image", runId: "question", position: 0, isUser: true,
+                           text: "", date: nil, previews: [Data([1])])
+    let blank = ChatMessage(id: "empty", runId: "question", position: 1, isUser: false,
+                            text: " \t\n", date: Date(timeIntervalSince1970: 100), previews: [])
+    let later = ChatMessage(id: "reply", runId: "follow-up", position: 2, isUser: false,
+                            text: "A visible reply.", date: nil, previews: [])
+
+    #expect(ChatMessage.groupReplies(in: [user, blank, later]) == [user, later])
+}

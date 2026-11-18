@@ -399,6 +399,7 @@ struct FloatView: View {
                     .lineLimit(1)
                     .help(summary)
                     .padding(.leading, 2)
+                    .padding(.bottom, chat.activeQuestion == nil ? 0 : 4)
             }
             if let summary = chat.approvalSummary {
                 Text(summary)

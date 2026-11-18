@@ -162,3 +162,23 @@ func hidesRedundantQuestionOptionDescriptions(
     #expect(flow.composerText == "Keep this note")
     #expect(flow.confirm() == .submit(["scope": .text("stale"), "last": .text("Keep this note")]))
 }
+
+@Test func newRequestsStartFreshEvenWhenQuestionIDsRepeat() {
+    var previous = T3QuestionFlow(request: .init(requestId: "first", questions: [singleQuestion]))
+    previous.select(singleQuestion.options[0])
+    #expect(previous.confirm() == .submit(["scope": .text("stale")]))
+
+    let next = T3QuestionFlow(request: .init(requestId: "next", questions: [singleQuestion]))
+    #expect(!next.isSelected(singleQuestion.options[0]))
+    #expect(!next.canAdvance)
+    #expect(next.composerText.isEmpty)
+
+    let seeded = T3Question(
+        id: singleQuestion.id, header: "Notes", question: "Revise the proposed notes",
+        options: singleQuestion.options, initialAnswer: "  Suggested notes\n"
+    )
+    let prefilled = T3QuestionFlow(request: .init(requestId: "seeded", questions: [seeded]))
+    #expect(prefilled.composerText == "  Suggested notes\n")
+    #expect(prefilled.canAdvance)
+    #expect(!prefilled.isSelected(singleQuestion.options[0]))
+}
