@@ -159,6 +159,12 @@ code{font-family:var(--font-mono);font-size:11.5px;background:var(--code-backgro
 .light .input{background:color-mix(in oklab, var(--foreground) 6%, var(--card))}
 .cx .cv{width:9px;height:9px;opacity:.7}
 .sep{width:1px;height:12px;background:var(--line)}
+/* Project icon: favicon image or T3's monogram tile (text in the colour, the colour at 14% behind, radius 25% of the side). */
+.picon{display:inline-flex;align-items:center;justify-content:center;flex:none;width:12px;height:12px;border-radius:25%;overflow:hidden}
+.picon.mono{font:700 6.5px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:-.2px;background:color-mix(in srgb,currentColor 14%,transparent)}
+.picon.fav{background:#88c0d0;color:#0d1b2a}.picon.fav svg{width:9px !important;height:9px !important}
+.pop .it .picon{width:13px;height:13px}.pop .it .picon.mono{font-size:7px}
+.crumb .pj .picon{width:11px;height:11px}.crumb .pj .picon.mono{font-size:6px}
 .pop{position:absolute;z-index:5;bottom:calc(100% + 6px);left:0;min-width:236px;border-radius:10px;background:var(--popover);border:1px solid var(--line);
   box-shadow:0 14px 34px -10px rgba(0,0,0,.65);padding:4px;font-size:12px;color:var(--foreground)}
 .pop .lab{font-size:10.5px;color:var(--muted-foreground);padding:6px 8px 3px;letter-spacing:.02em}
@@ -268,7 +274,11 @@ code{font-family:var(--font-mono);font-size:11.5px;background:var(--code-backgro
 </div>
 
 <script>
-const ic=(id,c='')=>`<svg class="${c}"><use href="#${id}"/></svg>`;
+const ic=(id,c='')=>id.startsWith('<')?id:`<svg class="${c}"><use href="#${id}"/></svg>`;
+/* Project icons, resolved as T3 does: the project's own icon setting (emoji, monogram or lucide, with its colour), else the checkout's favicon, else a monogram from the name in a colour hashed from the name. */
+const FAV=`<span class="picon fav"><svg><use href="#i-float"/></svg></span>`;
+const mono=(t,c)=>`<span class="picon mono" style="color:${c}">${t}</span>`;
+const MONO_FR=mono('FR','#c084fc');
 const glyph={claude:'g-claude',codex:'g-codex',cursor:'g-cursor',anti:'g-anti'};
 function foot({model='Opus 5.5', prov='claude', open=false, pop=''}={}){
   return `<div class="tray-foot"><div class="foot">
@@ -299,19 +309,19 @@ const projPop=`<div class="pop" style="left:-96px;min-width:250px">
   <div class="srch">${ic('p-search')}<b>fl</b><span class="caret"></span></div>
   <div class="it">${ic('p-scratch')}<span>No project<span class="sub">Scratch chat, no repo</span></span></div>
   <div class="lab">On Dylan’s Mac mini</div>
-  <div class="it sel">${ic('p-folder')}<span>float<span class="sub">~/dev/float</span></span></div>
-  <div class="it">${ic('p-folder')}<span>flow-reports<span class="sub">~/dev/flow-reports</span></span></div>
+  <div class="it sel">${FAV}<span>float<span class="sub">~/dev/float</span></span></div>
+  <div class="it">${MONO_FR}<span>flow-reports<span class="sub">~/dev/flow-reports</span></span></div>
 </div>`;
 
 document.getElementById('g1').innerHTML=[
   cell(shell({input:`<span class="caret"></span>${ph(' Ask anything, or paste a screenshot…')}`})+ctx(),
     `<b>1 · New chat.</b> A context row sits under the shell in its own small strip, like T3’s context strip. Defaults: this Mac, No project. No branch or checkout picker.`),
-  `<div><div class="bg light" style="padding-top:14px;background:linear-gradient(135deg,#f3f0ea,#dfe6ee)"><div class="stack">${shell({input:ph('Ask anything, or paste a screenshot…')})+ctx({proj:'float'})}</div></div><p class="cap"><b>1b · Any wallpaper.</b> The strip is almost opaque, in the panel's own colour, so the chips read on a light desktop too. Chips are plain muted text: no border, no outline, no focus ring.</p></div>`,
+  `<div><div class="bg light" style="padding-top:14px;background:linear-gradient(135deg,#f3f0ea,#dfe6ee)"><div class="stack">${shell({input:ph('Ask anything, or paste a screenshot…')})+ctx({proj:'float',projIcon:FAV})}</div></div><p class="cap"><b>1b · Any wallpaper.</b> The strip is almost opaque, in the panel's own colour, so the chips read on a light desktop too. Chips are plain muted text: no border, no outline, no focus ring.</p></div>`,
   cell(shell({input:ph('Ask anything…')})+ctx({devOpen:true,devPop}),
     `<b>2 · Run on.</b> <span class="kbd">⇧</span><span class="kbd">⌘</span><span class="kbd">H</span> opens it. Lists T3’s linked machines with live status dots, all on one line at the right. The current machine sits in a filled pill; no checkmark. Offline ones are dimmed. Switching machines resets the project if it doesn’t exist there.`,200),
-  cell(shell({input:ph('Ask anything…')})+ctx({dev:'Mac mini',devIcon:'p-server',proj:'float',projOpen:true,projPop}),
-    `<b>3 · Project.</b> Type to filter. No project is always first. Only projects on the chosen machine show. <span class="kbd">⇧</span><span class="kbd">⌘</span><span class="kbd">P</span> opens it.`,190),
-  cell(shell({tray:`<div class="tray-top"><div class="hdr"><span class="ib close"><svg><use href="#i-x"/></svg></span><div class="crumb"><span class="pj">${ic('p-folder')}float · Mac mini</span><span class="sl">/</span><span class="tt">Fix the panel resize</span></div><span class="ib"><svg><use href="#i-new"/></svg></span><span class="ib"><svg><use href="#i-open"/></svg></span></div><div class="msgs"><div class="msg-u">Why does the panel jump when the tray opens?</div><div class="msg-a"><p>The window resizes before SwiftUI lays out the tray, so it renders one frame at the old height.</p><div class="meta"><span class="ib"><svg><use href="#i-copy"/></svg></span>09:41</div></div></div></div>`,input:ph('Ask a follow-up…')}),
+  cell(shell({input:ph('Ask anything…')})+ctx({dev:'Mac mini',devIcon:'p-server',proj:'float',projIcon:FAV,projOpen:true,projPop}),
+    `<b>3 · Project.</b> Type to filter. No project is always first. Only projects on the chosen machine show. Each row and the chip carry the project's icon, resolved as T3 does: its icon setting, else the repo's favicon (float), else a monogram tile in a colour hashed from the name (flow-reports). <span class="kbd">⇧</span><span class="kbd">⌘</span><span class="kbd">P</span> opens it.`,190),
+  cell(shell({tray:`<div class="tray-top"><div class="hdr"><span class="ib close"><svg><use href="#i-x"/></svg></span><div class="crumb"><span class="pj">${FAV}float · Mac mini</span><span class="sl">/</span><span class="tt">Fix the panel resize</span></div><span class="ib"><svg><use href="#i-new"/></svg></span><span class="ib"><svg><use href="#i-open"/></svg></span></div><div class="msgs"><div class="msg-u">Why does the panel jump when the tray opens?</div><div class="msg-a"><p>The window resizes before SwiftUI lays out the tray, so it renders one frame at the old height.</p><div class="meta"><span class="ib"><svg><use href="#i-copy"/></svg></span>09:41</div></div></div></div>`,input:ph('Ask a follow-up…')}),
     `<b>4 · After the first send.</b> Machine and project are fixed for the thread. The header reads like T3: the project's icon and name (plus the machine when it isn't this Mac), a slash, then the title. No status dot. The context row goes away. ⌘N starts fresh.`),
 ].join('');
 
