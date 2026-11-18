@@ -884,7 +884,7 @@ private struct MachineContextButton: View {
         .buttonStyle(.plain)
         .fixedSize()
         .disabled(!chat.canChooseMachine)
-        .help("Choose machine · ⇧⌘R")
+        .help("Choose machine · ⌘H")
         .accessibilityLabel("Run on")
         .accessibilityValue(chat.machineLabel)
         .onHover { hovered = $0 }
