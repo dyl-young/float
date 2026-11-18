@@ -519,7 +519,8 @@ private struct ModelPickerView: View {
             Text("Effort")
                 .font(.system(size: 10.5))
                 .foregroundStyle(Theme.muted)
-            Spacer()
+                .fixedSize(horizontal: true, vertical: false)
+            Spacer(minLength: 0)
             HStack(spacing: 2) {
                 ForEach(option.stringValues, id: \.self) { value in
                     Button {
@@ -528,7 +529,7 @@ private struct ModelPickerView: View {
                         Text(effortLabel(value))
                             .font(.system(size: 10.5))
                             .foregroundStyle(selected == value ? Theme.text : Theme.muted)
-                            .padding(.horizontal, 7)
+                            .padding(.horizontal, 4)
                             .frame(height: 20)
                             .fixedSize(horizontal: true, vertical: false)
                             .background(selected == value ? Theme.text.opacity(0.12) : .clear,
@@ -536,6 +537,8 @@ private struct ModelPickerView: View {
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .help(effortName(value))
+                    .accessibilityLabel(effortName(value))
                 }
             }
             .fixedSize(horizontal: true, vertical: false)
@@ -559,8 +562,13 @@ private struct ModelPickerView: View {
         switch value.lowercased() {
         case "medium": "Med"
         case "xhigh": "XHigh"
-        default: value.capitalized
+        case "ultrathink": "Ultra"
+        default: effortName(value)
         }
+    }
+
+    private func effortName(_ value: String) -> String {
+        value.lowercased() == "xhigh" ? "Extra High" : value.capitalized
     }
 
     private func handle(_ command: ModelPickerKeyboard.Command) {
