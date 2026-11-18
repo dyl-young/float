@@ -25,6 +25,7 @@ struct FloatView: View {
     @State private var timelineBottom: CGFloat = 0
     @State private var inputTop: CGFloat = 0
     @State private var followsLatest = true
+    @State private var latestRequest = 0
     @State private var copiedMessage: String?
     @State private var followUpModifierMonitor: Any?
     @State private var followUpAlternate = false
@@ -39,7 +40,6 @@ struct FloatView: View {
     static let contextRowHeight = contextGap + ContextChip.height
         + 2 * (contextPadding + contextBorderWidth) + contextShadowBottom
     private nonisolated static let shellSpace = "Float shell"
-    private static let latest = "Latest message"
     private static let headerButtonSize: CGFloat = 24
     private static let headerButtonInset: CGFloat = 10
     private static let footerButtonSize: CGFloat = 26
@@ -235,67 +235,52 @@ struct FloatView: View {
     // MARK: Message tray
 
     private var conversation: some View {
-        ScrollViewReader { scroll in
-            ScrollView {
-                VStack(spacing: 0) {
-                    timeline
-                        .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named(Self.shellSpace)) }) {
-                            let grew = $0.height != timelineHeight
-                            timelineHeight = $0.height
-                            timelineBottom = $0.maxY
-                            if grew, followsLatest, chat.hasConversation {
-                                scroll.scrollTo(Self.latest, anchor: .bottom)
-                            } else if !grew {
-                                followsLatest = timelineBottom <= inputTop + 3
-                            }
-                        }
-                    // The bottom anchor clears the composer's overlap.
-                    Color.clear
-                        .frame(height: inputHeight)
-                        .id(Self.latest)
-                }
-                .background(OverlayScrollers())
-            }
-            .contentMargins(.trailing, 4, for: .scrollIndicators)
-            .contentMargins(.top, 4, for: .scrollIndicators)
-            .contentMargins(.bottom, inputHeight + 4, for: .scrollIndicators)
-            .flashScrollKnobsOnHover()
-            .onChange(of: inputTop) {
-                if followsLatest, chat.hasConversation { scroll.scrollTo(Self.latest, anchor: .bottom) }
-                if timelineBottom <= inputTop + 3 { followsLatest = true }
-            }
-            .onChange(of: chat.reference.map(ChatSwitcherEntry.ID.init)) {
-                followsLatest = true
-                scroll.scrollTo(Self.latest, anchor: .bottom)
-            }
-            .onDisappear { followsLatest = true }
-            .mask {
-                VStack(spacing: 0) {
-                    LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
-                        .frame(height: Self.headerFadeHeight)
-                    Color.black
-                }
-            }
-            .overlay(alignment: .bottom) {
-                if chat.hasConversation, !followsLatest {
-                    Button {
-                        followsLatest = true
-                        scroll.scrollTo(Self.latest, anchor: .bottom)
-                    } label: {
-                        Text("↓ Latest")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(Theme.text)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .background(Theme.raised, in: Capsule())
-                            .overlay { Capsule().strokeBorder(Theme.hairline, lineWidth: 1) }
+        ScrollView {
+            VStack(spacing: 0) {
+                timeline
+                    .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named(Self.shellSpace)) }) {
+                        timelineHeight = $0.height
+                        timelineBottom = $0.maxY
                     }
-                    .floatButtonStyle(in: Capsule())
-                    .padding(.bottom, inputHeight + 7)
-                }
+                // Leave room for the composer where it overlaps the scroll view.
+                Color.clear.frame(height: inputHeight)
             }
-            .accessibilityLabel("Conversation")
+            .background(OverlayScrollers())
+            .background(ConversationScrollAnchor(
+                thread: chat.reference.map(ChatSwitcherEntry.ID.init),
+                latestRequest: latestRequest,
+                followsLatest: $followsLatest
+            ))
         }
+        .contentMargins(.trailing, 4, for: .scrollIndicators)
+        .contentMargins(.top, 4, for: .scrollIndicators)
+        .contentMargins(.bottom, inputHeight + 4, for: .scrollIndicators)
+        .flashScrollKnobsOnHover()
+        .mask {
+            VStack(spacing: 0) {
+                LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                    .frame(height: Self.headerFadeHeight)
+                Color.black
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if !followsLatest {
+                Button {
+                    latestRequest += 1
+                } label: {
+                    Text("↓ Latest")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Theme.text)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Theme.raised, in: Capsule())
+                        .overlay { Capsule().strokeBorder(Theme.hairline, lineWidth: 1) }
+                }
+                .floatButtonStyle(in: Capsule())
+                .padding(.bottom, inputHeight + 7)
+            }
+        }
+        .accessibilityLabel("Conversation")
     }
 
     private var timeline: some View {

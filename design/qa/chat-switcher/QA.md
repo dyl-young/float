@@ -8,6 +8,7 @@
 | [04 · Earlier messages](04-resumed-history.png) | State 13. The Float test thread opened with its latest 10 user and assistant messages. The centered “Earlier messages · Open in T3” line is at the top of the tray. The Float project and Gemini 3.8 Flash remain visible, and the context row is hidden. |
 | [05 · Running thread](05-resumed-running.png) | State 13 with a live run. Switching from the pinned test thread showed the new user message, the thinking grid and the Stop button. The Float panel stayed 516 × 560pt at the same origin. |
 | [06 · Compact shortcut](06-compact-shortcut.png) | State 12 adapted to compact Float. ⌘K opened a 320pt picker 6pt above the input without changing the compact window. ⌘N cleared the resumed chat and restored the compact context row. |
+| [07 · Resumed at latest](07-resumed-at-latest.png) | After [04](04-resumed-history.png). Switching between two overflowing threads and relaunching Float opened at the bottom with no “↓ Latest” button. Scrolling up revealed “Earlier messages · Open in T3”. A resumed Gemini 3.8 Flash run followed the reply until a scroll up, then held its position as the reply grew. |
 
 Window captures used the verified worktree app’s window IDs with `screencapture -x -o -l<windowID>`. The Mac was locked. The temporary AppKit harness kept the windows visible, routed keyboard and click events, and bypassed the picker’s key-window guard. The search field became first responder in that harness. The physical shortcut and hover delivery still need an unlocked-screen check.
 
