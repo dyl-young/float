@@ -671,9 +671,23 @@ final class ChatState: ObservableObject {
         } else if case T3Error.uncertainDelivery = error {
             setNotice("T3 Code may have received that message. Check the thread before sending again.",
                 kind: .run, detail: detail)
+        } else if Self.isProjectUnavailable(error) {
+            setNotice(
+                "That project is no longer available in T3. Choose another project or No project and send again.",
+                title: "Project unavailable", kind: .run, detail: detail
+            )
+            reloadProjects()
         } else {
             setNotice(Self.friendlyError(detail), kind: .run, detail: detail)
         }
+    }
+
+    private static func isProjectUnavailable(_ error: Error) -> Bool {
+        guard case T3Error.tool(let message) = error else { return false }
+        let lower = message.lowercased()
+        return lower.contains("project was not found")
+            || lower.contains("project is missing")
+            || (lower.contains("workspace") && lower.contains("does not exist"))
     }
 
     private func updateFailure(from snapshot: ThreadSnapshot) {
