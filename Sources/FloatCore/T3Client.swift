@@ -126,7 +126,8 @@ public struct T3Client: Sendable {
 
     public func send(
         _ text: String, images: [ImageAttachment], thread: ThreadReference?, requestId: UUID,
-        modelSelection: T3ModelSelection? = nil, projectID: String? = nil
+        modelSelection: T3ModelSelection? = nil, projectID: String? = nil,
+        environmentID: String? = nil, machineName: String? = nil
     ) async throws -> ThreadReceipt {
         let selection: T3ModelSelection?
         if thread == nil, modelSelection == nil {
@@ -157,17 +158,28 @@ public struct T3Client: Sendable {
             let result: Delivery
             if let thread {
                 if let selection {
-                    _ = try await transport.call("t3_thread_configure", [
+                    var arguments: [String: any Sendable] = [
                         "threadId": thread.threadId, "modelSelection": selection.arguments,
-                    ], result: Empty.self)
+                    ]
+                    arguments["environmentId"] = thread.environmentID
+                    _ = try await transport.call(
+                        "t3_thread_configure", arguments, result: Empty.self
+                    )
                 }
                 submitted = true
                 if uploads.isEmpty {
-                    result = try await transport.call("t3_thread_send", [
+                    var arguments: [String: any Sendable] = [
                         "threadId": thread.threadId, "message": text, "mode": "queue",
                         "clientRequestId": requestId.uuidString,
-                    ], result: Delivery.self)
+                    ]
+                    arguments["environmentId"] = thread.environmentID
+                    result = try await transport.call(
+                        "t3_thread_send", arguments, result: Delivery.self
+                    )
                 } else {
+                    guard thread.environmentID == nil else {
+                        throw T3Error.tool("Attachments cannot be sent to a linked machine yet.")
+                    }
                     result = try await transport.call("t3_thread_send_attachments", [
                         "threadId": thread.threadId, "message": text, "attachments": uploads,
                     ], result: Delivery.self)
@@ -187,13 +199,18 @@ public struct T3Client: Sendable {
                 } else {
                     arguments["scratch"] = true
                 }
+                arguments["environmentId"] = environmentID
                 submitted = true
                 result = try await transport.call(
                     "t3_thread_launch", arguments, result: Delivery.self
                 )
             }
             guard let id = result.threadId ?? thread?.threadId else { throw T3Error.invalidResponse }
-            let reference = ThreadReference(threadId: id, link: result.link ?? thread?.link)
+            let reference = ThreadReference(
+                threadId: id, link: result.link ?? thread?.link,
+                environmentID: thread?.environmentID ?? environmentID,
+                machineName: thread?.machineName ?? machineName
+            )
             return ThreadReceipt(
                 reference: reference, runId: result.runId, status: result.status,
                 modelSelection: result.modelSelection ?? selection,
@@ -227,13 +244,14 @@ public struct T3Client: Sendable {
         try await readSnapshot([
             "threadId": thread.threadId, "view": "messages", "limit": 40, "maxCharsPerItem": 20_000,
             "beforePosition": before ?? 9_007_199_254_740_991, "runLimit": 1,
-        ])
+        ], thread: thread)
     }
 
     /// True when T3 accepted the interrupt or the run was already stopped.
     public func stop(_ thread: ThreadReference, runId: String?) async throws -> Bool {
-        var arguments = ["threadId": thread.threadId]
+        var arguments: [String: any Sendable] = ["threadId": thread.threadId]
         arguments["runId"] = runId
+        arguments["environmentId"] = thread.environmentID
         let result = try await transport.call(
             "t3_thread_interrupt", arguments, result: Interruption.self
         )
@@ -249,7 +267,7 @@ public struct T3Client: Sendable {
             let page = try await readSnapshot([
                 "threadId": thread.threadId, "view": "messages",
                 "itemId": item.itemId, "textOffset": start, "maxCharsPerItem": 20_000,
-            ])
+            ], thread: thread)
             guard let part = page.items.first(where: { $0.itemId == item.itemId }) else { break }
             text += part.text ?? ""
             offset = part.nextTextOffset.flatMap { $0 > start ? $0 : nil }
@@ -257,8 +275,12 @@ public struct T3Client: Sendable {
         return text
     }
 
-    private func readSnapshot(_ arguments: [String: any Sendable]) async throws -> ThreadSnapshot {
+    private func readSnapshot(
+        _ arguments: [String: any Sendable], thread: ThreadReference
+    ) async throws -> ThreadSnapshot {
         do {
+            var arguments = arguments
+            arguments["environmentId"] = thread.environmentID
             return try await transport.call(
                 "t3_thread_read", arguments, result: ThreadSnapshot.self, retryExpiredSession: true
             )

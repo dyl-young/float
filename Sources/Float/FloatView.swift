@@ -268,7 +268,7 @@ struct FloatView: View {
                             Image(systemName: "folder")
                                 .font(.system(size: 10, weight: .medium))
                         }
-                        Text(chat.threadProjectLabel)
+                        Text(chat.threadSubtitle)
                             .font(.system(size: 11))
                     }
                     .foregroundStyle(Theme.muted)

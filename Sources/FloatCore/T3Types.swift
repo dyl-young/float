@@ -42,6 +42,18 @@ public struct ImageAttachment: Identifiable, Equatable, Sendable {
 public struct ThreadReference: Codable, Equatable, Sendable {
     public let threadId: String
     public let link: URL?
+    public let environmentID: String?
+    public let machineName: String?
+
+    public init(
+        threadId: String, link: URL?, environmentID: String? = nil,
+        machineName: String? = nil
+    ) {
+        self.threadId = threadId
+        self.link = link
+        self.environmentID = environmentID
+        self.machineName = machineName
+    }
 
     public var desktopURL: URL? {
         guard let link else { return nil }

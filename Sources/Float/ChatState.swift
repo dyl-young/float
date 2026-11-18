@@ -160,6 +160,13 @@ final class ChatState: ObservableObject {
 
     var threadProjectLabel: String { threadProject?.title ?? "No project" }
 
+    var threadMachineName: String? { reference?.machineName }
+
+    var threadSubtitle: String {
+        guard let threadMachineName else { return threadProjectLabel }
+        return "\(threadProjectLabel) · \(threadMachineName)"
+    }
+
     var canChooseProject: Bool {
         reference == nil && !submitting && !loading
     }
@@ -476,6 +483,13 @@ final class ChatState: ObservableObject {
             setNotice("T3 accepts up to 120,000 characters per message.", kind: .input)
             return
         }
+        let launchMachine = reference == nil ? selectedMachine : nil
+        let environmentID = reference?.environmentID
+            ?? (launchMachine?.isLocal == false ? launchMachine?.id : nil)
+        if environmentID != nil, !images.isEmpty {
+            setNotice("Attachments can't be sent to a linked machine yet.", kind: .input)
+            return
+        }
         let attachments = images
         let request = UUID()
         let target = reference
@@ -493,7 +507,9 @@ final class ChatState: ObservableObject {
             do {
                 let receipt = try await client.send(
                     text, images: attachments, thread: target, requestId: request,
-                    modelSelection: selection, projectID: projectID
+                    modelSelection: selection, projectID: projectID,
+                    environmentID: environmentID,
+                    machineName: launchMachine?.isLocal == false ? launchMachine?.name : nil
                 )
                 reference = receipt.reference
                 if target == nil { threadProjectID = receipt.projectID }
@@ -669,7 +685,13 @@ final class ChatState: ObservableObject {
                     guard generation == version && !Task.isCancelled else { return }
                     showError(error)
                     loading = false
-                    guard case T3Error.serverUnavailable = error else { return }
+                    let serverUnavailable: Bool
+                    if case T3Error.serverUnavailable = error {
+                        serverUnavailable = true
+                    } else {
+                        serverUnavailable = false
+                    }
+                    guard serverUnavailable || Self.isRemoteMachineUnavailable(error) else { return }
                     connectionFailures += 1
                     if connectionFailures >= 10 && status != .running && status != .waiting { return }
                 }
@@ -720,7 +742,15 @@ final class ChatState: ObservableObject {
 
     private func showError(_ error: Error) {
         let detail = error.localizedDescription
-        if case T3Error.serverUnavailable = error {
+        if Self.isRemoteMachineUnavailable(error),
+            let machine = reference?.machineName
+                ?? selectedMachine.flatMap({ $0.isLocal ? nil : $0.name }) {
+            needsT3 = false
+            setNotice(
+                "Reconnect it in T3 Code to continue.",
+                title: "\(machine) is offline", kind: .connection, detail: detail
+            )
+        } else if case T3Error.serverUnavailable = error {
             needsT3 = true
             setNotice(
                 retrySendAfterLaunch
@@ -764,6 +794,17 @@ final class ChatState: ObservableObject {
         return lower.contains("project was not found")
             || lower.contains("project is missing")
             || (lower.contains("workspace") && lower.contains("does not exist"))
+    }
+
+    private static func isRemoteMachineUnavailable(_ error: Error) -> Bool {
+        guard case T3Error.tool(let message) = error else { return false }
+        let lower = message.lowercased()
+        return lower.contains("did not answer")
+            || lower.contains("stopped answering")
+            || lower.contains("link to") && lower.contains("expired")
+            || lower.contains("is not linked")
+            || lower.contains("no longer accepts this link")
+            || lower.contains("linked environment") && lower.contains("turned off")
     }
 
     private func updateFailure(from snapshot: ThreadSnapshot) {
