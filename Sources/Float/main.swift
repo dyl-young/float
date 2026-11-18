@@ -15,7 +15,13 @@ private final class FloatApp: NSObject, NSApplicationDelegate, NSWindowDelegate 
     private var statusMenu: NSMenu?
     private var approvalMenuItem: NSMenuItem?
     private var screenSharingMenuItem: NSMenuItem?
-    private var hideFromScreenSharing = ProcessInfo.processInfo.environment["FLOAT_ALLOW_CAPTURE"] != "1"
+    /// Remembered across launches (on by default). `FLOAT_ALLOW_CAPTURE=1` turns it off for one
+    /// launch without changing the saved choice, so QA screenshots work.
+    private static let hideFromScreenSharingKey = "hideFromScreenSharing"
+    private let captureOverride = ProcessInfo.processInfo.environment["FLOAT_ALLOW_CAPTURE"] == "1"
+    private lazy var hideFromScreenSharing: Bool = !captureOverride
+        && (preferences.object(forKey: Self.hideFromScreenSharingKey) as? Bool ?? true)
+    private let preferences = UserDefaults(suiteName: PanelSizing.defaultsDomain) ?? .standard
     private var hotKey: EventHotKeyRef?
     private var hotKeyHandler: EventHandlerRef?
     private var compactHeight: CGFloat = 86 + FloatView.contextRowHeight
@@ -268,6 +274,7 @@ private final class FloatApp: NSObject, NSApplicationDelegate, NSWindowDelegate 
 
     @objc private func toggleScreenSharing() {
         hideFromScreenSharing.toggle()
+        preferences.set(hideFromScreenSharing, forKey: Self.hideFromScreenSharingKey)
         panel?.setScreenSharingHidden(hideFromScreenSharing)
         screenSharingMenuItem?.state = hideFromScreenSharing ? .on : .off
     }

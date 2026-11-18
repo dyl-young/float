@@ -30,6 +30,7 @@ Dylan filters test sessions out of T3's sidebar by project, so every test chat m
 ## Captures
 
 - Capture the Float window by window ID with `screencapture -x -o -l<windowID>`. It works while the screen is locked.
+- Float hides itself from screen capture by default, so screenshots come back empty. Launch it with `open -n --env FLOAT_ALLOW_CAPTURE=1 /path/to/Float.app` for QA. That turns hiding off for that launch only and leaves Dylan's saved choice alone. Don't untick **Hide from screen sharing** in the cloud menu instead, because that choice is saved.
 - Save captures under `design/qa/<batch>/` and commit them.
 - Never capture or commit secrets such as bearer tokens.
 
