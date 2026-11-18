@@ -193,13 +193,19 @@ private struct MachinePickerView: View {
                 .padding(.horizontal, 8)
                 .frame(height: 25, alignment: .bottom)
                 .padding(.bottom, 3)
-            ScrollView {
-                LazyVStack(spacing: 2) {
-                    ForEach(chat.machines) { machine in machineRow(machine) }
+            // Follow the keyboard highlight: scroll just far enough to keep it in view.
+            ScrollViewReader { scroll in
+                ScrollView {
+                    LazyVStack(spacing: 2) {
+                        ForEach(chat.machines) { machine in machineRow(machine) }
+                    }
+                    .background(OverlayScrollers())
                 }
-                .background(OverlayScrollers())
+                .flashScrollKnobsOnHover()
+                .onChange(of: highlightedID) {
+                    if let highlightedID { scroll.scrollTo(highlightedID) }
+                }
             }
-            .flashScrollKnobsOnHover()
             Divider().overlay(Theme.border)
                 .padding(.horizontal, 2)
                 .padding(.top, 3)
@@ -267,6 +273,7 @@ private struct MachinePickerView: View {
         )
         .background(current ? Theme.selection : .clear, in: RoundedRectangle(cornerRadius: 8))
         .contentShape(Rectangle())
+        .id(machine.id)
         .onHover { hoveredID = $0 && machine.isOnline ? machine.id : nil }
         .onTapGesture {
             guard machine.isOnline else { return }

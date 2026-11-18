@@ -247,6 +247,8 @@ private struct ProjectPickerView: View {
     }
 
     private var projectList: some View {
+        // Follow the keyboard highlight: scroll just far enough to keep it in view.
+        ScrollViewReader { scroll in
         ScrollView {
             LazyVStack(spacing: 2) {
                 projectRow(id: Self.scratch, title: "No project", subtitle: "Scratch chat, no repo")
@@ -288,6 +290,10 @@ private struct ProjectPickerView: View {
             .background(OverlayScrollers())
         }
         .flashScrollKnobsOnHover()
+        .onChange(of: highlightedID) {
+            if let highlightedID { scroll.scrollTo(highlightedID) }
+        }
+        }
     }
 
     private func projectRow(
@@ -323,6 +329,7 @@ private struct ProjectPickerView: View {
         )
         .background(isCurrent ? Theme.selection : .clear, in: RoundedRectangle(cornerRadius: 8))
         .contentShape(Rectangle())
+        .id(id)
         .onHover { hoveredID = $0 ? id : nil }
         .onTapGesture {
             chat.selectProject(project)
