@@ -163,6 +163,7 @@ private struct MachinePickerView: View {
     @ObservedObject var keyboard: MachinePickerKeyboard
     let close: () -> Void
 
+    @State private var hoveredID: String?
     @State private var highlightedID: String
 
     init(chat: ChatState, keyboard: MachinePickerKeyboard, close: @escaping () -> Void) {
@@ -246,21 +247,17 @@ private struct MachinePickerView: View {
             Circle()
                 .fill(machine.isOnline ? Theme.success : Theme.muted)
                 .frame(width: 6, height: 6)
-            if current {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 10.5, weight: .bold))
-                    .foregroundStyle(Theme.accent)
-            }
+
         }
         .padding(.horizontal, 8)
         .frame(height: 40)
         .opacity(machine.isOnline ? 1 : 0.45)
         .background(
-            highlightedID == machine.id && machine.isOnline ? Theme.text.opacity(0.08) : .clear,
-            in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+            current ? Theme.selection : machine.isOnline && (highlightedID == machine.id || hoveredID == machine.id) ? Theme.text.opacity(0.06) : .clear,
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
         )
         .contentShape(Rectangle())
-        .onHover { if $0, machine.isOnline { highlightedID = machine.id } }
+        .onHover { hoveredID = $0 && machine.isOnline ? machine.id : nil }
         .onTapGesture {
             guard machine.isOnline else { return }
             chat.selectMachine(machine)
@@ -281,12 +278,13 @@ private struct MachinePickerView: View {
         guard !choices.isEmpty else { return }
         switch command {
         case .move(let direction):
+            hoveredID = nil
             let current = choices.firstIndex { $0.id == highlightedID }
             let index = current.map { ($0 + direction + choices.count) % choices.count }
                 ?? (direction > 0 ? 0 : choices.count - 1)
             highlightedID = choices[index].id
         case .pick:
-            guard let machine = choices.first(where: { $0.id == highlightedID }) else { return }
+            guard let machine = choices.first(where: { $0.id == (hoveredID ?? highlightedID) }) else { return }
             chat.selectMachine(machine)
             close()
         }

@@ -24,18 +24,16 @@ private func provider(
     )
 }
 
-@Test func modelRowTrailingIconsKeepCurrentCheckmark() {
+@Test func modelRowTrailingIconsPreserveFavouriteControlsOnCurrentRow() {
     let currentFavourite = T3ModelRowTrailingState(
         isCurrent: true, isFavourite: true, isHovered: false, tab: .provider
     )
-    #expect(currentFavourite.showsCheckmark)
     #expect(!currentFavourite.showsRestingFavourite)
     #expect(!currentFavourite.showsFavouriteToggle)
 
     let hoveredCurrent = T3ModelRowTrailingState(
         isCurrent: true, isFavourite: true, isHovered: true, tab: .favourites
     )
-    #expect(hoveredCurrent.showsCheckmark)
     #expect(hoveredCurrent.showsFavouriteToggle)
 }
 

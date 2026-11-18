@@ -172,6 +172,7 @@ private struct ProjectPickerView: View {
     let close: () -> Void
 
     @State private var search = ""
+    @State private var hoveredID: String?
     @State private var highlightedID: String
     @FocusState private var searchFocused: Bool
 
@@ -306,18 +307,16 @@ private struct ProjectPickerView: View {
                     .truncationMode(.middle)
             }
             Spacer()
-            if isCurrent {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 10.5, weight: .bold))
-                    .foregroundStyle(Theme.accent)
-            }
+
         }
         .padding(.horizontal, 8)
         .frame(height: 36)
-        .background(highlightedID == id ? Theme.text.opacity(0.08) : .clear,
-            in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .background(
+            isCurrent ? Theme.selection : highlightedID == id || hoveredID == id ? Theme.text.opacity(0.06) : .clear,
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+        )
         .contentShape(Rectangle())
-        .onHover { if $0 { highlightedID = id } }
+        .onHover { hoveredID = $0 ? id : nil }
         .onTapGesture {
             chat.selectProject(project)
             close()
@@ -350,13 +349,14 @@ private struct ProjectPickerView: View {
     private func handle(_ command: ProjectPickerKeyboard.Command) {
         switch command {
         case .move(let direction):
+            hoveredID = nil
             guard !choiceIDs.isEmpty else { return }
             let current = choiceIDs.firstIndex(of: highlightedID)
             let index = current.map { ($0 + direction + choiceIDs.count) % choiceIDs.count }
                 ?? (direction > 0 ? 0 : choiceIDs.count - 1)
             highlightedID = choiceIDs[index]
         case .pick:
-            let project = filteredProjects.first { $0.id == highlightedID }
+            let project = filteredProjects.first { $0.id == (hoveredID ?? highlightedID) }
             chat.selectProject(project)
             close()
         }

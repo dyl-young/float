@@ -8,6 +8,7 @@ enum Theme {
     static let tray = Color(red: 0.064, green: 0.104, blue: 0.134)
     static let border = Color(red: 0.180, green: 0.255, blue: 0.321)
     static let hairline = Color(red: 0.63, green: 0.76, blue: 0.86).opacity(0.13)
+    static let selection = Color(red: 28.0 / 255.0, green: 51.0 / 255.0, blue: 73.0 / 255.0)
     static let text = Color(red: 0.882, green: 0.945, blue: 1.0)
     static let muted = Color(red: 0.493, green: 0.544, blue: 0.584)
     static let placeholder = Color(red: 0.501, green: 0.554, blue: 0.600)

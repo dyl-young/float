@@ -9,7 +9,6 @@ public enum T3ModelPickerTabContext: Equatable, Sendable {
 public struct T3ModelRowTrailingState: Equatable, Sendable {
     public let showsFavouriteToggle: Bool
     public let showsRestingFavourite: Bool
-    public let showsCheckmark: Bool
 
     public init(
         isCurrent: Bool, isFavourite: Bool, isHovered: Bool,
@@ -17,7 +16,6 @@ public struct T3ModelRowTrailingState: Equatable, Sendable {
     ) {
         showsFavouriteToggle = isHovered
         showsRestingFavourite = !isHovered && !isCurrent && isFavourite && tab == .provider
-        showsCheckmark = isCurrent
     }
 }
 

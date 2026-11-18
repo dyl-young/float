@@ -199,14 +199,7 @@ private struct ModelRowTrailingIcons: View {
                     .frame(width: 18)
             }
 
-            if state.showsCheckmark {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 10.5, weight: .bold))
-                    .foregroundStyle(Theme.accent)
-                    .frame(width: 18)
-            } else if state.showsFavouriteToggle {
-                Color.clear.frame(width: 18)
-            }
+
         }
     }
 }
@@ -219,6 +212,7 @@ private struct ModelPickerView: View {
     let close: () -> Void
 
     @State private var search = ""
+    @State private var defaultHovered = false
     @State private var selectedTab: String
     @State private var hovered: T3ModelSelection?
     @State private var highlighted: T3ModelSelection?
@@ -496,16 +490,15 @@ private struct ModelPickerView: View {
                 .font(.system(size: 12))
                 .foregroundStyle(Theme.text)
             Spacer()
-            if chat.usesDefaultModel {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 10.5, weight: .bold))
-                    .foregroundStyle(Theme.accent)
-            }
+
         }
         .padding(.horizontal, 8)
         .frame(height: 28)
-        .background(chat.usesDefaultModel ? Theme.text.opacity(0.08) : .clear,
-            in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .background(
+            chat.usesDefaultModel ? Theme.selection : defaultHovered ? Theme.text.opacity(0.06) : .clear,
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+        )
+        .onHover { defaultHovered = $0 }
         .contentShape(Rectangle())
         .onTapGesture {
             chat.selectModel(nil)
@@ -547,12 +540,14 @@ private struct ModelPickerView: View {
         }
         .padding(.horizontal, 8)
         .frame(minHeight: selectedTab == Self.favourites && search.isEmpty ? 36 : 28)
-        .background(isCurrent || highlighted == model.selection ? Theme.text.opacity(0.08) : .clear,
-            in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .background(
+            isCurrent ? Theme.selection : highlighted == model.selection || hovered == model.selection
+                ? Theme.text.opacity(0.06) : .clear,
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+        )
         .contentShape(Rectangle())
         .onHover {
             hovered = $0 ? model.selection : nil
-            if $0 { highlighted = model.selection }
         }
         .onTapGesture {
             chat.selectModel(model)
@@ -632,6 +627,7 @@ private struct ModelPickerView: View {
             selectedTab = tabs[index]
             highlighted = displayedModels.first?.selection
         case .move(let direction):
+            hovered = nil
             let models = displayedModels
             guard !models.isEmpty else { return }
             let current = models.firstIndex { $0.selection.matches(highlighted) }
@@ -643,7 +639,7 @@ private struct ModelPickerView: View {
             }
             highlighted = models[index].selection
         case .pick:
-            if let model = displayedModels.first(where: { $0.selection.matches(highlighted) })
+            if let model = displayedModels.first(where: { $0.selection.matches(hovered ?? highlighted) })
                 ?? displayedModels.first {
                 chat.selectModel(model)
                 close()
