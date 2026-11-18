@@ -25,6 +25,8 @@ struct FloatView: View {
     @State private var inputTop: CGFloat = 0
     @State private var followsLatest = true
     @State private var copiedMessage: String?
+    @State private var followUpModifierMonitor: Any?
+    @State private var followUpAlternate = false
 
     private static let headerHeight: CGFloat = 38
     private static let headerFadeHeight: CGFloat = 14
@@ -72,6 +74,17 @@ struct FloatView: View {
             if composerMenu.trigger != nil, let target = chat.composerInventoryTarget {
                 await composerMenu.load(target, chat: chat)
             }
+        }
+        .onAppear {
+            followUpModifierMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
+                followUpAlternate = event.modifierFlags.contains(.command)
+                return event
+            }
+        }
+        .onDisappear {
+            if let followUpModifierMonitor { NSEvent.removeMonitor(followUpModifierMonitor) }
+            followUpModifierMonitor = nil
+            followUpAlternate = false
         }
         .onChange(of: chat.modelPickerRequest) { composerMenu.close() }
         .onChange(of: chat.projectPickerRequest) { composerMenu.close() }
@@ -471,17 +484,28 @@ struct FloatView: View {
 
     @ViewBuilder private func messageView(_ message: ChatMessage) -> some View {
         if message.isUser {
-            VStack(alignment: .trailing, spacing: 6) {
-                if !message.previews.isEmpty { previewRow(message.previews) }
-                if !message.text.isEmpty {
-                    MessageMarkdown(source: message.text, isUser: true, chips: chat.skillChips(in: message))
-                        .padding(.horizontal, 11)
-                        .padding(.vertical, 8)
-                        .background(Theme.message, in: UnevenRoundedRectangle(
-                            topLeadingRadius: 12, bottomLeadingRadius: 12,
-                            bottomTrailingRadius: 4, topTrailingRadius: 12, style: .continuous
-                        ))
+            let shape = UnevenRoundedRectangle(
+                topLeadingRadius: 12, bottomLeadingRadius: 12,
+                bottomTrailingRadius: 4, topTrailingRadius: 12, style: .continuous
+            )
+            let queued = message.followUp == .queued
+            VStack(alignment: .trailing, spacing: 2) {
+                if let followUp = message.followUp { followUpLabel(followUp, message: message) }
+                VStack(alignment: .trailing, spacing: 6) {
+                    if !message.previews.isEmpty { previewRow(message.previews) }
+                    if !message.text.isEmpty {
+                        MessageMarkdown(source: message.text, isUser: true, chips: chat.skillChips(in: message))
+                            .padding(.horizontal, 11)
+                            .padding(.vertical, 8)
+                            .background(Theme.message, in: shape)
+                            .overlay {
+                                if queued {
+                                    shape.strokeBorder(Theme.hairline, style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
+                                }
+                            }
+                    }
                 }
+                .opacity(queued ? 0.6 : 1)
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
             .padding(.leading, 48)
@@ -508,6 +532,29 @@ struct FloatView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    private func followUpLabel(_ state: FollowUpState, message: ChatMessage) -> some View {
+        HStack(spacing: 4) {
+            FollowUpGlyph(mode: state == .queued ? .queue : .steer)
+                .frame(width: 11, height: 11)
+                .accessibilityHidden(true)
+            switch state {
+            case .steerWaiting: Text("Steer · waiting to be read")
+            case .steerRead: Text("Steer")
+            case .queued: Text("Queued · sends when this turn ends")
+            }
+            if chat.canCancelQueue(message) {
+                PanelButton("Cancel queued message", systemImage: "xmark", size: 16, glyphSize: 8) {
+                    chat.cancelQueuedFollowUp(message)
+                }
+                .disabled(chat.queueCancellationInFlight(message))
+            }
+        }
+        .font(.system(size: 10.5))
+        .foregroundStyle(Theme.muted)
+        .padding(.top, 2)
+        .padding(.trailing, 2)
     }
 
     private func copy(_ message: ChatMessage) {
@@ -549,7 +596,13 @@ struct FloatView: View {
                     draft: Binding(get: { chat.composerDraft }, set: chat.setComposerDraft),
                     height: $editorHeight, focusRequest: chat.focusRequest,
                     editable: chat.composerEditable, chat: chat, menu: composerMenu,
-                    submit: chat.confirmOrSend,
+                    submit: { alternate in
+                        if alternate {
+                            if chat.canFollowUp { chat.send(alternate: true) }
+                        } else {
+                            chat.confirmOrSend()
+                        }
+                    },
                     pickOption: chat.selectQuestionOption(at:), pasteImages: chat.pasteImages
                 )
                 .frame(height: editorHeight)
@@ -611,6 +664,7 @@ struct FloatView: View {
                 .frame(height: 30)
                 .accessibilityHidden(true)
             modelPicker
+            if chat.canFollowUp, chat.canSend { followUpButton }
             sendButton
         }
         .padding(.horizontal, Self.footerButtonInset)
@@ -620,6 +674,30 @@ struct FloatView: View {
                 .fill(Theme.tray)
                 .padding(.top, -Theme.radius)
         }
+    }
+
+    private var followUpButton: some View {
+        let standard = chat.followUpMode() == .steer ? "Steer" : "Queue"
+        let alternate = chat.followUpMode(alternate: true) == .steer ? "Steer" : "Queue"
+        let mode = chat.followUpMode(alternate: followUpAlternate)
+        return Button {
+            chat.send(alternate: NSApp.currentEvent?.modifierFlags.contains(.command) == true)
+        } label: {
+            sendRing(tint: Theme.accent) {
+                FollowUpGlyph(mode: mode).frame(width: 14, height: 14)
+            }
+        }
+        .floatButtonStyle(in: Circle())
+        .accessibilityLabel(mode == .steer ? "Steer" : "Queue")
+        .help(standard == alternate ? "\(standard) · Return" : "\(standard) · Return  /  \(alternate) · ⌘Return")
+    }
+
+    private func sendRing<Glyph: View>(tint: Color, @ViewBuilder glyph: () -> Glyph) -> some View {
+        glyph()
+            .foregroundStyle(tint)
+            .frame(width: Self.footerButtonSize, height: Self.footerButtonSize)
+            .overlay { Circle().strokeBorder(tint, lineWidth: 1.5) }
+            .contentShape(Rectangle())
     }
 
     private var sendButton: some View {
@@ -633,13 +711,7 @@ struct FloatView: View {
                 chat.send()
             }
         } label: {
-            sendGlyph(stopping: stopping)
-                .foregroundStyle(tint)
-                .frame(width: Self.footerButtonSize, height: Self.footerButtonSize)
-                .overlay {
-                    Circle().strokeBorder(tint, lineWidth: 1.5)
-                }
-                .contentShape(Rectangle())
+            sendRing(tint: tint) { sendGlyph(stopping: stopping) }
         }
         .floatButtonStyle(in: Circle())
         .accessibilityLabel(stopping ? "Stop" : "Send")
@@ -673,6 +745,36 @@ struct FloatView: View {
         guard let window = NSApp.keyWindow else { return }
         panel.beginSheetModal(for: window) { result in
             if result == .OK { chat.addImageFiles(panel.urls) }
+        }
+    }
+}
+
+/// Lucide corner-up-right and list-plus, drawn on their 24-point viewbox.
+private struct FollowUpGlyph: View {
+    let mode: FollowUpMode
+
+    var body: some View {
+        Canvas { context, size in
+            var path = Path()
+            if mode == .steer {
+                path.move(to: CGPoint(x: 15, y: 14))
+                path.addLines([CGPoint(x: 20, y: 9), CGPoint(x: 15, y: 4)])
+                path.move(to: CGPoint(x: 4, y: 20))
+                path.addLine(to: CGPoint(x: 4, y: 13))
+                path.addQuadCurve(to: CGPoint(x: 8, y: 9), control: CGPoint(x: 4, y: 9))
+                path.addLine(to: CGPoint(x: 20, y: 9))
+            } else {
+                for (y, end) in [(6.0, 21.0), (12.0, 13.0), (18.0, 13.0)] {
+                    path.move(to: CGPoint(x: 3, y: y))
+                    path.addLine(to: CGPoint(x: end, y: y))
+                }
+                path.move(to: CGPoint(x: 16, y: 15))
+                path.addLine(to: CGPoint(x: 22, y: 15))
+                path.move(to: CGPoint(x: 19, y: 12))
+                path.addLine(to: CGPoint(x: 19, y: 18))
+            }
+            context.scaleBy(x: size.width / 24, y: size.height / 24)
+            context.stroke(path, with: .foreground, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
         }
     }
 }

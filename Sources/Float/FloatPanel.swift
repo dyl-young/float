@@ -107,6 +107,10 @@ final class FloatPanel: EditingPanel {
         case ("\r", .command), ("\u{3}", .command):
             if !event.isARepeat, (firstResponder as? NSTextView)?.hasMarkedText() != true,
                allowApproval?() == true { return true }
+            if let editor = firstResponder as? PromptTextView, !editor.hasMarkedText() {
+                editor.keyDown(with: event)
+                return true
+            }
             return super.performKeyEquivalent(with: event)
         default:
             return super.performKeyEquivalent(with: event)

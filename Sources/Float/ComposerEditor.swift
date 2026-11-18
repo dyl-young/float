@@ -36,7 +36,7 @@ struct ComposerEditor: NSViewRepresentable {
     let editable: Bool
     let chat: ChatState
     let menu: ComposerMenuState
-    let submit: () -> Void
+    let submit: (Bool) -> Void
     let pickOption: (Int) -> Bool
     let pasteImages: (NSPasteboard) -> Bool
 
@@ -188,7 +188,7 @@ private final class EditorScrollView: NSScrollView {
 }
 
 final class PromptTextView: NSTextView {
-    var submit: (() -> Void)?
+    var submit: ((Bool) -> Void)?
     var menuKey: ((NSEvent) -> Bool)?
     var pickOption: ((Int) -> Bool)?
     var pasteImages: ((NSPasteboard) -> Bool)?
@@ -261,9 +261,10 @@ final class PromptTextView: NSTextView {
             pickOption?(number - 1) == true {
             return
         }
-        if [36, 76].contains(event.keyCode), modifiers.intersection(editingModifiers).isEmpty,
+        let shortcut = modifiers.intersection([.command, .shift, .option, .control])
+        if [36, 76].contains(event.keyCode), shortcut.isEmpty || shortcut == .command,
             let submit {
-            if !event.isARepeat { submit() }
+            if !event.isARepeat { submit(shortcut == .command) }
             return
         }
         super.keyDown(with: event)
