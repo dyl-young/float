@@ -77,7 +77,12 @@ final class FloatPanel: EditingPanel {
     var sizing: PanelSizing?
     var resizeEnabled = false {
         didSet {
+            acceptsMouseMovedEvents = resizeEnabled
             if !resizeEnabled { drag = nil }
+            if !resizeEnabled, showingResizeCursor {
+                showingResizeCursor = false
+                NSCursor.arrow.set()
+            }
             if let contentView { invalidateCursorRects(for: contentView) }
         }
     }
@@ -90,6 +95,7 @@ final class FloatPanel: EditingPanel {
 
     private var drag: Drag?
     private var applyingResize = false
+    private var showingResizeCursor = false
     var isResizing: Bool { drag != nil || applyingResize }
 
     override var canBecomeKey: Bool { true }
@@ -161,7 +167,12 @@ final class FloatPanel: EditingPanel {
             return
         }
         if resizeEnabled, let sizing, handleResize(event, sizing: sizing) { return }
+        if resizeEnabled, updateResizeCursor(for: event) { return }
         super.sendEvent(event)
+        if resizeEnabled, event.type == .mouseMoved, let zone = resizeZone(at: event.locationInWindow) {
+            // SwiftUI's own tracking areas may have just set a cursor; the edge wins.
+            zone.cursor.set()
+        }
     }
 }
 
@@ -176,6 +187,33 @@ extension FloatPanel {
         applyingResize = true
         defer { applyingResize = false }
         setFrame(frame, display: true)
+    }
+
+    fileprivate func resizeZone(at point: NSPoint) -> PanelResizeZone? {
+        PanelResizeZone.allCases.first { $0.rectangle(in: frame.size).contains(point) }
+    }
+
+    /// Cursor rects alone lose to the SwiftUI views under the top edge, so the panel sets the
+    /// resize cursor itself: on hover over a grab zone, and for the whole of a drag.
+    /// Returns true when it swallowed a cursor update that would have replaced it.
+    fileprivate func updateResizeCursor(for event: NSEvent) -> Bool {
+        switch event.type {
+        case .mouseMoved:
+            if resizeZone(at: event.locationInWindow) == nil, showingResizeCursor {
+                showingResizeCursor = false
+                NSCursor.arrow.set()
+            }
+            return false
+        case .cursorUpdate:
+            if let zone = drag?.zone ?? resizeZone(at: event.locationInWindow) {
+                zone.cursor.set()
+                showingResizeCursor = true
+                return true
+            }
+            return false
+        default:
+            return false
+        }
     }
 
     private func handleResize(_ event: NSEvent, sizing: PanelSizing) -> Bool {
@@ -194,6 +232,8 @@ extension FloatPanel {
                 applyResize(resetFrame)
             } else {
                 drag = Drag(zone: zone, frame: frame, pointer: convertPoint(toScreen: point))
+                zone.cursor.set()
+                showingResizeCursor = true
             }
             return true
         case .leftMouseDragged:
@@ -212,11 +252,17 @@ extension FloatPanel {
                 next.size.width = CGFloat(PanelWidthLimits.clamp(Double(drag.frame.width + dx)))
             }
             applyResize(next)
+            drag.zone.cursor.set()
             return true
         case .leftMouseUp:
             guard drag != nil else { return false }
             drag = nil
             sizing.save(frame.size)
+            if resizeZone(at: event.locationInWindow) == nil {
+                showingResizeCursor = false
+                NSCursor.arrow.set()
+            }
+            invalidateCursorRects(for: contentView ?? NSView())
             return true
         default:
             return false

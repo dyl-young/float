@@ -12,8 +12,10 @@ public enum PanelHeightLimits {
 
 public enum PanelWidthLimits {
     public static let defaultWidth = 516.0
+    public static let minimum = 420.0
+    public static let maximum = 720.0
 
     public static func clamp(_ width: Double) -> Double {
-        min(900, max(420, width.isFinite ? width : defaultWidth))
+        min(maximum, max(minimum, width.isFinite ? width : defaultWidth))
     }
 }
