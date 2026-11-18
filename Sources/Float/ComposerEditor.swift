@@ -111,18 +111,36 @@ final class PromptTextView: NSTextView {
 
     override func keyDown(with event: NSEvent) {
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        if modifiers.intersection([.command, .shift, .option, .control]).isEmpty,
+        let editingModifiers: NSEvent.ModifierFlags = [.command, .shift, .option, .control, .function]
+        guard !hasMarkedText() else {
+            super.keyDown(with: event)
+            return
+        }
+        if modifiers.intersection(editingModifiers).isEmpty,
             string.isEmpty, let character = event.charactersIgnoringModifiers,
             let number = Int(character), (1...9).contains(number),
             pickOption?(number - 1) == true {
             return
         }
-        if [36, 76].contains(event.keyCode), modifiers.intersection([.shift, .option, .control]).isEmpty,
-            !hasMarkedText() {
-            submit?()
+        if [36, 76].contains(event.keyCode), modifiers.intersection(editingModifiers).isEmpty,
+            let submit {
+            if !event.isARepeat { submit() }
             return
         }
         super.keyDown(with: event)
+    }
+
+    override func deleteToBeginningOfLine(_ sender: Any?) {
+        let selection = selectedRange()
+        super.deleteToBeginningOfLine(sender)
+        // AppKit stops at the start of the line. A subsequent invocation
+        // crosses that boundary and deletes back to the preceding line start.
+        guard isEditable, !hasMarkedText(), selection.length == 0, selection.location > 0,
+              selectedRange() == selection else { return }
+        undoManager?.beginUndoGrouping()
+        defer { undoManager?.endUndoGrouping() }
+        deleteBackward(sender)
+        super.deleteToBeginningOfLine(sender)
     }
 
     override func cancelOperation(_ sender: Any?) { window?.cancelOperation(sender) }
