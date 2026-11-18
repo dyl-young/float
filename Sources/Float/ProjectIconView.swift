@@ -153,6 +153,14 @@ final class ProjectFaviconCache {
     }
 }
 
+// A plain key rather than @Entry: the Command Line Tools toolchain has no SwiftUIMacros plugin.
+private struct ProjectFaviconCacheKey: EnvironmentKey {
+    static let defaultValue: ProjectFaviconCache? = nil
+}
+
 extension EnvironmentValues {
-    @Entry var projectFaviconCache: ProjectFaviconCache?
+    var projectFaviconCache: ProjectFaviconCache? {
+        get { self[ProjectFaviconCacheKey.self] }
+        set { self[ProjectFaviconCacheKey.self] = newValue }
+    }
 }
