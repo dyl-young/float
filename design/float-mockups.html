@@ -138,18 +138,21 @@ code{font-family:var(--font-mono);font-size:11.5px;background:var(--code-backgro
 .notice.info{background:color-mix(in oklab, var(--primary) 10%, transparent);border-color:color-mix(in oklab, var(--primary) 35%, transparent)}
 .notice.info svg{color:var(--primary)}
 /* Question card: an agent asked you something through T3's ask-user-question tool. Answer it here, no trip to T3. */
-.ask{border:1px solid var(--line);border-radius:10px;background:color-mix(in oklab, var(--foreground) 3%, transparent);padding:9px 10px 9px;font-size:12px;line-height:1.4}
-.ask .qh{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--muted-foreground);text-transform:uppercase;letter-spacing:.05em;margin:0 0 3px}
-.ask .qh .pg{margin-left:auto;text-transform:none;letter-spacing:0}
-.ask .q{font-size:12.5px;font-weight:600;margin:0 0 7px}
-.opt{display:flex;gap:8px;align-items:flex-start;padding:6px 7px;border-radius:7px;margin:0 -3px}
-.opt .kbd{margin-top:1px;flex:none}
-.opt .t{flex:1;min-width:0}.opt .t b{display:block;font-weight:500;font-size:12px}.opt .t span{display:block;color:var(--muted-foreground);font-size:11px}
-.opt svg{width:13px;height:13px;color:var(--primary);flex:none;margin-top:2px;visibility:hidden}
-.opt.sel{background:color-mix(in oklab, var(--primary) 12%, transparent)}.opt.sel svg{visibility:visible}
-.ask .af{display:flex;align-items:center;gap:8px;margin-top:6px}
+/* Question card, as T3 draws it: sentence-case header, "2/3 ⌄" step menu, plain question, radio rows with the number key on the right, previews under every option that has one, always shown so the card never changes height on hover. */
+.ask{border:1px solid var(--line);border-radius:10px;background:color-mix(in oklab, var(--foreground) 3%, transparent);padding:10px 11px;font-size:12px;line-height:1.4}
+.ask .qh{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted-foreground);margin:0 0 5px}
+.ask .qh .pg{margin-left:auto;display:inline-flex;align-items:center;gap:3px}
+.ask .qh .pg svg{width:10px;height:10px}
+.ask .q{font-size:12.5px;font-weight:400;margin:0 0 8px}
+.opt{display:flex;gap:9px;align-items:flex-start;padding:5px 6px;border-radius:7px;margin:0 -4px}
+.opt .rd{width:13px;height:13px;border-radius:50%;border:1.5px solid color-mix(in oklab, var(--foreground) 45%, transparent);flex:none;margin-top:1px;box-sizing:border-box}
+.opt.sel .rd{border-color:var(--primary);background:radial-gradient(circle, var(--primary) 0 3px, transparent 3.5px)}
+.opt .t{flex:1;min-width:0}.opt .t b{display:block;font-weight:400;font-size:12px}.opt .t span{display:block;color:var(--muted-foreground);font-size:11px}
+.opt .t pre{margin:5px 0 2px;font-family:var(--font-mono);font-size:10.5px;line-height:1.35;color:var(--muted-foreground);white-space:pre;overflow:hidden}
+.opt .kbd{flex:none;margin-top:0}
+.opt.sel{background:color-mix(in oklab, var(--foreground) 5%, transparent)}
+.ask .af{display:flex;align-items:center;gap:6px;margin-top:8px}
 .ask .af .btn{margin-top:0}
-.ask .af small{color:var(--muted-foreground);font-size:10.5px;display:inline-flex;align-items:center;gap:4px}
 .btn{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 10px;border-radius:999px;font-size:11.5px;font-weight:500;margin-top:8px}
 .btn svg{width:12px;height:12px;margin:0}
 .btn.pri{background:var(--primary);color:var(--primary-foreground)}
@@ -311,13 +314,13 @@ const states = [
   [shell({tray: trayTop({title:'Clean up node_modules', body:`<div class="msg-u">Find and delete stale node_modules folders under ~/repos</div><div class="notice warn">${ic('shield')}<div><b>Needs your approval</b>Wants to run <code>rm -rf</code> on 14 folders.<div class="apv"><span class="btn pri">Allow</span><span class="btn ghost">Deny</span><span class="lnk">Open in T3</span></div></div></div>`}),
      input: ph('Waiting on your approval…')}),
    `<b>5 · Needs approval.</b> Approve or deny right here, and the run keeps going without opening T3. <span class="kbd">⌘</span><span class="kbd">↵</span> allows, <span class="kbd">Esc</span> leaves it pending. Open in T3 shows the full request.`],
-  [shell({tray: trayTop({title:'Clean up node_modules', body:`<div class="msg-u">Find stale node_modules folders under ~/repos and clean them up</div><div class="ask"><div class="qh">Scope<span class="pg">1 of 2</span></div><div class="q">Which folders should I delete?</div>` +
-     `<div class="opt sel"><span class="kbd">1</span><div class="t"><b>Untouched for 30+ days</b><span>14 folders, 3.1 GB</span></div><svg><use href="#i-check"/></svg></div>` +
-     `<div class="opt"><span class="kbd">2</span><div class="t"><b>All of them</b><span>41 folders, 9.8 GB</span></div><svg><use href="#i-check"/></svg></div>` +
-     `<div class="opt"><span class="kbd">3</span><div class="t"><b>Just list them</b><span>Delete nothing yet</span></div><svg><use href="#i-check"/></svg></div>` +
-     `<div class="af"><span class="btn pri">Next</span><small><span class="kbd">1</span>–<span class="kbd">3</span> pick · <span class="kbd">↵</span> confirm</small></div></div>`}),
-     input: ph('Or type your own answer…')}),
-   `<b>6 · Asks a question.</b> When an agent asks you something, the question card shows in Float and the answer goes back through T3. Number keys pick, Return confirms, and typing in the input answers in your own words. Tool approvals still open T3.`],
+  [shell({tray: trayTop({title:'Composer layout', project:'float', projectIcon:'float', body:`<div class="msg-u">Ask me how the compact composer should look</div><div class="ask"><div class="qh">Picker spot<span class="pg">2/3 ${ic('chev')}</span></div><div class="q">Where should the model picker sit in the compact composer?</div>` +
+     `<div class="opt"><span class="rd"></span><div class="t"><b>Left of input</b><span>Chip before the text field</span><pre>┌──────────────────────────────┐\n│ [opus ▾] Ask anything…   [↑] │\n└──────────────────────────────┘</pre></div><span class="kbd">1</span></div>` +
+     `<div class="opt sel"><span class="rd"></span><div class="t"><b>Next to send</b><span>Chip beside the send button</span><pre>┌──────────────────────────────┐\n│ Ask anything…   [opus ▾] [↑] │\n└──────────────────────────────┘</pre></div><span class="kbd">2</span></div>` +
+     `<div class="opt"><span class="rd"></span><div class="t"><b>Hidden until hover</b><span>Appears only when the pointer is over the composer</span></div><span class="kbd">3</span></div>` +
+     `<div class="af"><span class="btn ghost">Back</span><span class="btn pri">Next</span></div></div>`}),
+     input: ph('Or type your own answer…'), send:'stop'}),
+   `<b>6 · Asks a question.</b> Drawn as T3 draws it. A sentence-case header, and "2/3" with a chevron to jump between questions. A radio circle per option (checkboxes when several can be picked), the number key on the right, and every option's preview always shown under it as plain monospaced text, so the card never changes height when you hover or move between options. From the second question on, Back keeps your earlier answers; Next becomes Send answer on the last one. The run is still going, so the red stop ring (or <span class="kbd">⌘</span><span class="kbd">.</span>) stops it and drops the form.`],
   [shell({tray: trayTop({title:'Float', offline:'T3 not running', body:`<div class="notice info">${ic('power')}<div><b>T3 Code isn't running</b>Your draft is saved. Launch T3 and Float sends it.<div style="display:flex;gap:6px"><span class="btn pri">Launch T3</span><span class="btn ghost">Not now</span></div></div></div>`}),
      input: 'Summarise the diff in ~/repos/float since yesterday'}),
    `<b>7 · T3 closed.</b> The tray opens just to show the notice. Draft and images survive. The grey dot is the only status dot Float shows, and only while T3 or the thread's machine is disconnected.`],
