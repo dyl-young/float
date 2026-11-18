@@ -186,7 +186,7 @@ private struct ProjectPickerView: View {
         self.keyboard = keyboard
         self.resize = resize
         self.close = close
-        _highlightedID = State(initialValue: chat.selectedProjectID ?? Self.scratch)
+        _highlightedID = State(initialValue: chat.selectedProject?.id ?? Self.scratch)
     }
 
     private var filteredProjects: [T3Project] {
@@ -292,8 +292,9 @@ private struct ProjectPickerView: View {
     private func projectRow(
         id: String, title: String, subtitle: String, project: T3Project? = nil
     ) -> some View {
-        let isCurrent = project?.id == chat.selectedProjectID
-            || (project == nil && chat.selectedProjectID == nil)
+        let currentProjectID = chat.selectedProject?.id
+        let isCurrent = project?.id == currentProjectID
+            || (project == nil && currentProjectID == nil)
         return HStack(spacing: 8) {
             Image(systemName: project == nil ? "pencil" : "folder")
                 .font(.system(size: 11, weight: .medium))
