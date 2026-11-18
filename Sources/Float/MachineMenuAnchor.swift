@@ -74,6 +74,7 @@ private final class MachinePickerPanelController {
             styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false
         )
         panel.dismiss = { [weak self] in self?.close() }
+        panel.handleKey = { [weak self] in self?.handleKey($0) == true }
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
@@ -120,28 +121,30 @@ private final class MachinePickerPanelController {
     }
 
     private func installMonitors() {
+        // Keys go through the picker panel's own sendEvent (`handleKey`), as in the model
+        // picker. An app-wide key monitor misses them when Float isn't the active app.
         localMonitor = NSEvent.addLocalMonitorForEvents(
-            matching: [.leftMouseDown, .rightMouseDown, .keyDown]
+            matching: [.leftMouseDown, .rightMouseDown]
         ) { [weak self] event in
             guard let self else { return event }
-            if event.type == .keyDown, event.window === panel,
-               (panel.firstResponder as? NSTextView)?.hasMarkedText() != true {
-                let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
-                if modifiers.isEmpty {
-                    switch event.keyCode {
-                    case 125: keyboard.send(.move(1)); return nil
-                    case 126: keyboard.send(.move(-1)); return nil
-                    case 36, 76: keyboard.send(.pick); return nil
-                    default: break
-                    }
-                }
-            }
-            if event.type != .keyDown, event.window !== panel { close() }
+            if event.window !== panel { close() }
             return event
         }
         globalMonitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown]
         ) { [weak self] _ in self?.close() }
+    }
+
+    private func handleKey(_ event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
+        guard modifiers.isEmpty else { return false }
+        switch event.keyCode {
+        case 125: keyboard.send(.move(1))
+        case 126: keyboard.send(.move(-1))
+        case 36, 76: keyboard.send(.pick)
+        default: return false
+        }
+        return true
     }
 
     private func removeMonitors() {
