@@ -158,12 +158,10 @@ struct FloatView: View {
         }
         .padding(Self.contextPadding + Self.contextBorderWidth)
         .background {
+            // No SwiftUI shadow: in this transparent window, macOS traces its own window
+            // shadow around a soft shadow's edge and draws a ragged smear under the strip.
+            // The window shadow already outlines the strip, as it does the panel.
             ZStack {
-                // The mockup's shadow has a negative spread. Inset its source
-                // shape while keeping the strip fill and border at full size.
-                strip.inset(by: 12)
-                    .fill(Theme.tray)
-                    .shadow(color: Theme.canvas.opacity(0.55), radius: 13, y: 10)
                 if !reduceTransparency {
                     ContextStripBlur().clipShape(strip)
                 }
@@ -1034,10 +1032,12 @@ private struct QuestionCard: View {
         return Button {
             chat.selectQuestionOption(option)
         } label: {
-            HStack(alignment: .top, spacing: 9) {
+            // Centre the mark and key cap on the label's first line: a 12pt label's
+            // visual middle sits about 4.3pt above its baseline.
+            HStack(alignment: .firstTextBaseline, spacing: 9) {
                 selectionMark(selected: selected)
-                    .frame(width: 13, height: 13)
-                    .padding(.top, 1)
+                    .frame(width: 14, height: 14)
+                    .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4.3 }
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 0) {
@@ -1070,6 +1070,7 @@ private struct QuestionCard: View {
                         .foregroundStyle(Theme.text)
                         .frame(width: 18, height: 18)
                         .background(Theme.text.opacity(0.08), in: RoundedRectangle(cornerRadius: 5))
+                        .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4.3 }
                         .accessibilityHidden(true)
                 }
             }
