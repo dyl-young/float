@@ -9,6 +9,7 @@ public struct T3Client: Sendable {
     private struct Delivery: Decodable {
         let threadId: String?
         let link: URL?
+        let projectId: String?
         let runId: String
         let status: RunStatus
         let modelSelection: T3ModelSelection?
@@ -24,12 +25,15 @@ public struct T3Client: Sendable {
     }
 
     private let transport: MCPTransport
+    private let scratchRoot: URL
 
     public init(base: URL? = nil, executable: URL? = nil) {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let standardBase = home.appending(path: ".t3")
+        let resolvedBase = base ?? standardBase
+        scratchRoot = resolvedBase.appending(path: "scratch").resolvingSymlinksInPath()
         transport = MCPTransport(cli: LocalCLI(
-            base: base ?? standardBase,
+            base: resolvedBase,
             executable: executable ?? standardBase.appending(path: "bin/t3")
         ))
     }
@@ -69,7 +73,9 @@ public struct T3Client: Sendable {
                 projects.append(contentsOf: page.projects)
                 cursor = page.nextCursor
             } while cursor != nil
-            return projects.filter(\.isAvailable)
+            return projects.filter(\.isAvailable).filter {
+                URL(fileURLWithPath: $0.workspaceRoot).resolvingSymlinksInPath() != scratchRoot
+            }
         } catch let error as URLError where [
             .cannotConnectToHost, .networkConnectionLost, .notConnectedToInternet, .timedOut,
         ].contains(error.code) {
@@ -79,7 +85,7 @@ public struct T3Client: Sendable {
 
     public func send(
         _ text: String, images: [ImageAttachment], thread: ThreadReference?, requestId: UUID,
-        modelSelection: T3ModelSelection? = nil
+        modelSelection: T3ModelSelection? = nil, projectID: String? = nil
     ) async throws -> ThreadReceipt {
         let selection: T3ModelSelection?
         if thread == nil, modelSelection == nil {
@@ -129,19 +135,28 @@ public struct T3Client: Sendable {
                 guard let selection else { throw T3Error.invalidResponse }
                 let title = text.split(whereSeparator: \.isNewline).first.map { String($0.prefix(80)) }
                     ?? images.first?.name ?? "Float chat"
-                submitted = true
-                result = try await transport.call("t3_thread_launch", [
-                    "title": title, "scratch": true, "message": text, "attachments": uploads,
+                var arguments: [String: any Sendable] = [
+                    "title": title, "message": text, "attachments": uploads,
                     "runtimeMode": "approval-required", "interactionMode": "default",
                     "clientRequestId": requestId.uuidString,
                     "modelSelection": selection.arguments,
-                ], result: Delivery.self)
+                ]
+                if let projectID {
+                    arguments["projectId"] = projectID
+                } else {
+                    arguments["scratch"] = true
+                }
+                submitted = true
+                result = try await transport.call(
+                    "t3_thread_launch", arguments, result: Delivery.self
+                )
             }
             guard let id = result.threadId ?? thread?.threadId else { throw T3Error.invalidResponse }
             let reference = ThreadReference(threadId: id, link: result.link ?? thread?.link)
             return ThreadReceipt(
                 reference: reference, runId: result.runId, status: result.status,
-                modelSelection: result.modelSelection ?? selection
+                modelSelection: result.modelSelection ?? selection,
+                projectID: thread == nil && projectID != nil ? result.projectId ?? projectID : nil
             )
         } catch {
             if submitted {

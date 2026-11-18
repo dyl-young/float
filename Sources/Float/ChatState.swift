@@ -61,6 +61,7 @@ final class ChatState: ObservableObject {
     @Published private(set) var loadingProjects = false
     @Published private(set) var projectCatalogFailed = false
     @Published private(set) var selectedProjectID: String?
+    @Published private(set) var threadProjectID: String?
     @Published private var threadModel: T3ModelSelection?
     @Published private var nextModel: T3ModelSelection?
     @Published private var savedModel: T3ModelSelection?
@@ -115,6 +116,7 @@ final class ChatState: ObservableObject {
     var canStop: Bool { showsStop && !stopping }
     var canSend: Bool {
         !submitting && !stopping && !loading && status != .running && status != .waiting &&
+            (reference != nil || !loadingProjects) &&
             (!draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !images.isEmpty)
     }
 
@@ -146,6 +148,12 @@ final class ChatState: ObservableObject {
     }
 
     var projectLabel: String { selectedProject?.title ?? "No project" }
+
+    var threadProject: T3Project? {
+        projects.first { $0.id == threadProjectID }
+    }
+
+    var threadProjectLabel: String { threadProject?.title ?? "No project" }
 
     var canChooseProject: Bool {
         reference == nil && !submitting && !loading
@@ -282,6 +290,7 @@ final class ChatState: ObservableObject {
         draft = ""
         images = []
         reference = nil
+        threadProjectID = nil
         threadModel = nil
         nextModel = nil
         messages = []
@@ -394,6 +403,7 @@ final class ChatState: ObservableObject {
         let attachments = images
         let request = UUID()
         let target = reference
+        let projectID = target == nil ? selectedProject?.id : nil
         let selection = selectedModel.map(selectionForSend)
         clearNotice()
         needsT3 = false
@@ -406,9 +416,11 @@ final class ChatState: ObservableObject {
         Task {
             do {
                 let receipt = try await client.send(
-                    text, images: attachments, thread: target, requestId: request, modelSelection: selection
+                    text, images: attachments, thread: target, requestId: request,
+                    modelSelection: selection, projectID: projectID
                 )
                 reference = receipt.reference
+                if target == nil { threadProjectID = receipt.projectID }
                 threadModel = receipt.modelSelection ?? threadModel
                 nextModel = nil
                 if !attachments.isEmpty {
@@ -568,6 +580,7 @@ final class ChatState: ObservableObject {
                     updateFailure(from: page)
                     if status != .running { stopAcknowledged = false }
                     title = page.thread.title
+                    threadProjectID = page.thread.projectId
                     threadModel = page.thread.modelSelection ?? threadModel
                     loading = false
                     connectionFailures = 0

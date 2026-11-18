@@ -260,6 +260,7 @@ public struct ThreadReceipt: Sendable {
     public let runId: String
     public let status: RunStatus
     public let modelSelection: T3ModelSelection?
+    public let projectID: String?
 }
 
 public enum RunStatus: Equatable, Sendable {
@@ -292,6 +293,7 @@ public struct ThreadSnapshot: Decodable, Sendable {
     }
 
     public struct Thread: Decodable, Sendable {
+        public let projectId: String
         public let title: String
         public let status: RunStatus
         public let pendingRequestCount: Int

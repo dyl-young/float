@@ -253,10 +253,16 @@ struct FloatView: View {
                         .foregroundStyle(Theme.text)
                         .lineLimit(1)
                         .accessibilityAddTraits(.isHeader)
-                    Text(chat.needsT3 ? "T3 not running" : "No project")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.muted)
-                        .fixedSize()
+                    HStack(spacing: 4) {
+                        if chat.threadProject != nil {
+                            Image(systemName: "folder")
+                                .font(.system(size: 10, weight: .medium))
+                        }
+                        Text(chat.threadProjectLabel)
+                            .font(.system(size: 11))
+                    }
+                    .foregroundStyle(Theme.muted)
+                    .fixedSize()
                 }
                 Spacer(minLength: 8)
             }
