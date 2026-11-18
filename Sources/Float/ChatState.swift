@@ -103,6 +103,7 @@ final class ChatState: ObservableObject {
 
     private let defaults: UserDefaults
     private let client: T3Client
+    let projectFaviconCache: ProjectFaviconCache
     private let favouritesStore: T3ModelFavouritesStore
     @Published private var modelEfforts: T3ModelEfforts
     private var pickedCatalogModel: T3Model?
@@ -124,6 +125,7 @@ final class ChatState: ObservableObject {
     ) {
         self.defaults = defaults
         self.client = client
+        projectFaviconCache = ProjectFaviconCache(client: client)
         self.favouritesStore = favouritesStore ?? T3ModelFavouritesStore(
             settingsURL: FileManager.default.homeDirectoryForCurrentUser
                 .appending(path: ".t3/userdata/settings.json")

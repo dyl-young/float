@@ -90,7 +90,7 @@ private final class ProjectPickerPanelController {
         let height = 42 + min(228, rows)
         let host = NSHostingView(rootView: ProjectPickerView(
             chat: chat, keyboard: keyboard, height: height, close: { [weak self] in self?.close() }
-        ))
+        ).environment(\.projectFaviconCache, chat.projectFaviconCache))
         host.sizingOptions = []
         panel.contentView = host
 
@@ -303,10 +303,14 @@ private struct ProjectPickerView: View {
         let isCurrent = project?.id == currentProjectID
             || (project == nil && currentProjectID == nil)
         return HStack(spacing: 8) {
-            Image(systemName: project == nil ? "pencil" : "folder")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(Theme.muted)
-                .frame(width: 13)
+            if let project {
+                ProjectIconView(project: project, environmentID: chat.selectedMachineEnvironmentID, size: 13)
+            } else {
+                Image(systemName: "pencil")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Theme.muted)
+                    .frame(width: 13, height: 13)
+            }
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
                     .font(.system(size: 12))

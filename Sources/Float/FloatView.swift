@@ -66,6 +66,7 @@ struct FloatView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .preferredColorScheme(.dark)
+        .environment(\.projectFaviconCache, chat.projectFaviconCache)
         .onChange(of: trayVisible, initial: true) { resize(compactHeight, trayVisible) }
         .task(id: composerMenu.trigger == nil ? nil : chat.composerInventoryTarget) {
             if composerMenu.trigger != nil, let target = chat.composerInventoryTarget {
@@ -139,7 +140,7 @@ struct FloatView: View {
             if chat.showsMachinePicker {
                 ContextChip(
                     title: chat.machineLabel,
-                    icon: chat.selectedMachine?.isLocal == false ? "server.rack" : "laptopcomputer",
+                    icon: .symbol(chat.selectedMachine?.isLocal == false ? "server.rack" : "laptopcomputer"),
                     isOpen: isMachinePickerOpen,
                     action: chat.requestMachinePicker
                 )
@@ -154,7 +155,8 @@ struct FloatView: View {
 
             ContextChip(
                 title: chat.projectLabel,
-                icon: chat.selectedProject == nil ? "pencil" : "folder",
+                icon: chat.selectedProject.map { .project($0, environmentID: chat.selectedMachineEnvironmentID) }
+                    ?? .symbol("pencil"),
                 isOpen: isProjectPickerOpen,
                 action: chat.requestProjectPicker
             )
@@ -308,7 +310,10 @@ struct FloatView: View {
                 }
                 if let project = chat.threadProjectLabel {
                     HStack(spacing: 5) {
-                        HeaderProjectIcon(project: chat.threadProject, isLocal: chat.threadHeaderEnvironmentID == nil)
+                        ProjectIconView(
+                            project: chat.threadProject, environmentID: chat.threadHeaderEnvironmentID,
+                            size: 11, fallbackTitle: project
+                        )
                         Text(chat.threadMachineName.map { "\(project) · \($0)" } ?? project)
                             .lineLimit(1)
                     }
@@ -857,8 +862,13 @@ private struct ModelButton: View {
 private struct ContextChip: View {
     static let height: CGFloat = 22
 
+    enum Icon {
+        case symbol(String)
+        case project(T3Project, environmentID: String?)
+    }
+
     let title: String
-    let icon: String
+    let icon: Icon
     let isOpen: Bool
     let action: () -> Void
 
@@ -866,9 +876,14 @@ private struct ContextChip: View {
         let pill = RoundedRectangle(cornerRadius: 9)
         Button(action: action) {
             HStack(spacing: 5) {
-                Image(systemName: icon)
-                    .font(.system(size: 12, weight: .regular))
-                    .frame(width: 12, height: 12)
+                switch icon {
+                case .symbol(let name):
+                    Image(systemName: name)
+                        .font(.system(size: 12, weight: .regular))
+                        .frame(width: 12, height: 12)
+                case .project(let project, let environmentID):
+                    ProjectIconView(project: project, environmentID: environmentID, size: 12)
+                }
                 Text(title)
                     .font(.system(size: 11.5, weight: .regular))
                     .lineLimit(1)
