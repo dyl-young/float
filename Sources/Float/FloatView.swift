@@ -115,6 +115,14 @@ struct FloatView: View {
 
     private var projectContextRow: some View {
         HStack(spacing: 0) {
+            if chat.showsMachinePicker {
+                MachineContextButton(chat: chat)
+                    .background(MachineMenuAnchor(chat: chat, request: chat.machinePickerRequest))
+                Rectangle()
+                    .fill(Theme.border)
+                    .frame(width: 1, height: 12)
+                    .padding(.horizontal, 3)
+            }
             ProjectContextButton(chat: chat)
                 .background(ProjectMenuAnchor(chat: chat, request: chat.projectPickerRequest))
             Spacer(minLength: 0)
@@ -820,6 +828,43 @@ private struct ProjectContextButton: View {
         .help("Choose project · ⇧⌘P")
         .accessibilityLabel("Project")
         .accessibilityValue(chat.projectLabel)
+        .onHover { hovered = $0 }
+    }
+}
+
+private struct MachineContextButton: View {
+    @ObservedObject var chat: ChatState
+    @Environment(\.isEnabled) private var enabled
+    @State private var hovered = false
+
+    var body: some View {
+        Button(action: chat.requestMachinePicker) {
+            HStack(spacing: 5) {
+                Image(systemName: chat.selectedMachine?.isLocal == false ? "server.rack" : "laptopcomputer")
+                    .font(.system(size: 10.5, weight: .medium))
+                    .frame(width: 12)
+                Text(chat.machineLabel)
+                    .font(.system(size: 11.5))
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+                    .opacity(0.7)
+            }
+            .foregroundStyle(enabled ? Theme.muted : Theme.muted.opacity(0.5))
+            .padding(.horizontal, 7)
+            .frame(height: 22)
+            .background(
+                hovered && enabled ? Theme.text.opacity(0.07) : .clear,
+                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+        .disabled(!chat.canChooseMachine)
+        .help("Choose machine · ⇧⌘R")
+        .accessibilityLabel("Run on")
+        .accessibilityValue(chat.machineLabel)
         .onHover { hovered = $0 }
     }
 }

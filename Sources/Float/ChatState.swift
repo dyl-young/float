@@ -52,6 +52,7 @@ final class ChatState: ObservableObject {
     @Published private(set) var focusRequest = 0
     @Published private(set) var modelPickerRequest = 0
     @Published private(set) var projectPickerRequest = 0
+    @Published private(set) var machinePickerRequest = 0
     @Published private(set) var models: [T3Model] = []
     @Published private(set) var modelProviders: [T3ModelProvider] = []
     @Published private(set) var favouriteModelKeys: Set<T3ModelKey> = []
@@ -62,6 +63,9 @@ final class ChatState: ObservableObject {
     @Published private(set) var projectCatalogFailed = false
     @Published private(set) var selectedProjectID: String?
     @Published private(set) var threadProjectID: String?
+    @Published private(set) var machines: [T3Machine] = []
+    @Published private(set) var loadingMachines = false
+    @Published private(set) var selectedMachineID: String?
     @Published private var threadModel: T3ModelSelection?
     @Published private var nextModel: T3ModelSelection?
     @Published private var savedModel: T3ModelSelection?
@@ -97,6 +101,7 @@ final class ChatState: ObservableObject {
         modelEfforts = defaults.dictionary(forKey: "modelEfforts") as? [String: String] ?? [:]
         draft = defaults.string(forKey: "draft") ?? ""
         selectedProjectID = defaults.string(forKey: "preferredProjectID")
+        selectedMachineID = defaults.string(forKey: "preferredMachineID")
         if let data = defaults.data(forKey: "preferredModel") {
             savedModel = try? JSONDecoder().decode(T3ModelSelection.self, from: data)
         }
@@ -159,12 +164,28 @@ final class ChatState: ObservableObject {
         reference == nil && !submitting && !loading
     }
 
+    var selectedMachine: T3Machine? {
+        machines.first { $0.id == selectedMachineID } ?? machines.first(where: \.isLocal)
+    }
+
+    var machineLabel: String { selectedMachine?.name ?? "This Mac" }
+
+    var showsMachinePicker: Bool { machines.count > 1 }
+
+    var canChooseMachine: Bool {
+        reference == nil && !submitting && !loading && !loadingMachines
+    }
+
     func requestModelPicker() {
         if canChooseModel { modelPickerRequest += 1 }
     }
 
     func requestProjectPicker() {
         if canChooseProject { projectPickerRequest += 1 }
+    }
+
+    func requestMachinePicker() {
+        if canChooseMachine, showsMachinePicker { machinePickerRequest += 1 }
     }
 
     func reloadModels() {
@@ -215,6 +236,35 @@ final class ChatState: ObservableObject {
         guard canChooseProject else { return }
         selectedProjectID = project?.id
         defaults.set(selectedProjectID, forKey: "preferredProjectID")
+        focusRequest += 1
+    }
+
+    func reloadMachines() {
+        guard !loadingMachines else { return }
+        loadingMachines = true
+        Task {
+            defer { loadingMachines = false }
+            do {
+                machines = try await client.machines()
+            } catch {
+                machines = [
+                    T3Machine(
+                        id: "__float_local__", name: "This Mac", kind: .local,
+                        status: .reachable
+                    ),
+                ]
+            }
+            selectedMachineID = T3MachinePicker.resolvedID(
+                selectedMachineID, machines: machines
+            )
+            defaults.set(selectedMachineID, forKey: "preferredMachineID")
+        }
+    }
+
+    func selectMachine(_ machine: T3Machine) {
+        guard canChooseMachine, machine.isOnline else { return }
+        selectedMachineID = machine.id
+        defaults.set(machine.id, forKey: "preferredMachineID")
         focusRequest += 1
     }
 
@@ -277,6 +327,7 @@ final class ChatState: ObservableObject {
             Task { await reloadFavourites() }
         }
         if projects.isEmpty { reloadProjects() }
+        if machines.isEmpty { reloadMachines() }
         if let reference { refresh(reference, force: watcher == nil) }
     }
 
@@ -331,6 +382,14 @@ final class ChatState: ObservableObject {
     func openProviderSettings(_ instanceId: String) {
         let encoded = instanceId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? instanceId
         if let url = URL(string: "t3code://app/settings/providers?instanceId=\(encoded)"),
+            NSWorkspace.shared.open(url) {
+            return
+        }
+        launchT3()
+    }
+
+    func openMachineSettings() {
+        if let url = URL(string: "t3code://app/settings/connections"),
             NSWorkspace.shared.open(url) {
             return
         }

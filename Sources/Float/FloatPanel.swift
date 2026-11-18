@@ -6,6 +6,7 @@ final class FloatPanel: NSPanel {
     var startNewChat: (() -> Void)?
     var openModelPicker: (() -> Void)?
     var openProjectPicker: (() -> Void)?
+    var openMachinePicker: (() -> Void)?
     var stopRun: (() -> Void)?
 
     override var canBecomeKey: Bool { true }
@@ -22,6 +23,9 @@ final class FloatPanel: NSPanel {
             return true
         case ("p", [.command, .shift]):
             if !event.isARepeat { openProjectPicker?() }
+            return true
+        case ("r", [.command, .shift]):
+            if !event.isARepeat { openMachinePicker?() }
             return true
         case (".", .command):
             if !event.isARepeat { stopRun?() }

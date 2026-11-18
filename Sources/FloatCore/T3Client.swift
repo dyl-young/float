@@ -23,6 +23,16 @@ public struct T3Client: Sendable {
         let projects: [T3Project]
         let nextCursor: Int?
     }
+    private struct EnvironmentLinks: Decodable {
+        struct Link: Decodable {
+            let environmentId: String
+            let label: String
+            let status: T3Machine.Status
+        }
+
+        let environmentId: String
+        let links: [Link]
+    }
 
     private let transport: MCPTransport
     private let scratchRoot: URL
@@ -59,13 +69,43 @@ public struct T3Client: Sendable {
         try await modelCatalogue().available
     }
 
-    public func projects() async throws -> [T3Project] {
+    public func machines() async throws -> [T3Machine] {
+        do {
+            let response = try await transport.call(
+                "t3_environment_links", [:], result: EnvironmentLinks.self,
+                retryExpiredSession: true
+            )
+            var machines = [
+                T3Machine(
+                    id: response.environmentId, name: "This Mac", kind: .local,
+                    status: .reachable
+                ),
+            ]
+            for link in response.links {
+                let count = link.status == .reachable
+                    ? try? await projects(environmentID: link.environmentId).count
+                    : nil
+                machines.append(T3Machine(
+                    id: link.environmentId, name: link.label, kind: .linked,
+                    status: link.status, projectCount: count
+                ))
+            }
+            return T3MachinePicker.ordered(machines)
+        } catch let error as URLError where [
+            .cannotConnectToHost, .networkConnectionLost, .notConnectedToInternet, .timedOut,
+        ].contains(error.code) {
+            throw T3Error.serverUnavailable
+        }
+    }
+
+    public func projects(environmentID: String? = nil) async throws -> [T3Project] {
         do {
             var projects: [T3Project] = []
             var cursor: Int?
             repeat {
                 var arguments: [String: any Sendable] = ["limit": 100]
                 arguments["cursor"] = cursor
+                arguments["environmentId"] = environmentID
                 let page = try await transport.call(
                     "t3_project_list", arguments, result: ProjectPage.self,
                     retryExpiredSession: true
@@ -74,7 +114,8 @@ public struct T3Client: Sendable {
                 cursor = page.nextCursor
             } while cursor != nil
             return projects.filter(\.isAvailable).filter {
-                URL(fileURLWithPath: $0.workspaceRoot).resolvingSymlinksInPath() != scratchRoot
+                environmentID != nil
+                    || URL(fileURLWithPath: $0.workspaceRoot).resolvingSymlinksInPath() != scratchRoot
             }
         } catch let error as URLError where [
             .cannotConnectToHost, .networkConnectionLost, .notConnectedToInternet, .timedOut,
