@@ -72,7 +72,8 @@ final class FloatPanel: EditingPanel {
     }
 
     private var drag: Drag?
-    var isResizing: Bool { drag != nil }
+    private var applyingResize = false
+    var isResizing: Bool { drag != nil || applyingResize }
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
@@ -122,6 +123,18 @@ final class FloatPanel: EditingPanel {
 }
 
 extension FloatPanel {
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
+        // During a resize AppKit may reposition the window to keep it onscreen.
+        // The drag owns its bottom edge and the side opposite the pointer.
+        applyingResize ? frameRect : super.constrainFrameRect(frameRect, to: screen)
+    }
+
+    private func applyResize(_ frame: NSRect) {
+        applyingResize = true
+        defer { applyingResize = false }
+        setFrame(frame, display: true)
+    }
+
     private func handleResize(_ event: NSEvent, sizing: PanelSizing) -> Bool {
         let visibleHeight = screen?.visibleFrame.height ?? 1_000
         switch event.type {
@@ -135,7 +148,7 @@ extension FloatPanel {
                 sizing.reset()
                 var resetFrame = frame
                 resetFrame.size = CGSize(width: sizing.width, height: sizing.height(on: visibleHeight))
-                setFrame(resetFrame, display: true)
+                applyResize(resetFrame)
             } else {
                 drag = Drag(zone: zone, frame: frame, pointer: convertPoint(toScreen: point))
             }
@@ -155,7 +168,7 @@ extension FloatPanel {
             case .topRight:
                 next.size.width = CGFloat(PanelWidthLimits.clamp(Double(drag.frame.width + dx)))
             }
-            setFrame(next, display: true)
+            applyResize(next)
             return true
         case .leftMouseUp:
             guard drag != nil else { return false }

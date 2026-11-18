@@ -60,7 +60,8 @@ private final class FloatApp: NSObject, NSApplicationDelegate, NSWindowDelegate 
     private func show() {
         let panel = self.panel ?? makePanel()
         let pointer = NSEvent.mouseLocation
-        if let screen = NSScreen.screens.first(where: { $0.frame.contains(pointer) }) ?? NSScreen.main {
+        if !trayVisible || !positioned,
+           let screen = NSScreen.screens.first(where: { $0.frame.contains(pointer) }) ?? NSScreen.main {
             if panel.screen != screen { positioned = false }
             layout(on: screen)
         }
@@ -153,7 +154,7 @@ private final class FloatApp: NSObject, NSApplicationDelegate, NSWindowDelegate 
     }
 
     func windowDidChangeScreen(_ notification: Notification) {
-        guard let screen = panel?.screen else { return }
+        guard !trayVisible, let screen = panel?.screen else { return }
         layout(on: screen)
     }
 
