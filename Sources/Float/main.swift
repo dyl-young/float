@@ -17,7 +17,7 @@ private final class FloatApp: NSObject, NSApplicationDelegate, NSWindowDelegate 
     private var approvalMenuItem: NSMenuItem?
     private var hotKey: EventHotKeyRef?
     private var hotKeyHandler: EventHandlerRef?
-    private var compactHeight: CGFloat = 79
+    private var compactHeight: CGFloat = 86 + FloatView.contextRowHeight
     private var trayVisible = false
     private var positioned = false
     private var shuttingDown = false
@@ -124,23 +124,32 @@ private final class FloatApp: NSObject, NSApplicationDelegate, NSWindowDelegate 
     private func resize(to height: CGFloat, trayVisible: Bool) {
         let animate = self.trayVisible != trayVisible
         guard animate || (!trayVisible && height != compactHeight) else { return }
+        let previousTrayVisible = self.trayVisible
         self.trayVisible = trayVisible
         if !trayVisible { compactHeight = height }
         panel?.resizeEnabled = trayVisible
         if let screen = panel?.screen ?? NSScreen.main {
-            layout(on: screen, animated: animate)
+            layout(on: screen, animated: animate, previousTrayVisible: previousTrayVisible)
         }
     }
 
-    private func layout(on screen: NSScreen, animated: Bool = false) {
+    private func layout(
+        on screen: NSScreen, animated: Bool = false, previousTrayVisible: Bool? = nil
+    ) {
         guard let panel, !panel.isResizing else { return }
         let visible = screen.visibleFrame.insetBy(dx: 12, dy: 12)
         let trayHeight = sizing.height(on: screen.visibleFrame.height)
-        let width = min(trayVisible ? sizing.width : Self.panelWidth, visible.width)
+        let sideInset = trayVisible ? 0 : FloatView.contextShadowSides
+        let bottomInset = trayVisible ? 0 : FloatView.contextRowHeight
+        let wasExpanded = previousTrayVisible ?? trayVisible
+        let previousSideInset = wasExpanded ? 0 : FloatView.contextShadowSides
+        let previousBottomInset = wasExpanded ? 0 : FloatView.contextRowHeight
+        let width = min(trayVisible ? sizing.width : Self.panelWidth + 2 * sideInset, visible.width)
         let height = min(trayVisible ? trayHeight : compactHeight, visible.height)
-        let x = positioned ? panel.frame.minX : visible.midX - width / 2
-        let proposedBottom = positioned ? panel.frame.minY
-            : min(visible.midY + visible.height * 0.10, visible.maxY - trayHeight)
+        // Anchor the composer itself as the strip's transparent window margins come and go.
+        let x = positioned ? panel.frame.minX + previousSideInset - sideInset : visible.midX - width / 2
+        let proposedBottom = positioned ? panel.frame.minY + previousBottomInset - bottomInset
+            : min(visible.midY + visible.height * 0.10, visible.maxY - trayHeight) - bottomInset
         let bottom = min(max(proposedBottom, visible.minY), visible.maxY - height)
         let rect = NSRect(
             x: min(max(x, visible.minX), visible.maxX - width),

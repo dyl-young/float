@@ -13,6 +13,8 @@ struct FloatView: View {
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.displayScale) private var displayScale
+    @State private var isMachinePickerOpen = false
+    @State private var isProjectPickerOpen = false
     @State private var editorHeight: CGFloat = 28
     @State private var inputHeight: CGFloat = 44
     @State private var composerHeight: CGFloat = 86
@@ -25,7 +27,13 @@ struct FloatView: View {
 
     private static let headerHeight: CGFloat = 38
     private static let headerFadeHeight: CGFloat = 14
-    private static let contextRowHeight: CGFloat = 30
+    private static let contextGap: CGFloat = 6
+    private static let contextShadowBottom: CGFloat = 36
+    private static let contextPadding: CGFloat = 3
+    private static let contextBorderWidth: CGFloat = 1
+    static let contextShadowSides: CGFloat = 26
+    static let contextRowHeight = contextGap + ContextChip.height
+        + 2 * (contextPadding + contextBorderWidth) + contextShadowBottom
     private nonisolated static let shellSpace = "Float shell"
     private static let latest = "Latest message"
     private static let headerButtonSize: CGFloat = 24
@@ -44,10 +52,11 @@ struct FloatView: View {
 
     var body: some View {
         let trayVisible = showsTray
-        VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 0) {
             shell
-            if showsContextRow { projectContextRow }
+            if showsContextRow { contextStrip }
         }
+        .padding(.horizontal, trayVisible ? 0 : Self.contextShadowSides)
         .fixedSize(horizontal: false, vertical: !trayVisible)
         .onGeometryChange(for: CGFloat?.self, of: { geometry in
             trayVisible ? nil : ceil(geometry.size.height)
@@ -114,19 +123,61 @@ struct FloatView: View {
         .frame(maxWidth: .infinity)
     }
 
-    private var projectContextRow: some View {
-        HStack(spacing: 12) {
+    private var contextStrip: some View {
+        let strip = RoundedRectangle(cornerRadius: 12)
+        return HStack(spacing: 4) {
             if chat.showsMachinePicker {
-                MachineContextButton(chat: chat)
-                    .background(MachineMenuAnchor(chat: chat, request: chat.machinePickerRequest))
+                ContextChip(
+                    title: chat.machineLabel,
+                    icon: chat.selectedMachine?.isLocal == false ? "server.rack" : "laptopcomputer",
+                    isOpen: isMachinePickerOpen,
+                    action: chat.requestMachinePicker
+                )
+                .disabled(!chat.canChooseMachine)
+                .help("Choose machine · ⇧⌘H")
+                .accessibilityLabel("Run on")
+                .accessibilityValue(chat.machineLabel)
+                .background(MachineMenuAnchor(
+                    chat: chat, request: chat.machinePickerRequest, isPresented: $isMachinePickerOpen
+                ))
             }
-            ProjectContextButton(chat: chat)
-                .background(ProjectMenuAnchor(chat: chat, request: chat.projectPickerRequest))
-            Spacer(minLength: 0)
+
+            ContextChip(
+                title: chat.projectLabel,
+                icon: chat.selectedProject == nil ? "pencil" : "folder",
+                isOpen: isProjectPickerOpen,
+                action: chat.requestProjectPicker
+            )
+            .disabled(!chat.canChooseProject)
+            .help("Choose project · ⇧⌘P")
+            .accessibilityLabel("Project")
+            .accessibilityValue(chat.projectLabel)
+            .background(ProjectMenuAnchor(
+                chat: chat, request: chat.projectPickerRequest, isPresented: $isProjectPickerOpen
+            ))
         }
-        .padding(.horizontal, 8)
-        .padding(.top, 8)
-        .frame(height: Self.contextRowHeight, alignment: .top)
+        .padding(Self.contextPadding + Self.contextBorderWidth)
+        .background {
+            ZStack {
+                // The mockup's shadow has a negative spread. Inset its source
+                // shape while keeping the strip fill and border at full size.
+                strip.inset(by: 12)
+                    .fill(Theme.tray)
+                    .shadow(color: Theme.canvas.opacity(0.55), radius: 13, y: 10)
+                if !reduceTransparency {
+                    ContextStripBlur().clipShape(strip)
+                }
+                strip.fill(Theme.tray.opacity(reduceTransparency ? 1 : 0.94))
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
+        .overlay {
+            strip.strokeBorder(Theme.hairline, lineWidth: Self.contextBorderWidth)
+                .allowsHitTesting(false)
+        }
+        .padding(.top, Self.contextGap)
+        .padding(.bottom, Self.contextShadowBottom)
     }
 
     @ViewBuilder private var inputBackdrop: some View {
@@ -790,66 +841,49 @@ private struct ModelButton: View {
     }
 }
 
-private struct ProjectContextButton: View {
-    @ObservedObject var chat: ChatState
-    @Environment(\.isEnabled) private var enabled
+private struct ContextChip: View {
+    static let height: CGFloat = 22
+
+    let title: String
+    let icon: String
+    let isOpen: Bool
+    let action: () -> Void
 
     var body: some View {
-        Button(action: chat.requestProjectPicker) {
+        let pill = RoundedRectangle(cornerRadius: 9)
+        Button(action: action) {
             HStack(spacing: 5) {
-                Image(systemName: chat.selectedProject == nil ? "pencil" : "folder")
-                    .font(.system(size: 10.5, weight: .medium))
-                    .frame(width: 12)
-                Text(chat.projectLabel)
-                    .font(.system(size: 11.5))
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .regular))
+                    .frame(width: 12, height: 12)
+                Text(title)
+                    .font(.system(size: 11.5, weight: .regular))
                     .lineLimit(1)
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .bold))
+                    .font(.system(size: 9, weight: .regular))
+                    .frame(width: 9, height: 9)
                     .opacity(0.7)
             }
-            .foregroundStyle(enabled ? Theme.muted : Theme.muted.opacity(0.5))
-            .padding(.horizontal, 7)
-            .frame(height: 22)
-            .contentShape(Rectangle())
+            .foregroundStyle(isOpen ? Theme.text : Theme.muted)
+            .padding(.horizontal, 8)
+            .frame(height: Self.height)
+            .background(isOpen ? Theme.selection : .clear, in: pill)
+            .contentShape(pill)
         }
-        .floatButtonStyle(in: RoundedRectangle(cornerRadius: 9))
-        .fixedSize()
-        .disabled(!chat.canChooseProject)
-        .help("Choose project · ⇧⌘P")
-        .accessibilityLabel("Project")
-        .accessibilityValue(chat.projectLabel)
+        .floatButtonStyle(in: pill, highlight: isOpen ? .none : .background)
     }
 }
 
-private struct MachineContextButton: View {
-    @ObservedObject var chat: ChatState
-    @Environment(\.isEnabled) private var enabled
-
-    var body: some View {
-        Button(action: chat.requestMachinePicker) {
-            HStack(spacing: 5) {
-                Image(systemName: chat.selectedMachine?.isLocal == false ? "server.rack" : "laptopcomputer")
-                    .font(.system(size: 10.5, weight: .medium))
-                    .frame(width: 12)
-                Text(chat.machineLabel)
-                    .font(.system(size: 11.5))
-                    .lineLimit(1)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .bold))
-                    .opacity(0.7)
-            }
-            .foregroundStyle(enabled ? Theme.muted : Theme.muted.opacity(0.5))
-            .padding(.horizontal, 7)
-            .frame(height: 22)
-            .contentShape(Rectangle())
-        }
-        .floatButtonStyle(in: RoundedRectangle(cornerRadius: 9))
-        .fixedSize()
-        .disabled(!chat.canChooseMachine)
-        .help("Choose machine · ⇧⌘H")
-        .accessibilityLabel("Run on")
-        .accessibilityValue(chat.machineLabel)
+private struct ContextStripBlur: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .popover
+        view.blendingMode = .behindWindow
+        view.state = .active
+        return view
     }
+
+    func updateNSView(_ view: NSVisualEffectView, context: Context) {}
 }
 
 private struct NoticeAction {

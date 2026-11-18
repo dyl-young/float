@@ -5,6 +5,7 @@ import SwiftUI
 struct MachineMenuAnchor: NSViewRepresentable {
     let chat: ChatState
     let request: Int
+    @Binding var isPresented: Bool
 
     func makeNSView(context: Context) -> Anchor { Anchor(request: request) }
 
@@ -15,8 +16,12 @@ struct MachineMenuAnchor: NSViewRepresentable {
             guard let anchor, let chat, anchor.request == request, chat.canChooseMachine,
                 anchor.window?.isKeyWindow == true
             else { return }
-            anchor.showMenu(for: chat)
+            anchor.showMenu(for: chat, isPresented: $isPresented)
         }
+    }
+
+    static func dismantleNSView(_ anchor: Anchor, coordinator: ()) {
+        DispatchQueue.main.async { anchor.closePicker() }
     }
 
     final class Anchor: NSView {
@@ -33,12 +38,18 @@ struct MachineMenuAnchor: NSViewRepresentable {
 
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
-        func showMenu(for chat: ChatState) {
-            picker?.close()
+        func closePicker() { picker?.close() }
+
+        func showMenu(for chat: ChatState, isPresented: Binding<Bool>) {
+            closePicker()
             guard let window else { return }
             let controller = MachinePickerPanelController(anchor: self, parent: window, chat: chat)
             picker = controller
-            controller.show { [weak self] in self?.picker = nil }
+            controller.show { [weak self] in
+                self?.picker = nil
+                isPresented.wrappedValue = false
+            }
+            isPresented.wrappedValue = true
         }
     }
 }
