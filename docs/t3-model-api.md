@@ -86,3 +86,77 @@ desktop app handles its custom URL, for example:
 
 Float can open that deep link for a disabled provider. If opening it fails,
 Float should fall back to launching T3 Code.
+
+## Projects
+
+### Listing local projects
+
+Float can list projects on the Mac running Float with the read-only MCP tool
+`t3_project_list`. Omit `environmentId` for the local environment. The call
+accepts optional integer `cursor` and `limit` arguments. `limit` is clamped to
+100 and defaults to 20, so Float must follow `nextCursor` until it is `null`.
+
+The result is:
+
+```json
+{
+  "projects": [
+    {
+      "id": "project-id",
+      "title": "float",
+      "workspaceRoot": "/Users/dylanyoung/repos/dev/float",
+      "archivedAt": null,
+      "deletedAt": null
+    }
+  ],
+  "nextCursor": null
+}
+```
+
+Each project also carries repository identity, icon, model default, scripts,
+pinning and timestamps. `archivedAt` is the archive signal. The list excludes
+deleted projects, so `deletedAt` is `null` for listed rows. There is no field
+that says whether `workspaceRoot` still exists on disk. Float should omit
+archived projects from the picker and handle a launch failure if a saved
+project or its workspace has disappeared.
+
+### Launching in a project
+
+Float already launches new threads with `t3_thread_launch`. To launch in a
+project, pass its `id` as `projectId`, omit `scratch`, and do not pass
+`workspaceStrategy`. An omitted workspace strategy becomes `{ "type": "root" }`
+inside T3, which binds the thread to the registered project checkout. Float
+must not ask for a branch or worktree and must not create either one.
+
+The QA launch should make this call, substituting a real small-project ID and a
+cheap advertised model:
+
+```json
+{
+  "name": "t3_thread_launch",
+  "arguments": {
+    "title": "Float project picker QA",
+    "projectId": "<project-id>",
+    "message": "Reply with the current working directory only.",
+    "runtimeMode": "approval-required",
+    "interactionMode": "default",
+    "clientRequestId": "<new-uuid>",
+    "modelSelection": {
+      "instanceId": "<provider-instance-id>",
+      "model": "<cheap-model-id>"
+    }
+  }
+}
+```
+
+This deliberately has no `scratch` or `workspaceStrategy`. The successful
+result includes `threadId`, `projectId`, `modelSelection`, `runId`, `status`
+and usually `link`.
+
+### Reading an existing thread
+
+`t3_thread_read` returns the owning project as `thread.projectId`. It does not
+include the project title or workspace path. Float must resolve that ID against
+`t3_project_list` or `t3_project_read` and use the matching title in the
+header. The thread read also exposes `branch` and `worktreePath`, but Float
+does not show or change them.
