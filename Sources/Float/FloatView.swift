@@ -997,6 +997,7 @@ private struct QuestionCard: View {
 
     private func optionRow(_ option: T3Question.Option, index: Int) -> some View {
         let selected = chat.isQuestionOptionSelected(option)
+        let description = option.displayDescription
         return Button {
             chat.selectQuestionOption(option)
         } label: {
@@ -1014,8 +1015,8 @@ private struct QuestionCard: View {
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(Theme.text)
                         .fixedSize(horizontal: false, vertical: true)
-                    if !option.description.isEmpty {
-                        Text(option.description)
+                    if let description {
+                        Text(description)
                             .font(.system(size: 11))
                             .foregroundStyle(Theme.muted)
                             .fixedSize(horizontal: false, vertical: true)
@@ -1041,7 +1042,9 @@ private struct QuestionCard: View {
         .disabled(chat.answeringQuestion)
         .padding(.horizontal, -3)
         .onHover { hoveredOption = $0 ? index : nil }
-        .accessibilityLabel("\(index + 1), \(option.label), \(option.description)")
+        .accessibilityLabel(
+            ["\(index + 1)", option.label, description].compactMap { $0 }.joined(separator: ", ")
+        )
         .accessibilityValue(selected ? "Selected" : "Not selected")
     }
 }

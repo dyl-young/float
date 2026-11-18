@@ -1,5 +1,24 @@
 import Foundation
 
+extension T3Question.Option {
+    public var displayDescription: String? {
+        let text = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalized = Self.normalizedForComparison(text)
+        guard !normalized.isEmpty, !Self.normalizedForComparison(label).hasPrefix(normalized) else {
+            return nil
+        }
+        return text
+    }
+
+    private static func normalizedForComparison(_ text: String) -> String {
+        var normalized = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        while let last = normalized.last, last.isPunctuation || last.isWhitespace {
+            normalized.removeLast()
+        }
+        return normalized
+    }
+}
+
 public enum T3QuestionAnswer: Equatable, Sendable {
     case text(String)
     case selections([String])

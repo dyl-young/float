@@ -11,6 +11,22 @@ private let singleQuestion = T3Question(
     allowCustomAnswer: false
 )
 
+@Test(arguments: [
+    ("Feature-based", "Feature-based", nil),
+    ("  Feature-based. ", "\n FEATURE-BASED?!  ", nil),
+    ("Feature-based (grouped by domain)", "feature-based…", nil),
+    ("Feature-based", "Feature-based by domain", "Feature-based by domain"),
+    ("Feature-based", "  Group by domain.  ", "Group by domain."),
+    ("Feature-based", "Based", "Based"),
+    ("Feature-based", " \n ", nil),
+] as [(String, String, String?)])
+func hidesRedundantQuestionOptionDescriptions(
+    label: String, description: String, expected: String?
+) {
+    let option = T3Question.Option(label: label, description: description)
+    #expect(option.displayDescription == expected)
+}
+
 @Test func buildsSingleSelectAnswersFromOptionValuesAndLabels() {
     #expect(
         T3QuestionAnswerBuilder.build(
