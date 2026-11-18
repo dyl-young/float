@@ -28,6 +28,11 @@ The designs live in `design/`. Work is planned in batches. Items move from "Next
 - **Approvals in Float:** opt-in, with a revocable Keychain credential. Allow (⌘↵) and Deny for threads on this Mac. Threads on other machines hand off to T3.
 - **Auto mode:** new threads on this Mac start in T3's Auto mode, or the broadest mode the provider offers below it. Float gets Auto by signing in through T3's MCP app sign-in, which it approves itself with a five-minute session from the local `t3` CLI. Threads on linked machines start Supervised.
 - Editing keys behave like any macOS text field.
+- **Skills and commands:**
+  - `$` lists the chosen provider's skills.
+  - `/` lists Float's commands (`/clear`, `/model`), the provider's slash commands and `/skill:name`.
+  - A picked skill is an inline chip, sent as `$name` the way T3 sends it.
+  - Not yet: `/side`, `/btw`, `/compact` and `/usage-limits`, which need T3 actions Float can't reach. Skills for chats on other machines, which need access to that machine's T3 API.
 
 ## Next
 In this order:
@@ -47,9 +52,6 @@ In this order:
 
    Then decide which of those details are worth porting. Each port gets a mockup in `design/` first. A change to a fixed rule in `design/README.md` is Dylan's call.
 3. **Auto mode on linked machines:** today they start Supervised, because the link caps Float's access. Find out whether a linked machine can grant Auto the same way, and if so, use it.
-
-## In progress
-- **Skills and commands (`$` and `/`):** see `design/pickers.png` states 9–11 and the "Skills and commands" rule in `design/README.md`.
 
 ## Later
 - **Voice input:** the mic button in the T3 composer.
