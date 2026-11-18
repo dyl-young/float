@@ -44,9 +44,11 @@ final class ChatState: ObservableObject {
     @Published private(set) var hasOlderMessages = false
     @Published private(set) var loadingOlder = false
     @Published private(set) var notice: String?
+    @Published private(set) var noticeTitle: String?
     @Published private(set) var noticeKind: NoticeKind?
     @Published private(set) var noticeDetail: String?
     @Published private(set) var needsT3 = false
+    @Published private(set) var canLaunchT3 = false
     @Published private(set) var focusRequest = 0
     @Published private(set) var modelPickerRequest = 0
     @Published private(set) var models: [T3Model] = []
@@ -70,6 +72,7 @@ final class ChatState: ObservableObject {
     private var expandedText: [String: (timestamp: String, text: String)] = [:]
     private var pendingMessage: ChatMessage?
     private var activeRunId: String?
+    private var retrySendAfterLaunch = false
 
     init(client: T3Client, defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -176,6 +179,7 @@ final class ChatState: ObservableObject {
         failureReason = nil
         failureDetail = nil
         needsT3 = false
+        canLaunchT3 = false
         loading = false
         hasOlderMessages = false
         loadingOlder = false
@@ -192,29 +196,65 @@ final class ChatState: ObservableObject {
         guard let url = reference?.desktopURL else { return }
         if !NSWorkspace.shared.open(url) {
             needsT3 = true
-            setNotice("Float couldn't open the thread in T3 Code.", kind: .connection)
+            setNotice(
+                "Float couldn't open the thread in T3 Code.", title: "Can't open T3",
+                kind: .connection
+            )
         }
     }
 
     func launchT3() {
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.t3tools.t3code") else {
-            setNotice("T3 Code isn't installed. Download it from t3.codes.", kind: .connection)
+            needsT3 = true
+            setNotice(
+                "Download it from t3.codes.", title: "T3 Code isn't installed",
+                kind: .connection
+            )
             return
         }
+        let shouldSend = retrySendAfterLaunch
         NSWorkspace.shared.openApplication(at: url, configuration: .init()) { _, error in
             let message = error?.localizedDescription
             Task { @MainActor in
                 if let message {
                     self.needsT3 = true
-                    self.setNotice("Float couldn't launch T3 Code.", kind: .connection, detail: message)
+                    self.setNotice(
+                        "Try launching it directly, then send again.", title: "Couldn't launch T3 Code",
+                        kind: .connection, detail: message, canLaunchT3: true
+                    )
                 } else {
-                    if let reference = self.reference { self.refresh(reference, force: self.watcher == nil) }
-                    self.reloadModels()
+                    await self.waitForT3AndResume(shouldSend: shouldSend)
                 }
             }
         }
         needsT3 = false
         clearNotice()
+    }
+
+    private func waitForT3AndResume(shouldSend: Bool) async {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(30))
+        while clock.now < deadline {
+            do {
+                models = try await client.models()
+                modelCatalogFailed = false
+                needsT3 = false
+                if shouldSend {
+                    retrySendAfterLaunch = false
+                    send()
+                } else if let reference {
+                    refresh(reference, force: watcher == nil)
+                }
+                return
+            } catch {
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
+        needsT3 = true
+        setNotice(
+            "T3 didn't start in time.", title: "T3 Code isn't running",
+            kind: .connection, detail: T3Error.serverUnavailable.localizedDescription, canLaunchT3: true
+        )
     }
 
     func send() {
@@ -230,6 +270,7 @@ final class ChatState: ObservableObject {
         let selection = target == nil ? selectedModel : nextModel
         clearNotice()
         needsT3 = false
+        retrySendAfterLaunch = false
         submitting = true
         stopAcknowledged = false
         watcher?.cancel()
@@ -254,6 +295,7 @@ final class ChatState: ObservableObject {
                 messages.append(message)
                 status = receipt.status
                 activeRunId = receipt.runId
+                retrySendAfterLaunch = false
                 if draft.trimmingCharacters(in: .whitespacesAndNewlines) == text { draft = "" }
                 let sent = Set(attachments.map(\.id))
                 images.removeAll { sent.contains($0.id) }
@@ -265,6 +307,7 @@ final class ChatState: ObservableObject {
                 }
             } catch {
                 stopping = false
+                if case T3Error.serverUnavailable = error { retrySendAfterLaunch = true }
                 showError(error)
                 if case T3Error.uncertainDelivery = error, let target { refresh(target, force: true) }
             }
@@ -361,6 +404,7 @@ final class ChatState: ObservableObject {
     }
 
     func dismissNotice() {
+        retrySendAfterLaunch = false
         clearNotice()
         if status == .waiting || status == .failed { dismissedStatusNotice = status }
     }
@@ -462,14 +506,28 @@ final class ChatState: ObservableObject {
         let detail = error.localizedDescription
         if case T3Error.serverUnavailable = error {
             needsT3 = true
-            setNotice("The local T3 server isn't responding.", kind: .connection, detail: detail)
+            setNotice(
+                retrySendAfterLaunch
+                    ? "Your draft is saved. Launch T3 and Float sends it."
+                    : "Launch T3 to reconnect Float.",
+                title: "T3 Code isn't running", kind: .connection, detail: detail, canLaunchT3: true
+            )
         } else if case T3Error.cliUnavailable = error {
             needsT3 = true
-            setNotice("Float couldn't find the local T3 command.", kind: .connection, detail: detail)
+            setNotice(
+                "Float couldn't find the local T3 command.", title: "Can't reach T3",
+                kind: .connection, detail: detail, canLaunchT3: true
+            )
         } else if case T3Error.authorization = error {
-            setNotice("T3 Code couldn't authorize Float.", kind: .connection, detail: detail)
+            setNotice(
+                "T3 Code couldn't authorize Float.", title: "Can't reach T3",
+                kind: .connection, detail: detail
+            )
         } else if case T3Error.localAddressRequired = error {
-            setNotice("T3 Code's local server address isn't valid.", kind: .connection, detail: detail)
+            setNotice(
+                "T3 Code's local server address isn't valid.", title: "Can't reach T3",
+                kind: .connection, detail: detail
+            )
         } else if case T3Error.uncertainDelivery = error {
             setNotice("T3 Code may have received that message. Check the thread before sending again.",
                 kind: .run, detail: detail)
@@ -532,16 +590,23 @@ final class ChatState: ObservableObject {
         return "T3 Code reported an internal error."
     }
 
-    private func setNotice(_ text: String, kind: NoticeKind, detail: String? = nil) {
+    private func setNotice(
+        _ text: String, title: String? = nil, kind: NoticeKind, detail: String? = nil,
+        canLaunchT3: Bool = false
+    ) {
         notice = text
+        noticeTitle = title
         noticeKind = kind
         noticeDetail = detail == text ? nil : detail
+        self.canLaunchT3 = canLaunchT3
     }
 
     private func clearNotice() {
         notice = nil
+        noticeTitle = nil
         noticeKind = nil
         noticeDetail = nil
+        canLaunchT3 = false
     }
 
     private func persist() {

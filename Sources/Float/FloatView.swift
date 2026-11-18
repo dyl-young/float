@@ -291,12 +291,16 @@ struct FloatView: View {
         VStack(alignment: .leading, spacing: 8) {
             if let notice = chat.notice, chat.noticeKind != .input {
                 NoticeCard(
+                    title: chat.noticeTitle,
                     text: notice,
                     detail: chat.noticeDetail,
                     tone: chat.needsT3 ? .info : .error,
-                    action: chat.needsT3
+                    action: chat.canLaunchT3
                         ? NoticeAction(title: "Launch T3", handle: { chat.launchT3() })
                         : chat.noticeKind == .run ? openAction : nil,
+                    secondaryAction: chat.canLaunchT3
+                        ? NoticeAction(title: "Not now", handle: { chat.dismissNotice() })
+                        : nil,
                     dismiss: chat.dismissNotice
                 )
             }
@@ -760,20 +764,25 @@ private struct NoticeAction {
 
 private struct NoticeCard: View {
     enum Tone { case info, warning, error }
+    var title: String?
     let text: String
     var detail: String?
     let tone: Tone
     var action: NoticeAction?
+    var secondaryAction: NoticeAction?
     let dismiss: () -> Void
 
     init(
-        text: String, detail: String? = nil, tone: Tone,
-        action: NoticeAction? = nil, dismiss: @escaping () -> Void
+        title: String? = nil, text: String, detail: String? = nil, tone: Tone,
+        action: NoticeAction? = nil, secondaryAction: NoticeAction? = nil,
+        dismiss: @escaping () -> Void
     ) {
+        self.title = title
         self.text = text
         self.detail = detail
         self.tone = tone
         self.action = action
+        self.secondaryAction = secondaryAction
         self.dismiss = dismiss
     }
 
@@ -802,33 +811,59 @@ private struct NoticeCard: View {
                 .padding(.top, 1)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 8) {
-                Text(text)
-                    .font(.system(size: 12.5))
-                    .foregroundStyle(Theme.text)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityAddTraits(.updatesFrequently)
-                if let action {
-                    Button(action: action.handle) {
-                        Text(action.title)
-                            .font(.system(size: 11.5, weight: .semibold))
-                            .foregroundStyle(Theme.canvas)
-                            .padding(.horizontal, 10)
-                            .frame(height: 24)
-                            .background(tint, in: Capsule())
+                VStack(alignment: .leading, spacing: 2) {
+                    if let title {
+                        Text(title)
+                            .font(.system(size: 12.5, weight: .bold))
+                            .foregroundStyle(Theme.text)
                     }
-                    .buttonStyle(.plain)
+                    Text(text)
+                        .font(.system(size: title == nil ? 12.5 : 12))
+                        .foregroundStyle(Theme.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityAddTraits(.updatesFrequently)
+                }
+                if action != nil || secondaryAction != nil {
+                    HStack(spacing: 6) {
+                        if let action {
+                            noticeButton(action, primary: true)
+                        }
+                        if let secondaryAction {
+                            noticeButton(secondaryAction, primary: false)
+                        }
+                    }
                 }
             }
             Spacer(minLength: 0)
-            PanelButton("Dismiss", systemImage: "xmark", size: 18, action: dismiss)
-                .offset(x: 3, y: -3)
+            if secondaryAction == nil {
+                PanelButton("Dismiss", systemImage: "xmark", size: 18, action: dismiss)
+                    .offset(x: 3, y: -3)
+            }
         }
-        .padding(10)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 11)
         .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(tint.opacity(0.35), lineWidth: 1)
         }
         .help(detail ?? text)
+    }
+
+    private func noticeButton(_ action: NoticeAction, primary: Bool) -> some View {
+        Button(action: action.handle) {
+            Text(action.title)
+                .font(.system(size: 11.5, weight: .medium))
+                .foregroundStyle(primary ? Theme.canvas : Theme.muted)
+                .padding(.horizontal, 10)
+                .frame(height: 24)
+                .background(primary ? tint : Color.clear, in: Capsule())
+                .overlay {
+                    if !primary {
+                        Capsule().strokeBorder(Theme.hairline, lineWidth: 1)
+                    }
+                }
+        }
+        .buttonStyle(.plain)
     }
 }
 
