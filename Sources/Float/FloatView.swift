@@ -344,7 +344,13 @@ struct FloatView: View {
                     dismiss: chat.dismissNotice
                 )
             }
-            if isThinking {
+            if let question = chat.activeQuestion, let request = chat.pendingQuestion {
+                QuestionCard(
+                    chat: chat, question: question, position: chat.questionIndex + 1,
+                    count: request.questions.count
+                )
+                .id("\(request.requestId):\(question.id)")
+            } else if isThinking {
                 ThinkingLoader(size: 16)
                     .padding(.leading, 2)
                     .padding(.vertical, 4)
@@ -879,6 +885,148 @@ private struct NoticeAction {
         self.title = title
         self.icon = icon
         self.handle = handle
+    }
+}
+
+private struct QuestionCard: View {
+    @ObservedObject var chat: ChatState
+    let question: T3Question
+    let position: Int
+    let count: Int
+
+    @State private var hoveredOption: Int?
+
+    private var preview: String? {
+        let index = hoveredOption ?? question.options.firstIndex(where: chat.isQuestionOptionSelected)
+        guard let index, question.options.indices.contains(index) else { return nil }
+        return question.options[index].preview
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                Text(question.header.uppercased())
+                    .tracking(0.5)
+                Spacer(minLength: 0)
+                if count > 1 {
+                    Text("\(position) of \(count)")
+                }
+            }
+            .font(.system(size: 10.5))
+            .foregroundStyle(Theme.muted)
+            .padding(.bottom, 3)
+
+            Text(question.question)
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(Theme.text)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 7)
+
+            ForEach(Array(question.options.enumerated()), id: \.offset) { index, option in
+                optionRow(option, index: index)
+            }
+
+            if let preview, !preview.isEmpty {
+                ScrollView([.horizontal, .vertical]) {
+                    Text(preview)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(Theme.text)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: true, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                }
+                .frame(maxHeight: 88)
+                .background(Theme.code, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .padding(.top, 6)
+            }
+
+            if let error = chat.questionError {
+                Text(error)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.error)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 6)
+            }
+
+            HStack(spacing: 8) {
+                Button(action: chat.confirmQuestion) {
+                    Text(chat.isLastQuestion ? "Send answer" : "Next")
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundStyle(Theme.canvas)
+                        .padding(.horizontal, 10)
+                        .frame(height: 24)
+                        .background(Theme.accent, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .disabled(!chat.questionCanAdvance)
+                .opacity(chat.questionCanAdvance ? 1 : 0.45)
+
+                Text("1–\(min(9, question.options.count)) pick · ↵ confirm")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(Theme.muted)
+                    .lineLimit(1)
+            }
+            .padding(.top, 6)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .background(Theme.text.opacity(0.03), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(Theme.hairline, lineWidth: 1)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(question.header)
+    }
+
+    private func optionRow(_ option: T3Question.Option, index: Int) -> some View {
+        let selected = chat.isQuestionOptionSelected(option)
+        return Button {
+            chat.selectQuestionOption(option)
+        } label: {
+            HStack(alignment: .top, spacing: 8) {
+                Text("\(index + 1)")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(Theme.text)
+                    .frame(minWidth: 18, minHeight: 18)
+                    .padding(.horizontal, 1)
+                    .background(Theme.text.opacity(0.08),
+                        in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .padding(.top, 1)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(option.label)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Theme.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if !option.description.isEmpty {
+                        Text(option.description)
+                            .font(.system(size: 11))
+                            .foregroundStyle(Theme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "checkmark")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Theme.accent)
+                    .frame(width: 13, height: 13)
+                    .padding(.top, 2)
+                    .opacity(selected ? 1 : 0)
+            }
+            .padding(.horizontal, 7)
+            .padding(.vertical, 6)
+            .background(
+                selected ? Theme.accent.opacity(0.12) : Color.clear,
+                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, -3)
+        .onHover { hoveredOption = $0 ? index : nil }
+        .accessibilityLabel("\(index + 1), \(option.label), \(option.description)")
+        .accessibilityValue(selected ? "Selected" : "Not selected")
     }
 }
 

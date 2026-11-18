@@ -49,6 +49,10 @@ final class ChatState: ObservableObject {
     @Published private(set) var noticeDetail: String?
     @Published private(set) var needsT3 = false
     @Published private(set) var canLaunchT3 = false
+    @Published private(set) var pendingQuestion: T3PendingQuestionRequest?
+    @Published private(set) var questionIndex = 0
+    @Published private(set) var questionDrafts: [String: T3QuestionDraft] = [:]
+    @Published private(set) var questionError: String?
     @Published private(set) var focusRequest = 0
     @Published private(set) var modelPickerRequest = 0
     @Published private(set) var projectPickerRequest = 0
@@ -117,6 +121,20 @@ final class ChatState: ObservableObject {
     var hasConversation: Bool { reference != nil || submitting }
     var hasTrayNotice: Bool { notice != nil && noticeKind != .input }
     var statusNoticeDismissed: Bool { dismissedStatusNotice == status }
+    var activeQuestion: T3Question? {
+        guard let questions = pendingQuestion?.questions, questions.indices.contains(questionIndex) else {
+            return nil
+        }
+        return questions[questionIndex]
+    }
+    var questionCanAdvance: Bool {
+        guard let question = activeQuestion else { return false }
+        return Self.hasAnswer(question, draft: questionDrafts[question.id])
+    }
+    var isLastQuestion: Bool {
+        guard let count = pendingQuestion?.questions.count else { return true }
+        return questionIndex >= count - 1
+    }
     var showsStop: Bool { submitting || (status == .running && !stopAcknowledged) || stopping }
     var canStop: Bool { showsStop && !stopping }
     var canSend: Bool {
@@ -382,6 +400,7 @@ final class ChatState: ObservableObject {
         dismissedStatusNotice = nil
         failureReason = nil
         failureDetail = nil
+        resetQuestion()
         needsT3 = false
         canLaunchT3 = false
         loading = false
@@ -562,6 +581,36 @@ final class ChatState: ObservableObject {
         Task { await interrupt(reference, runId: runId, version: version) }
     }
 
+    func isQuestionOptionSelected(_ option: T3Question.Option) -> Bool {
+        guard let question = activeQuestion else { return false }
+        return questionDrafts[question.id]?.selectedOptionValues.contains(option.answerValue) == true
+    }
+
+    func selectQuestionOption(_ option: T3Question.Option) {
+        guard let question = activeQuestion else { return }
+        var draft = questionDrafts[question.id] ?? T3QuestionDraft()
+        let value = option.answerValue
+        if question.allowsMultiple {
+            if let index = draft.selectedOptionValues.firstIndex(of: value) {
+                draft.selectedOptionValues.remove(at: index)
+            } else {
+                draft.selectedOptionValues.append(value)
+            }
+        } else {
+            draft.selectedOptionValues = [value]
+        }
+        draft.customAnswer = ""
+        questionDrafts[question.id] = draft
+        questionError = nil
+    }
+
+    func confirmQuestion() {
+        guard questionCanAdvance, !isLastQuestion else { return }
+        questionIndex += 1
+        questionError = nil
+        focusRequest += 1
+    }
+
     private func interrupt(_ reference: ThreadReference, runId: String?, version: Int) async {
         do {
             let accepted = try await client.stop(reference, runId: runId)
@@ -672,6 +721,7 @@ final class ChatState: ObservableObject {
                         earliest = page.earlierPosition
                         hasOlderMessages = earliest != nil
                     }
+                    try await updateQuestion(from: page, thread: reference)
                     status = page.thread.pendingRequestCount > 0 ? .waiting : page.thread.status
                     activeRunId = page.recentRuns?.first { $0.status == .running }?.runId
                     updateFailure(from: page)
@@ -733,6 +783,46 @@ final class ChatState: ObservableObject {
             return $0.id < $1.id
         }
         if updated != messages { messages = updated }
+    }
+
+    private func updateQuestion(
+        from snapshot: ThreadSnapshot, thread: ThreadReference
+    ) async throws {
+        guard snapshot.thread.pendingRequestCount > 0 else {
+            resetQuestion()
+            return
+        }
+        let question = try await client.pendingQuestion(thread)
+        guard question?.requestId != pendingQuestion?.requestId else { return }
+        guard let question else {
+            resetQuestion()
+            return
+        }
+        pendingQuestion = question
+        questionIndex = 0
+        questionDrafts = Dictionary(uniqueKeysWithValues: question.questions.map {
+            ($0.id, T3QuestionDraft(customAnswer: $0.allowsCustom ? $0.initialAnswer : nil))
+        })
+        questionError = nil
+        focusRequest += 1
+    }
+
+    private func resetQuestion() {
+        pendingQuestion = nil
+        questionIndex = 0
+        questionDrafts = [:]
+        questionError = nil
+    }
+
+    private static func hasAnswer(_ question: T3Question, draft: T3QuestionDraft?) -> Bool {
+        if question.allowsCustom {
+            if question.initialAnswer != nil, draft?.customAnswer != nil { return true }
+            if draft?.customAnswer?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+                return true
+            }
+        }
+        if draft?.selectedOptionValues.isEmpty == false { return true }
+        return !question.isRequired && question.options.isEmpty
     }
 
     private func expandLongMessages(

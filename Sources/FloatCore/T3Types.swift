@@ -343,6 +343,72 @@ public struct ThreadSnapshot: Decodable, Sendable {
     public let earlierPosition: Int?
 }
 
+public struct T3PendingQuestionRequest: Decodable, Equatable, Sendable {
+    public let requestId: String
+    public let questions: [T3Question]
+
+    public init(requestId: String, questions: [T3Question]) {
+        self.requestId = requestId
+        self.questions = questions
+    }
+}
+
+public struct T3Question: Decodable, Equatable, Sendable {
+    public struct Option: Decodable, Equatable, Sendable {
+        public let label: String
+        public let description: String
+        public let value: String?
+        public let preview: String?
+
+        public init(label: String, description: String, value: String? = nil, preview: String? = nil) {
+            self.label = label
+            self.description = description
+            self.value = value
+            self.preview = preview
+        }
+
+        public var answerValue: String { value ?? label.trimmingCharacters(in: .whitespacesAndNewlines) }
+    }
+
+    public let id: String
+    public let header: String
+    public let question: String
+    public let options: [Option]
+    public let multiSelect: Bool?
+    public let allowCustomAnswer: Bool?
+    public let initialAnswer: String?
+    public let required: Bool?
+
+    public init(
+        id: String, header: String, question: String, options: [Option],
+        multiSelect: Bool? = nil, allowCustomAnswer: Bool? = nil,
+        initialAnswer: String? = nil, required: Bool? = nil
+    ) {
+        self.id = id
+        self.header = header
+        self.question = question
+        self.options = options
+        self.multiSelect = multiSelect
+        self.allowCustomAnswer = allowCustomAnswer
+        self.initialAnswer = initialAnswer
+        self.required = required
+    }
+
+    public var allowsMultiple: Bool { multiSelect == true }
+    public var allowsCustom: Bool { allowCustomAnswer != false }
+    public var isRequired: Bool { required != false }
+}
+
+public struct T3QuestionDraft: Equatable, Sendable {
+    public var selectedOptionValues: [String]
+    public var customAnswer: String?
+
+    public init(selectedOptionValues: [String] = [], customAnswer: String? = nil) {
+        self.selectedOptionValues = selectedOptionValues
+        self.customAnswer = customAnswer
+    }
+}
+
 func t3Date(_ value: String) -> Date? {
     (try? Date(value, strategy: .iso8601.year().month().day().time(includingFractionalSeconds: true)))
         ?? (try? Date(value, strategy: .iso8601))

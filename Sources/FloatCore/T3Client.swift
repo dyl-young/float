@@ -33,6 +33,9 @@ public struct T3Client: Sendable {
         let environmentId: String
         let links: [Link]
     }
+    private struct PendingRequestList: Decodable {
+        let requestIds: [String]
+    }
 
     private let transport: MCPTransport
     private let scratchRoot: URL
@@ -247,6 +250,26 @@ public struct T3Client: Sendable {
             "threadId": thread.threadId, "view": "messages", "limit": 40, "maxCharsPerItem": 20_000,
             "beforePosition": before ?? 9_007_199_254_740_991, "runLimit": 1,
         ], thread: thread)
+    }
+
+    public func pendingQuestion(_ thread: ThreadReference) async throws -> T3PendingQuestionRequest? {
+        var listArguments: [String: any Sendable] = [
+            "action": "list", "threadId": thread.threadId,
+        ]
+        listArguments["environmentId"] = thread.environmentID
+        let list = try await transport.call(
+            "t3_pending_request", listArguments, result: PendingRequestList.self,
+            retryExpiredSession: true
+        )
+        guard let requestId = list.requestIds.first else { return nil }
+        var readArguments: [String: any Sendable] = [
+            "action": "read", "threadId": thread.threadId, "requestId": requestId,
+        ]
+        readArguments["environmentId"] = thread.environmentID
+        return try await transport.call(
+            "t3_pending_request", readArguments, result: T3PendingQuestionRequest.self,
+            retryExpiredSession: true
+        )
     }
 
     /// True when T3 accepted the interrupt or the run was already stopped.
