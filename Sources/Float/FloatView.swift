@@ -251,28 +251,33 @@ struct FloatView: View {
                 "Close (Esc)", accessibilityLabel: "Close",
                 systemImage: "xmark", size: Self.headerButtonSize, glyphSize: 12, action: dismiss
             )
-            Circle()
-                .fill(statusColor)
-                .frame(width: 6, height: 6)
-                .help(statusLabel)
-                .accessibilityLabel(statusLabel)
-            HStack(spacing: 0) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(chat.title ?? "Float")
-                        .font(.system(size: 12.5, weight: .semibold))
-                        .foregroundStyle(Theme.text)
+            HStack(spacing: 7) {
+                if let offlineLabel {
+                    Circle()
+                        .fill(Theme.muted)
+                        .frame(width: 6, height: 6)
+                        .accessibilityHidden(true)
+                    headerTitle("Float")
+                    Text(offlineLabel)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.muted)
                         .lineLimit(1)
-                        .accessibilityAddTraits(.isHeader)
-                    HStack(spacing: 4) {
-                        if chat.hasThreadProject {
-                            Image(systemName: "folder")
-                                .font(.system(size: 10, weight: .medium))
+                } else {
+                    if let project = chat.threadProjectLabel {
+                        HStack(spacing: 5) {
+                            HeaderProjectIcon(project: chat.threadProject, isLocal: chat.reference?.environmentID == nil)
+                            Text(chat.threadMachineName.map { "\(project) · \($0)" } ?? project)
+                                .lineLimit(1)
                         }
-                        Text(chat.threadSubtitle)
-                            .font(.system(size: 11))
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.muted)
+                        .frame(maxWidth: 210, alignment: .leading)
+                        .fixedSize(horizontal: true, vertical: false)
+                        Text("/")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Theme.muted.opacity(0.55))
                     }
-                    .foregroundStyle(Theme.muted)
-                    .fixedSize()
+                    headerTitle(chat.title ?? "Float")
                 }
                 Spacer(minLength: 8)
             }
@@ -295,26 +300,23 @@ struct FloatView: View {
         }
         .padding(.horizontal, Self.headerButtonInset)
         .frame(height: Self.headerHeight)
+        .task(id: chat.threadProjectID) { await chat.loadThreadProject() }
     }
 
-    private var statusColor: Color {
-        if chat.needsT3 { return Theme.muted }
-        switch chat.status {
-        case .running: return Theme.accent
-        case .waiting: return Theme.warning
-        case .failed: return Theme.error
-        default: return chat.submitting ? Theme.accent : Theme.success
-        }
+    private func headerTitle(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(Theme.text)
+            .lineLimit(1)
+            .accessibilityAddTraits(.isHeader)
     }
 
-    private var statusLabel: String {
+    private var offlineLabel: String? {
         if chat.needsT3 { return "T3 not running" }
-        switch chat.status {
-        case .running: return "Thinking"
-        case .waiting: return "Needs input"
-        case .failed: return "Failed"
-        default: return chat.submitting ? "Thinking" : "Ready"
+        if chat.threadMachineDisconnected {
+            return "\(chat.threadMachineName ?? "Thread machine") is offline"
         }
+        return nil
     }
 
     private var openAction: NoticeAction? {

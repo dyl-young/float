@@ -73,6 +73,8 @@ final class ChatState: ObservableObject {
     @Published private(set) var projectCatalogFailed = false
     @Published private(set) var selectedProjectID: String?
     @Published private(set) var threadProjectID: String?
+    @Published private var loadedThreadProject: T3Project?
+    @Published private(set) var threadMachineDisconnected = false
     @Published private(set) var machines: [T3Machine] = []
     @Published private(set) var loadingMachines = false
     @Published private(set) var selectedMachineID: String?
@@ -198,20 +200,29 @@ final class ChatState: ObservableObject {
     var projectLabel: String { selectedProject?.title ?? "No project" }
 
     var threadProject: T3Project? {
-        projects.first { $0.id == threadProjectID }
+        if let loadedThreadProject, loadedThreadProject.id == threadProjectID {
+            return loadedThreadProject
+        }
+        guard reference?.environmentID == selectedMachineEnvironmentID else { return nil }
+        return projects.first { $0.id == threadProjectID }
     }
 
-    var hasThreadProject: Bool { threadProject != nil || reference?.projectName != nil }
-
-    var threadProjectLabel: String {
-        threadProject?.title ?? reference?.projectName ?? "No project"
+    var threadProjectLabel: String? {
+        let name = threadProject?.title ?? reference?.projectName
+        return name == "No project" ? nil : name
     }
 
-    var threadMachineName: String? { reference?.machineName }
+    var threadMachineName: String? {
+        guard let environmentID = reference?.environmentID else { return nil }
+        return machines.first { $0.id == environmentID }?.name ?? reference?.machineName
+    }
 
-    var threadSubtitle: String {
-        guard let threadMachineName else { return threadProjectLabel }
-        return "\(threadProjectLabel) · \(threadMachineName)"
+    func loadThreadProject() async {
+        guard let id = threadProjectID, let reference, loadedThreadProject?.id != id,
+              threadProject?.faviconPath == nil, threadProject?.projectIcon == nil,
+              let project = try? await client.project(id, environmentID: reference.environmentID),
+              reference == self.reference, id == threadProjectID, !Task.isCancelled else { return }
+        loadedThreadProject = project
     }
 
     var canChooseProject: Bool {
@@ -410,6 +421,8 @@ final class ChatState: ObservableObject {
         images = []
         reference = nil
         threadProjectID = nil
+        loadedThreadProject = nil
+        threadMachineDisconnected = false
         threadModel = nil
         nextModel = nil
         messages = []
@@ -818,6 +831,7 @@ final class ChatState: ObservableObject {
                     threadModel = page.thread.modelSelection ?? threadModel
                     loading = false
                     connectionFailures = 0
+                    threadMachineDisconnected = false
                     if needsT3 || noticeKind == .connection {
                         clearNotice()
                         needsT3 = false
@@ -943,9 +957,11 @@ final class ChatState: ObservableObject {
     private func showError(_ error: Error) {
         let detail = error.localizedDescription
         if Self.isRemoteMachineUnavailable(error),
-            let machine = reference?.machineName
-                ?? selectedMachine.flatMap({ $0.isLocal ? nil : $0.name }) {
+            let machine = threadMachineName
+                ?? selectedMachine.flatMap({ $0.isLocal ? nil : $0.name })
+                ?? (reference?.environmentID == nil ? nil : "Thread machine") {
             needsT3 = false
+            threadMachineDisconnected = reference?.environmentID != nil
             setNotice(
                 "Reconnect it in T3 Code to continue.",
                 title: "\(machine) is offline", kind: .connection, detail: detail

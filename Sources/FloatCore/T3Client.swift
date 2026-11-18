@@ -127,6 +127,12 @@ public struct T3Client: Sendable {
         }
     }
 
+    public func project(_ id: String, environmentID: String?) async throws -> T3Project {
+        var arguments: [String: any Sendable] = ["projectId": id]
+        arguments["environmentId"] = environmentID
+        return try await transport.call("t3_project_read", arguments, result: T3Project.self, retryExpiredSession: true)
+    }
+
     public func send(
         _ text: String, images: [ImageAttachment], thread: ThreadReference?, requestId: UUID,
         modelSelection: T3ModelSelection? = nil, projectID: String? = nil,

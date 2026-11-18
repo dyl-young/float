@@ -1,19 +1,30 @@
 import Foundation
 
+public struct T3ProjectIcon: Codable, Equatable, Sendable {
+    public let kind: String
+    public let text: String?
+    public let emoji: String?
+}
+
 public struct T3Project: Codable, Equatable, Identifiable, Sendable {
     public let id: String
     public let title: String
     public let workspaceRoot: String
+    public let faviconPath: String?
+    public let projectIcon: T3ProjectIcon?
     public let archivedAt: String?
     public let deletedAt: String?
 
     public init(
         id: String, title: String, workspaceRoot: String,
-        archivedAt: String? = nil, deletedAt: String? = nil
+        archivedAt: String? = nil, deletedAt: String? = nil,
+        faviconPath: String? = nil, projectIcon: T3ProjectIcon? = nil
     ) {
         self.id = id
         self.title = title
         self.workspaceRoot = workspaceRoot
+        self.faviconPath = faviconPath
+        self.projectIcon = projectIcon
         self.archivedAt = archivedAt
         self.deletedAt = deletedAt
     }
