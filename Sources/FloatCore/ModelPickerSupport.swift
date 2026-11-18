@@ -1,15 +1,22 @@
 import Foundation
 
+public enum T3ModelPickerTabContext: Equatable, Sendable {
+    case favourites
+    case provider
+    case search
+}
+
 public struct T3ModelRowTrailingState: Equatable, Sendable {
     public let showsFavouriteToggle: Bool
     public let showsRestingFavourite: Bool
     public let showsCheckmark: Bool
 
     public init(
-        isCurrent: Bool, isFavourite: Bool, isHovered: Bool, isFavouritesTab: Bool
+        isCurrent: Bool, isFavourite: Bool, isHovered: Bool,
+        tab: T3ModelPickerTabContext
     ) {
         showsFavouriteToggle = isHovered
-        showsRestingFavourite = !isHovered && !isCurrent && isFavourite && !isFavouritesTab
+        showsRestingFavourite = !isHovered && !isCurrent && isFavourite && tab == .provider
         showsCheckmark = isCurrent
     }
 }
@@ -40,7 +47,26 @@ public struct T3ModelSearchGroup: Identifiable, Equatable, Sendable {
     public var id: String { provider.instanceId }
     public let provider: T3ModelProvider
     public let models: [T3Model]
-    public let noMatchReason: String?
+}
+
+extension T3ModelProvider {
+    public var hasPickerIcon: Bool {
+        ["codex", "openai", "claudeAgent", "cursor", "antigravity", "opencode"]
+            .contains(driverKind)
+    }
+
+    public var appearsInPicker: Bool { enabled || hasPickerIcon }
+
+    public var pickerName: String {
+        switch driverKind {
+        case "codex", "openai": "Codex"
+        case "claudeAgent": "Claude"
+        case "cursor": "Cursor"
+        case "antigravity": "Antigravity"
+        case "opencode": "OpenCode"
+        default: displayName
+        }
+    }
 }
 
 public enum T3ModelSearch {
@@ -61,18 +87,24 @@ public enum T3ModelSearch {
         providers: [T3ModelProvider], query: String
     ) -> [T3ModelSearchGroup] {
         providers.compactMap { provider in
-            if !provider.enabled {
-                return T3ModelSearchGroup(
-                    provider: provider, models: [],
-                    noMatchReason: provider.disabledReason
-                        ?? "\(provider.displayName) is turned off in T3 settings."
-                )
-            }
+            guard provider.enabled else { return nil }
             let models = provider.models.filter { matches($0, query: query) }
             if !models.isEmpty {
-                return T3ModelSearchGroup(provider: provider, models: models, noMatchReason: nil)
+                return T3ModelSearchGroup(provider: provider, models: models)
             }
             return nil
+        }
+    }
+
+    public static func turnedOffProviders(
+        providers: [T3ModelProvider], query: String
+    ) -> [T3ModelProvider] {
+        let wanted = normalize(query)
+        return providers.filter { provider in
+            guard !provider.enabled else { return false }
+            if provider.hasPickerIcon { return true }
+            let name = normalize([provider.displayName, provider.pickerName].joined(separator: " "))
+            return !wanted.isEmpty && name.contains(wanted)
         }
     }
 

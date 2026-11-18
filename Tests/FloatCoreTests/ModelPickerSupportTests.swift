@@ -26,14 +26,14 @@ private func provider(
 
 @Test func modelRowTrailingIconsKeepCurrentCheckmark() {
     let currentFavourite = T3ModelRowTrailingState(
-        isCurrent: true, isFavourite: true, isHovered: false, isFavouritesTab: false
+        isCurrent: true, isFavourite: true, isHovered: false, tab: .provider
     )
     #expect(currentFavourite.showsCheckmark)
     #expect(!currentFavourite.showsRestingFavourite)
     #expect(!currentFavourite.showsFavouriteToggle)
 
     let hoveredCurrent = T3ModelRowTrailingState(
-        isCurrent: true, isFavourite: true, isHovered: true, isFavouritesTab: true
+        isCurrent: true, isFavourite: true, isHovered: true, tab: .favourites
     )
     #expect(hoveredCurrent.showsCheckmark)
     #expect(hoveredCurrent.showsFavouriteToggle)
@@ -41,17 +41,17 @@ private func provider(
 
 @Test func modelRowTrailingIconsRespectTabAndHover() {
     let providerFavourite = T3ModelRowTrailingState(
-        isCurrent: false, isFavourite: true, isHovered: false, isFavouritesTab: false
+        isCurrent: false, isFavourite: true, isHovered: false, tab: .provider
     )
     #expect(providerFavourite.showsRestingFavourite)
 
     let favouritesRow = T3ModelRowTrailingState(
-        isCurrent: false, isFavourite: true, isHovered: false, isFavouritesTab: true
+        isCurrent: false, isFavourite: true, isHovered: false, tab: .favourites
     )
     #expect(!favouritesRow.showsRestingFavourite)
 
     let hoveredUnstarred = T3ModelRowTrailingState(
-        isCurrent: false, isFavourite: false, isHovered: true, isFavouritesTab: false
+        isCurrent: false, isFavourite: false, isHovered: true, tab: .provider
     )
     #expect(hoveredUnstarred.showsFavouriteToggle)
 }
@@ -103,7 +103,7 @@ private func provider(
     #expect(T3ModelSearch.serverQuery("gpt56") == "gpt 5 6")
 }
 
-@Test func modelSearchGroupsMatchesAndExplainsDisabledProviders() {
+@Test func modelSearchGroupsEnabledMatchesInProviderOrder() {
     let claudeModel = model(
         "claude-sonnet-5-5", label: "Sonnet 5.5", instanceId: "claudeAgent",
         provider: "Claude Code", driver: "claudeAgent"
@@ -134,11 +134,48 @@ private func provider(
         ),
     ], query: "son")
 
-    #expect(groups.map(\.provider.instanceId) == ["claudeAgent", "cursor", "codex"])
+    #expect(groups.map(\.provider.instanceId) == ["claudeAgent", "cursor"])
     #expect(groups[0].models == [claudeModel])
     #expect(groups[1].models == [cursorModel])
-    #expect(groups[2].models.isEmpty)
-    #expect(groups[2].noMatchReason == "Provider instance is disabled.")
+}
+
+@Test func pickerShowsEnabledAndSupportedDisabledProviders() {
+    let enabledGrok = provider("grok", name: "Grok", driver: "grok", models: [])
+    let disabledGrok = provider(
+        "grok", name: "Grok", driver: "grok", constraints: ["Disabled"], models: []
+    )
+    let disabledOpenCode = provider(
+        "opencode", name: "OpenCode", driver: "opencode", constraints: ["Disabled"], models: []
+    )
+
+    #expect(enabledGrok.appearsInPicker)
+    #expect(!disabledGrok.appearsInPicker)
+    #expect(disabledOpenCode.appearsInPicker)
+}
+
+@Test func searchCollectsTurnedOffProvidersOnOneLine() {
+    let claude = provider(
+        "claude", name: "Claude Code", driver: "claudeAgent",
+        constraints: ["Provider instance is disabled."], models: []
+    )
+    let cursor = provider(
+        "cursor", name: "Cursor", driver: "cursor",
+        constraints: ["Provider instance is disabled."], models: []
+    )
+    let grok = provider(
+        "grok", name: "Grok", driver: "grok",
+        constraints: ["Provider instance is disabled."], models: []
+    )
+    let providers = [claude, cursor, grok]
+
+    #expect(
+        T3ModelSearch.turnedOffProviders(providers: providers, query: "son")
+            .map(\.pickerName) == ["Claude", "Cursor"]
+    )
+    #expect(
+        T3ModelSearch.turnedOffProviders(providers: providers, query: "grok")
+            .map(\.pickerName) == ["Claude", "Cursor", "Grok"]
+    )
 }
 
 @Test func favouritesStorePreservesSettingsAndKeysByProviderInstance() async throws {

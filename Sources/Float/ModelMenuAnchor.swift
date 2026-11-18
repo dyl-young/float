@@ -188,13 +188,13 @@ private struct ModelRowTrailingIcons: View {
     let isCurrent: Bool
     let isFavourite: Bool
     let isHovered: Bool
-    let isFavouritesTab: Bool
+    let tab: T3ModelPickerTabContext
     let toggleFavourite: () -> Void
 
     private var state: T3ModelRowTrailingState {
         T3ModelRowTrailingState(
             isCurrent: isCurrent, isFavourite: isFavourite,
-            isHovered: isHovered, isFavouritesTab: isFavouritesTab
+            isHovered: isHovered, tab: tab
         )
     }
 
@@ -260,7 +260,7 @@ private struct ModelPickerView: View {
     }
 
     private var providers: [T3ModelProvider] {
-        chat.modelProviders.filter { ProviderIcon(driverKind: $0.driverKind) != nil }
+        chat.modelProviders.filter(\.appearsInPicker)
     }
 
     private var selectedProvider: T3ModelProvider? {
@@ -280,7 +280,13 @@ private struct ModelPickerView: View {
     }
 
     private var searchGroups: [T3ModelSearchGroup] {
-        T3ModelSearch.groups(providers: searchProviders, query: search)
+        let results = Dictionary(uniqueKeysWithValues: searchProviders.map { ($0.instanceId, $0) })
+        let ordered = providers.compactMap { results[$0.instanceId] }
+        return T3ModelSearch.groups(providers: ordered, query: search)
+    }
+
+    private var turnedOffSearchProviders: [T3ModelProvider] {
+        T3ModelSearch.turnedOffProviders(providers: chat.modelProviders, query: search)
     }
 
     private var effortModel: T3Model? {
@@ -303,9 +309,11 @@ private struct ModelPickerView: View {
     private var listHeight: CGFloat {
         if !search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let height = searchGroups.reduce(CGFloat.zero) { total, group in
-                total + 24 + (group.models.isEmpty ? 36 : CGFloat(group.models.count * 30))
+                total + 24 + CGFloat(group.models.count * 30)
             }
-            return min(210, max(36, height))
+            let emptyHeight: CGFloat = searchGroups.isEmpty ? 34 : 0
+            let turnedOffHeight: CGFloat = turnedOffSearchProviders.isEmpty ? 0 : 28
+            return min(210, max(36, height + emptyHeight + turnedOffHeight))
         }
         if selectedProvider?.enabled == false { return 70 }
         let defaultHeight: CGFloat = selectedTab == Self.favourites ? 30 : 0
@@ -392,7 +400,7 @@ private struct ModelPickerView: View {
             tabButton(id: Self.favourites, name: "Favourites", systemImage: "star.fill", driverKind: nil, enabled: true)
             ForEach(providers) { provider in
                 tabButton(
-                    id: provider.instanceId, name: provider.displayName, systemImage: nil,
+                    id: provider.instanceId, name: provider.pickerName, systemImage: nil,
                     driverKind: provider.driverKind, enabled: provider.enabled
                 )
             }
@@ -448,7 +456,7 @@ private struct ModelPickerView: View {
             searchList
         } else if let provider = selectedProvider, !provider.enabled {
             VStack(alignment: .leading, spacing: 8) {
-                Text("\(provider.displayName) is turned off in T3.")
+                Text("\(provider.pickerName) is turned off in T3.")
                     .font(.system(size: 11.5))
                     .foregroundStyle(Theme.muted)
                 Button("Open T3 settings") {
@@ -492,39 +500,26 @@ private struct ModelPickerView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 2) {
                 ForEach(searchGroups) { group in
-                    Text(group.provider.displayName)
+                    Text(group.provider.pickerName)
                         .font(.system(size: 10.5, weight: .medium))
                         .foregroundStyle(Theme.muted)
                         .padding(.horizontal, 8)
                         .padding(.top, 5)
                         .frame(height: 24, alignment: .leading)
-                    if group.models.isEmpty {
-                        HStack(spacing: 8) {
-                            ProviderGlyph(driverKind: group.provider.driverKind)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text("No match")
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(Theme.muted)
-                                if let reason = group.noMatchReason {
-                                    Text(reason)
-                                        .font(.system(size: 10.5))
-                                        .foregroundStyle(Theme.muted)
-                                        .lineLimit(2)
-                                }
-                            }
-                        }
-                        .padding(.horizontal, 8)
-                        .frame(minHeight: 36)
-                        .opacity(0.55)
-                    } else {
-                        ForEach(group.models) { model in modelRow(model) }
-                    }
+                    ForEach(group.models) { model in modelRow(model) }
                 }
                 if searchGroups.isEmpty {
-                    Text("No match")
+                    Text("No models match \"\(search.trimmingCharacters(in: .whitespacesAndNewlines))\"")
                         .font(.system(size: 11.5))
                         .foregroundStyle(Theme.muted)
                         .padding(8)
+                }
+                if !turnedOffSearchProviders.isEmpty {
+                    Text("Turned off in T3: \(turnedOffSearchProviders.map(\.pickerName).joined(separator: ", "))")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(Theme.muted)
+                        .padding(.horizontal, 8)
+                        .frame(minHeight: 28, alignment: .leading)
                 }
             }
         }
@@ -577,11 +572,17 @@ private struct ModelPickerView: View {
                 }
             }
             Spacer()
+            if !search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                model.selection.matches(highlighted) {
+                keyCap("↵")
+            }
             ModelRowTrailingIcons(
                 isCurrent: isCurrent,
                 isFavourite: isFavourite,
                 isHovered: hovered == model.selection,
-                isFavouritesTab: selectedTab == Self.favourites && search.isEmpty,
+                tab: search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ? (selectedTab == Self.favourites ? .favourites : .provider)
+                    : .search,
                 toggleFavourite: { chat.toggleFavourite(model) }
             )
         }
