@@ -58,6 +58,7 @@ final class FloatPanel: EditingPanel {
     var stopRun: (() -> Void)?
     var allowApproval: (() -> Bool)?
     var goBackQuestion: (() -> Bool)?
+    var closeQuestionSteps: (() -> Bool)?
 
     var sizing: PanelSizing?
     var resizeEnabled = false {
@@ -112,6 +113,7 @@ final class FloatPanel: EditingPanel {
     }
 
     func closePicker() -> Bool {
+        if closeQuestionSteps?() == true { return true }
         guard let picker = childWindows?.compactMap({ $0 as? PickerPanel }).first else { return false }
         picker.dismiss?()
         return true

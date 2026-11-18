@@ -44,6 +44,7 @@ final class ChatState: ObservableObject {
     @Published private(set) var needsT3 = false
     @Published private(set) var canLaunchT3 = false
     @Published private var questionFlow: T3QuestionFlow?
+    var dismissQuestionSteps: (() -> Void)?
     @Published private(set) var approvalPreview: String?
     @Published private(set) var approvalAccessEnabled = false
     @Published private(set) var approvalAccessBusy = false
@@ -776,8 +777,19 @@ final class ChatState: ObservableObject {
         questionError = nil
     }
 
+    @discardableResult func closeQuestionSteps() -> Bool {
+        guard let dismiss = dismissQuestionSteps else { return false }
+        dismissQuestionSteps = nil
+        dismiss()
+        return true
+    }
+
     @discardableResult func goBackQuestion() -> Bool {
-        guard !answeringQuestion, questionFlow?.goBack() == true else { return false }
+        jumpToQuestion(questionIndex - 1)
+    }
+
+    @discardableResult func jumpToQuestion(_ index: Int) -> Bool {
+        guard !answeringQuestion, questionFlow?.jump(to: index) == true else { return false }
         questionError = nil
         focusRequest += 1
         return true
@@ -799,6 +811,10 @@ final class ChatState: ObservableObject {
         case .advanced:
             questionFlow = flow
             questionError = nil
+            focusRequest += 1
+        case .needsAnswer:
+            questionFlow = flow
+            questionError = "Pick an answer to continue."
             focusRequest += 1
         case .submit(let answers):
             guard let reference else { return }

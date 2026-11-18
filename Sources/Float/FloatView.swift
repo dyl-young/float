@@ -410,8 +410,7 @@ struct FloatView: View {
             }
             if let question = chat.activeQuestion, let request = chat.pendingQuestion {
                 QuestionCard(
-                    chat: chat, question: question, position: chat.questionIndex + 1,
-                    count: request.questions.count
+                    chat: chat, request: request, question: question, position: chat.questionIndex + 1
                 )
                 .id("\(request.requestId):\(question.id)")
             } else if chat.activeApproval != nil || chat.approvalPreview != nil {
@@ -901,57 +900,32 @@ private struct NoticeAction {
 
 private struct QuestionCard: View {
     @ObservedObject var chat: ChatState
+    let request: T3PendingQuestionRequest
     let question: T3Question
     let position: Int
-    let count: Int
 
-    @State private var hoveredOption: Int?
-
-    private var preview: String? {
-        let index = hoveredOption ?? question.options.firstIndex(where: chat.isQuestionOptionSelected)
-        guard let index, question.options.indices.contains(index) else { return nil }
-        return question.options[index].preview
-    }
+    @State private var showingSteps = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
-                Text(question.header.uppercased())
-                    .tracking(0.5)
+                Text(verbatim: question.header)
+                    .lineLimit(1)
                 Spacer(minLength: 0)
-                if count > 1 {
-                    Text("\(position) of \(count)")
-                }
+                if request.questions.count > 1 { stepMenu }
             }
-            .font(.system(size: 10.5))
+            .font(.system(size: 11))
             .foregroundStyle(Theme.muted)
-            .padding(.bottom, 3)
+            .padding(.bottom, 5)
 
-            Text(question.question)
-                .font(.system(size: 12.5, weight: .semibold))
+            Text(verbatim: question.question)
+                .font(.system(size: 12.5))
                 .foregroundStyle(Theme.text)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.bottom, 7)
+                .padding(.bottom, 8)
 
             ForEach(Array(question.options.enumerated()), id: \.offset) { index, option in
                 optionRow(option, index: index)
-            }
-
-            if let preview, !preview.isEmpty {
-                ScrollView([.horizontal, .vertical]) {
-                    Text(preview)
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(Theme.text)
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: true, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(8)
-                        .background(OverlayScrollers())
-                }
-                .flashScrollKnobsOnHover()
-                .frame(maxHeight: 88)
-                .background(Theme.code, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                .padding(.top, 6)
             }
 
             if let error = chat.questionError {
@@ -962,7 +936,7 @@ private struct QuestionCard: View {
                     .padding(.top, 6)
             }
 
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 if position > 1 {
                     Button("Back") { chat.goBackQuestion() }
                         .floatPillButtonStyle(tint: nil)
@@ -972,76 +946,161 @@ private struct QuestionCard: View {
                 Button(chat.isLastQuestion ? "Send answer" : "Next", action: chat.confirmQuestion)
                     .floatPillButtonStyle()
                     .disabled(!chat.questionCanAdvance || chat.answeringQuestion)
-
-                Text("1–\(min(9, question.options.count)) pick · ↵ confirm")
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(Theme.muted)
-                    .lineLimit(1)
             }
-            .padding(.top, 6)
+            .padding(.top, 8)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 9)
-        .background(Theme.text.opacity(0.03), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .padding(.horizontal, 11)
+        .padding(.vertical, 10)
+        .background(Theme.text.opacity(0.03), in: RoundedRectangle(cornerRadius: 10))
         .overlay {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: 10)
                 .strokeBorder(Theme.hairline, lineWidth: 1)
+                .allowsHitTesting(false)
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(question.header)
     }
 
-    private func optionRow(_ option: T3Question.Option, index: Int) -> some View {
-        let selected = chat.isQuestionOptionSelected(option)
-        let description = option.displayDescription
-        return Button {
-            chat.selectQuestionOption(option)
-        } label: {
-            HStack(alignment: .top, spacing: 8) {
-                Text("\(index + 1)")
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(Theme.text)
-                    .frame(minWidth: 18, minHeight: 18)
-                    .padding(.horizontal, 1)
-                    .background(Theme.text.opacity(0.08),
-                        in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                    .padding(.top, 1)
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(option.label)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Theme.text)
-                        .fixedSize(horizontal: false, vertical: true)
-                    if let description {
-                        Text(description)
-                            .font(.system(size: 11))
-                            .foregroundStyle(Theme.muted)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                Image(systemName: "checkmark")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(Theme.accent)
-                    .frame(width: 13, height: 13)
-                    .padding(.top, 2)
-                    .opacity(selected ? 1 : 0)
+    private var stepMenu: some View {
+        Button {
+            if !chat.closeQuestionSteps() {
+                let presentation = $showingSteps
+                chat.dismissQuestionSteps = { presentation.wrappedValue = false }
+                showingSteps = true
             }
-            .padding(.horizontal, 7)
-            .padding(.vertical, 6)
-            .background(
-                selected ? Theme.accent.opacity(0.12) : Theme.tray.opacity(0),
-                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
-            )
+        } label: {
+            HStack(spacing: 3) {
+                Text("\(position)/\(request.questions.count)")
+                    .monospacedDigit()
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9))
+            }
+            .font(.system(size: 11))
+            .foregroundStyle(Theme.muted)
+            .padding(.horizontal, 4)
             .contentShape(Rectangle())
         }
         .floatButtonStyle()
         .disabled(chat.answeringQuestion)
-        .padding(.horizontal, -3)
-        .onHover { hoveredOption = $0 ? index : nil }
-        .accessibilityLabel(
-            ["\(index + 1)", option.label, description].compactMap { $0 }.joined(separator: ", ")
-        )
+        .accessibilityLabel("Jump to question")
+        .accessibilityValue("\(position) of \(request.questions.count)")
+        .popover(isPresented: $showingSteps, arrowEdge: .bottom) {
+            ScrollView {
+                VStack(spacing: 2) {
+                    ForEach(Array(request.questions.enumerated()), id: \.offset) { index, step in
+                        stepRow(step, index: index)
+                    }
+                }
+                .padding(4)
+                .background(OverlayScrollers())
+            }
+            .frame(width: 220, height: CGFloat(min(request.questions.count, 8) * 28 + 6))
+            .background(Theme.raised)
+            .preferredColorScheme(.dark)
+            .onExitCommand { chat.closeQuestionSteps() }
+        }
+        .onChange(of: showingSteps) {
+            if !showingSteps { chat.dismissQuestionSteps = nil }
+        }
+        .onDisappear {
+            if showingSteps { chat.closeQuestionSteps() }
+        }
+    }
+
+    private func stepRow(_ step: T3Question, index: Int) -> some View {
+        let selected = index == position - 1
+        return Button {
+            showingSteps = false
+            chat.jumpToQuestion(index)
+        } label: {
+            Text("\(index + 1). \(step.header)")
+                .font(.system(size: 11.5))
+                .foregroundStyle(Theme.text)
+                .lineLimit(1)
+                .padding(.horizontal, 8)
+                .frame(maxWidth: .infinity, minHeight: 26, alignment: .leading)
+                .background(selected ? Theme.selection : .clear, in: RoundedRectangle(cornerRadius: 8))
+                .contentShape(Rectangle())
+        }
+        .floatButtonStyle(in: RoundedRectangle(cornerRadius: 8))
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    private func optionRow(_ option: T3Question.Option, index: Int) -> some View {
+        let selected = chat.isQuestionOptionSelected(option)
+        let description = option.displayDescription
+        let row = RoundedRectangle(cornerRadius: 7)
+        return Button {
+            chat.selectQuestionOption(option)
+        } label: {
+            HStack(alignment: .top, spacing: 9) {
+                selectionMark(selected: selected)
+                    .frame(width: 13, height: 13)
+                    .padding(.top, 1)
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(verbatim: option.label)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let description {
+                        Text(verbatim: description)
+                            .font(.system(size: 11))
+                            .foregroundStyle(Theme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if let preview = option.preview, !preview.isEmpty {
+                        Text(verbatim: preview)
+                            .font(.system(size: 10.5, design: .monospaced))
+                            .foregroundStyle(Theme.muted)
+                            .fixedSize(horizontal: true, vertical: true)
+                            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+                            .clipped()
+                            .padding(.top, 5)
+                            .padding(.bottom, 2)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                if index < 9 {
+                    Text("\(index + 1)")
+                        .font(.system(size: 10.5).monospacedDigit())
+                        .foregroundStyle(Theme.text)
+                        .frame(width: 18, height: 18)
+                        .background(Theme.text.opacity(0.08), in: RoundedRectangle(cornerRadius: 5))
+                        .accessibilityHidden(true)
+                }
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 5)
+            .background(selected ? Theme.text.opacity(0.05) : .clear, in: row)
+            .contentShape(Rectangle())
+        }
+        .floatButtonStyle(in: row, highlight: .background)
+        .disabled(chat.answeringQuestion)
+        .padding(.horizontal, -4)
         .accessibilityValue(selected ? "Selected" : "Not selected")
+    }
+
+    @ViewBuilder private func selectionMark(selected: Bool) -> some View {
+        if question.allowsMultiple {
+            let box = RoundedRectangle(cornerRadius: 3)
+            box.fill(selected ? Theme.accent : .clear)
+                .overlay { box.strokeBorder(selected ? Theme.accent : Theme.text.opacity(0.45), lineWidth: 1.5) }
+                .overlay {
+                    if selected {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 8, weight: .semibold))
+                            .foregroundStyle(Theme.canvas)
+                    }
+                }
+        } else {
+            Circle().strokeBorder(selected ? Theme.accent : Theme.text.opacity(0.45), lineWidth: 1.5)
+                .overlay {
+                    if selected { Circle().fill(Theme.accent).frame(width: 6, height: 6) }
+                }
+        }
     }
 }
 

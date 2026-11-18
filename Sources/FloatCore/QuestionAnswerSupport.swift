@@ -85,6 +85,7 @@ public enum T3QuestionAnswerBuilder {
 public struct T3QuestionFlow: Sendable {
     public enum Confirmation: Equatable, Sendable {
         case advanced
+        case needsAnswer
         case submit([String: T3QuestionAnswer])
     }
 
@@ -149,14 +150,24 @@ public struct T3QuestionFlow: Sendable {
     }
 
     public mutating func goBack() -> Bool {
-        guard index > 0 else { return false }
-        index -= 1
+        jump(to: index - 1)
+    }
+
+    @discardableResult public mutating func jump(to destination: Int) -> Bool {
+        guard request.questions.indices.contains(destination), destination != index else { return false }
+        index = destination
         return true
     }
 
     public mutating func confirm() -> Confirmation? {
         guard canAdvance else { return nil }
         if isLast {
+            if let missing = request.questions.firstIndex(where: {
+                T3QuestionAnswerBuilder.resolve($0, draft: drafts[$0.id]) == nil
+            }) {
+                index = missing
+                return .needsAnswer
+            }
             return T3QuestionAnswerBuilder.build(questions: request.questions, drafts: drafts)
                 .map(Confirmation.submit)
         }

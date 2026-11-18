@@ -149,3 +149,16 @@ func hidesRedundantQuestionOptionDescriptions(
         "notes": .text("Only generated folders"), "areas": .selections(["web", "server"]),
     ]))
 }
+
+@Test func jumpingToTheLastQuestionKeepsItsDraftAndReturnsToAnUnansweredStep() {
+    let last = T3Question(id: "last", header: "Last", question: "Any notes?", options: [])
+    var flow = T3QuestionFlow(request: .init(requestId: "id", questions: [singleQuestion, last]))
+    flow.jump(to: 1)
+    flow.setCustomAnswer("Keep this note")
+    #expect(flow.confirm() == .needsAnswer)
+    #expect(flow.index == 0)
+    flow.select(singleQuestion.options[0])
+    #expect(flow.confirm() == .advanced)
+    #expect(flow.composerText == "Keep this note")
+    #expect(flow.confirm() == .submit(["scope": .text("stale"), "last": .text("Keep this note")]))
+}
