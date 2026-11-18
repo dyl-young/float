@@ -5,7 +5,9 @@ struct ComposerEditor: NSViewRepresentable {
     @Binding var text: String
     @Binding var height: CGFloat
     let focusRequest: Int
+    let editable: Bool
     let submit: () -> Void
+    let pickOption: (Int) -> Bool
     let pasteImages: (NSPasteboard) -> Bool
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -43,7 +45,9 @@ struct ComposerEditor: NSViewRepresentable {
         guard let editor = scroll.documentView as? PromptTextView else { return }
         context.coordinator.parent = self
         editor.submit = submit
+        editor.pickOption = pickOption
         editor.pasteImages = pasteImages
+        editor.isEditable = editable
         if editor.string != text, !editor.hasMarkedText() { editor.string = text }
         let shouldFocus = context.coordinator.focusedRequest != focusRequest
         if shouldFocus { context.coordinator.focusedRequest = focusRequest }
@@ -102,10 +106,17 @@ private final class EditorScrollView: NSScrollView {
 
 final class PromptTextView: NSTextView {
     var submit: (() -> Void)?
+    var pickOption: ((Int) -> Bool)?
     var pasteImages: ((NSPasteboard) -> Bool)?
 
     override func keyDown(with event: NSEvent) {
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if modifiers.intersection([.command, .shift, .option, .control]).isEmpty,
+            string.isEmpty, let character = event.charactersIgnoringModifiers,
+            let number = Int(character), (1...9).contains(number),
+            pickOption?(number - 1) == true {
+            return
+        }
         if [36, 76].contains(event.keyCode), modifiers.intersection([.shift, .option, .control]).isEmpty,
             !hasMarkedText() {
             submit?()

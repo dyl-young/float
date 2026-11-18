@@ -53,6 +53,8 @@ final class ChatState: ObservableObject {
     @Published private(set) var questionIndex = 0
     @Published private(set) var questionDrafts: [String: T3QuestionDraft] = [:]
     @Published private(set) var questionError: String?
+    @Published private(set) var answeringQuestion = false
+    @Published private(set) var answeredQuestionSummary: String?
     @Published private(set) var focusRequest = 0
     @Published private(set) var modelPickerRequest = 0
     @Published private(set) var projectPickerRequest = 0
@@ -129,12 +131,24 @@ final class ChatState: ObservableObject {
     }
     var questionCanAdvance: Bool {
         guard let question = activeQuestion else { return false }
-        return Self.hasAnswer(question, draft: questionDrafts[question.id])
+        return T3QuestionAnswerBuilder.resolve(question, draft: questionDrafts[question.id]) != nil
     }
     var isLastQuestion: Bool {
         guard let count = pendingQuestion?.questions.count else { return true }
         return questionIndex >= count - 1
     }
+    var composerText: String {
+        guard let question = activeQuestion else { return draft }
+        guard question.allowsCustom else { return "" }
+        return questionDrafts[question.id]?.customAnswer ?? ""
+    }
+    var composerPlaceholder: String {
+        if let question = activeQuestion {
+            return question.allowsCustom ? "Or type your own answer…" : "Pick an answer above…"
+        }
+        return hasConversation ? "Ask a follow-up…" : "Ask anything, or paste a screenshot…"
+    }
+    var composerEditable: Bool { activeQuestion?.allowsCustom != false }
     var showsStop: Bool { submitting || (status == .running && !stopAcknowledged) || stopping }
     var canStop: Bool { showsStop && !stopping }
     var canSend: Bool {
@@ -401,6 +415,7 @@ final class ChatState: ObservableObject {
         failureReason = nil
         failureDetail = nil
         resetQuestion()
+        answeredQuestionSummary = nil
         needsT3 = false
         canLaunchT3 = false
         loading = false
@@ -519,6 +534,7 @@ final class ChatState: ObservableObject {
         let projectID = target == nil ? selectedProject?.id : nil
         let selection = selectedModel.map(selectionForSend)
         clearNotice()
+        answeredQuestionSummary = nil
         needsT3 = false
         retrySendAfterLaunch = false
         submitting = true
@@ -587,7 +603,7 @@ final class ChatState: ObservableObject {
     }
 
     func selectQuestionOption(_ option: T3Question.Option) {
-        guard let question = activeQuestion else { return }
+        guard let question = activeQuestion, !answeringQuestion else { return }
         var draft = questionDrafts[question.id] ?? T3QuestionDraft()
         let value = option.answerValue
         if question.allowsMultiple {
@@ -602,13 +618,75 @@ final class ChatState: ObservableObject {
         draft.customAnswer = ""
         questionDrafts[question.id] = draft
         questionError = nil
+        focusRequest += 1
+    }
+
+    func selectQuestionOption(at index: Int) -> Bool {
+        guard composerText.isEmpty, let question = activeQuestion,
+            question.options.indices.contains(index) else { return false }
+        selectQuestionOption(question.options[index])
+        return true
+    }
+
+    func setComposerText(_ text: String) {
+        guard let question = activeQuestion else {
+            draft = text
+            return
+        }
+        guard question.allowsCustom, !answeringQuestion else { return }
+        var answer = questionDrafts[question.id] ?? T3QuestionDraft()
+        answer.customAnswer = text
+        if question.initialAnswer != nil || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            answer.selectedOptionValues = []
+        }
+        questionDrafts[question.id] = answer
+        questionError = nil
+    }
+
+    func confirmOrSend() {
+        if activeQuestion != nil {
+            confirmQuestion()
+        } else {
+            send()
+        }
     }
 
     func confirmQuestion() {
-        guard questionCanAdvance, !isLastQuestion else { return }
-        questionIndex += 1
+        guard !answeringQuestion, let request = pendingQuestion, let question = activeQuestion else {
+            return
+        }
+        guard T3QuestionAnswerBuilder.resolve(
+            question, draft: questionDrafts[question.id]
+        ) != nil else {
+            questionError = "Pick an answer to continue."
+            return
+        }
+        if !isLastQuestion {
+            questionIndex += 1
+            questionError = nil
+            focusRequest += 1
+            return
+        }
+        guard let answers = T3QuestionAnswerBuilder.build(
+            questions: request.questions, drafts: questionDrafts
+        ), let reference else { return }
+        let summary = Self.questionSummary(request.questions, drafts: questionDrafts)
+        answeringQuestion = true
         questionError = nil
-        focusRequest += 1
+        Task {
+            do {
+                try await client.answer(request, answers: answers, thread: reference)
+                answeredQuestionSummary = summary
+                resetQuestion()
+                status = .running
+                dismissedStatusNotice = nil
+                focusRequest += 1
+                refresh(reference, force: true)
+            } catch {
+                answeringQuestion = false
+                questionError = "Float couldn't send that answer. Try again."
+            }
+        }
     }
 
     private func interrupt(_ reference: ThreadReference, runId: String?, version: Int) async {
@@ -812,17 +890,33 @@ final class ChatState: ObservableObject {
         questionIndex = 0
         questionDrafts = [:]
         questionError = nil
+        answeringQuestion = false
     }
 
-    private static func hasAnswer(_ question: T3Question, draft: T3QuestionDraft?) -> Bool {
-        if question.allowsCustom {
-            if question.initialAnswer != nil, draft?.customAnswer != nil { return true }
-            if draft?.customAnswer?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
-                return true
+    private static func questionSummary(
+        _ questions: [T3Question], drafts: [String: T3QuestionDraft]
+    ) -> String {
+        let values = questions.compactMap { question -> String? in
+            let draft = drafts[question.id]
+            let custom = draft?.customAnswer
+            let usesCustom = question.allowsCustom && (
+                question.initialAnswer != nil && custom != nil
+                    || custom?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            )
+            if usesCustom {
+                return custom.map(compactAnswer)
             }
+            let labels = (draft?.selectedOptionValues ?? []).compactMap { value in
+                question.options.first(where: { $0.answerValue == value })?.label
+            }
+            if !labels.isEmpty { return labels.joined(separator: ", ") }
+            return question.isRequired ? nil : "Skipped"
         }
-        if draft?.selectedOptionValues.isEmpty == false { return true }
-        return !question.isRequired && question.options.isEmpty
+        return values.joined(separator: " · ")
+    }
+
+    private static func compactAnswer(_ answer: String) -> String {
+        answer.split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }
 
     private func expandLongMessages(

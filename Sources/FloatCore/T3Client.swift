@@ -272,6 +272,22 @@ public struct T3Client: Sendable {
         )
     }
 
+    public func answer(
+        _ request: T3PendingQuestionRequest, answers: [String: T3QuestionAnswer],
+        thread: ThreadReference
+    ) async throws {
+        var encoded: [String: any Sendable] = [:]
+        for (id, answer) in answers { encoded[id] = answer.argument }
+        var arguments: [String: any Sendable] = [
+            "action": "respond", "threadId": thread.threadId,
+            "requestId": request.requestId, "answers": encoded,
+        ]
+        arguments["environmentId"] = thread.environmentID
+        _ = try await transport.call(
+            "t3_pending_request", arguments, result: Empty.self
+        )
+    }
+
     /// True when T3 accepted the interrupt or the run was already stopped.
     public func stop(_ thread: ThreadReference, runId: String?) async throws -> Bool {
         var arguments: [String: any Sendable] = ["threadId": thread.threadId]

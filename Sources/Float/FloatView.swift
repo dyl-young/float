@@ -344,6 +344,14 @@ struct FloatView: View {
                     dismiss: chat.dismissNotice
                 )
             }
+            if let summary = chat.answeredQuestionSummary, !summary.isEmpty {
+                Text("Answered: \(summary)")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.muted)
+                    .lineLimit(1)
+                    .help(summary)
+                    .padding(.leading, 2)
+            }
             if let question = chat.activeQuestion, let request = chat.pendingQuestion {
                 QuestionCard(
                     chat: chat, question: question, position: chat.questionIndex + 1,
@@ -449,8 +457,8 @@ struct FloatView: View {
         VStack(alignment: .leading, spacing: 8) {
             if !chat.images.isEmpty { draftImages }
             ZStack(alignment: .topLeading) {
-                if chat.draft.isEmpty {
-                    Text(chat.hasConversation ? "Ask a follow-up…" : "Ask anything, or paste a screenshot…")
+                if chat.composerText.isEmpty {
+                    Text(chat.composerPlaceholder)
                         .font(.system(size: 14))
                         .foregroundStyle(Theme.placeholder)
                         .padding(.top, 5)
@@ -458,8 +466,10 @@ struct FloatView: View {
                         .accessibilityHidden(true)
                 }
                 ComposerEditor(
-                    text: $chat.draft, height: $editorHeight, focusRequest: chat.focusRequest,
-                    submit: chat.send, pasteImages: chat.pasteImages
+                    text: Binding(get: { chat.composerText }, set: chat.setComposerText),
+                    height: $editorHeight, focusRequest: chat.focusRequest,
+                    editable: chat.composerEditable, submit: chat.confirmOrSend,
+                    pickOption: chat.selectQuestionOption(at:), pasteImages: chat.pasteImages
                 )
                 .frame(height: editorHeight)
             }
@@ -959,8 +969,8 @@ private struct QuestionCard: View {
                         .background(Theme.accent, in: Capsule())
                 }
                 .buttonStyle(.plain)
-                .disabled(!chat.questionCanAdvance)
-                .opacity(chat.questionCanAdvance ? 1 : 0.45)
+                .disabled(!chat.questionCanAdvance || chat.answeringQuestion)
+                .opacity(chat.questionCanAdvance && !chat.answeringQuestion ? 1 : 0.45)
 
                 Text("1–\(min(9, question.options.count)) pick · ↵ confirm")
                     .font(.system(size: 10.5))
@@ -1017,12 +1027,13 @@ private struct QuestionCard: View {
             .padding(.horizontal, 7)
             .padding(.vertical, 6)
             .background(
-                selected ? Theme.accent.opacity(0.12) : Color.clear,
+                selected ? Theme.accent.opacity(0.12) : Theme.tray.opacity(0),
                 in: RoundedRectangle(cornerRadius: 6, style: .continuous)
             )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(chat.answeringQuestion)
         .padding(.horizontal, -3)
         .onHover { hoveredOption = $0 ? index : nil }
         .accessibilityLabel("\(index + 1), \(option.label), \(option.description)")
