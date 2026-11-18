@@ -30,6 +30,89 @@ catalogue and returns matches per provider. Float therefore needs to preserve
 disabled providers and use catalogue search instead of treating the initial
 short list as exhaustive.
 
+## Skills and commands
+
+The web composer detects `$` and `/` at a token boundary and builds menus in
+`useComposerMenuItems.ts` and `ComposerCommandMenu.tsx`. Skills are available
+inline. Provider slash commands and `/clear`, `/side`, and `/btw` only appear
+at position zero. `providerSkillSearch.ts` and
+`composerSlashCommandSearch.ts` rank exact, prefix, boundary, substring, and
+fuzzy name matches, plus description matches. The skill search also scores
+display name, short description, and scope. It keeps enabled, user-invocable
+skills and deduplicates by name. Slash results suppress commands that duplicate
+a listed skill.
+
+### Listing provider inventory
+
+Both lists live in the provider registry by instance ID. They come from the
+provider's machine snapshot and workspace snapshots keyed by exact cwd.
+`ServerProviderSkill` supplies `name`, optional `displayName`,
+`description`, `shortDescription`, and `scope`, plus `path`, `enabled`, and
+optional `userInvocable` / `userInvocationOnly` flags. T3 infers the source
+from path and scope. `ServerProviderSlashCommand` supplies `name`, optional
+`description` and optional `input.hint`. Codex queries its app server's
+`skills/list` and advertises driver commands. Claude scans managed, user,
+project, and plugin skill locations and takes slash commands from its SDK
+initialization response, plus its built-in compact command. Antigravity scans
+user and workspace skill directories and takes slash commands from ACP's
+available-command inventory. Other installed drivers populate the same
+contract from their own discovery.
+
+The live MCP `orchestrator_capabilities` result includes models and
+constraints, with no skills or slash commands. The MCP toolkits have no
+inventory endpoint. The local V2 RPC socket used for approvals also exposes
+`server.getConfig` and `server.refreshProviders` under
+`orchestration:read`. Use a short-lived read-only headless session independent
+of Float's approval credential. Query `server.refreshProviders` with
+`{ instanceId, cwd, workspaceSnapshotsOnDemand: true }` for a project's
+inventory. This is a provider discovery read that refreshes the server's
+cache. Omit model discovery and settings flags. For a machine inventory,
+`server.getConfig` has the root provider lists. Prefer the exact cwd snapshot,
+using the current thread's worktree path when present. Float's existing MCP
+link routing does not expose remote inventory, so linked drafts have no
+provider suggestions until Float has remote RPC access.
+
+The live read-only probe accepted that scope and returned 14 machine skills
+and three commands for Codex and 13 workspace commands for Antigravity.
+Claude was disabled. Antigravity initially had zero workspace skills, and a
+fresh read discovered the temporary Float QA skill described below.
+
+### T3 commands
+
+- `/clear` in T3 arms a fresh agent session for the next send while keeping
+  older messages visible in that thread. In Float it invokes New chat (⌘N).
+- `/model` opens the model picker. It works at any word boundary in T3, so
+  Float can open its existing picker the same way.
+- `/side [prompt]` forks a side chat from a stable point in the current
+  thread and sends the supplied prompt there. `/btw` is its alias in the
+  inspected T3 source. Both use T3's side-chat RPC and pane lifecycle, which
+  Float's MCP client and single-thread panel do not support.
+- T3 can inject `/usage-limits` for clients that provide a usage panel.
+  `/compact` is provider-advertised, but T3 intercepts it for eligible
+  threads through its own compaction action. Float has neither action.
+
+### Sending and live proof
+
+The web picker inserts `$name ` for either skill entry point. The
+`/skill:name` label only appears in the menu. T3 sends the canonical
+`$name` inline in the user message's text. The client renders matching tokens
+as inline chips through `SkillInlineText.tsx`. Provider commands use
+`/name ` at the start of the same text, followed by any arguments. There is
+no separate skill or command field. Float can pass this text unchanged as
+`message` on `t3_thread_launch` and `t3_thread_send`. Claude's server
+adapter translates the last known skill mention to a leading `/name` in
+the final provider text block for native expansion.
+
+In a real `t3_thread_launch` in the Mac mini Float project
+(`0e51166a-90ec-46ca-a2c2-7dc566d71ce2`), Antigravity Gemini 3.8 Flash at
+`thought_level: low` received
+`$float-qa-marker Reply with the skill marker only.`. The temporary
+project-local skill was the only source of the marker.
+`t3_thread_read` returned the original user text, a completed run, and
+the exact assistant reply `FLOAT-SKILL-ORCHID-72`. The fixture was removed,
+a fresh inventory confirmed its removal, and the probe credentials were
+revoked.
+
 ## Favourites
 
 Favourites are not browser-local. T3 stores them in the server settings as
