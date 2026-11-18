@@ -145,7 +145,7 @@ code{font-family:var(--font-mono);font-size:11.5px;background:var(--code-backgro
 
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px 16px;align-items:start}
 @media (max-width:600px){.grid{grid-template-columns:1fr}.desk .shell{left:16px;width:auto}.app{width:calc(100% - 36px)}}
-.ctx{display:flex;align-items:center;gap:6px;padding:8px 4px 0;font-size:11.5px;color:var(--muted-foreground)}
+.ctx{display:flex;align-items:center;gap:12px;padding:8px 4px 0;font-size:11.5px;color:var(--muted-foreground)}
 .cx{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 7px;border-radius:6px;position:relative}
 .cx svg{width:12px;height:12px}
 .cx.on{background:color-mix(in oklab, var(--primary) 18%, transparent);color:var(--foreground)}
@@ -155,7 +155,17 @@ code{font-family:var(--font-mono);font-size:11.5px;background:var(--code-backgro
   box-shadow:0 14px 34px -10px rgba(0,0,0,.65);padding:4px;font-size:12px;color:var(--foreground)}
 .pop .lab{font-size:10.5px;color:var(--muted-foreground);padding:6px 8px 3px;letter-spacing:.02em}
 .pop .it{display:flex;align-items:center;gap:8px;min-height:28px;padding:4px 8px;border-radius:6px}
-.pop .it.sel{background:color-mix(in oklab, var(--foreground) 8%, transparent)}
+/* Current item: nordbones `secondary` pill (#1C3349), as T3 marks a selected chip. No checkmark. Hover and keyboard highlight: foreground at 6%. */
+.pop .it.sel{background:#1c3349;border-radius:8px}
+.pop .it.hl{background:color-mix(in oklab, var(--foreground) 6%, transparent)}
+/* Header crumb, as T3 shows a thread: project icon and name, muted; a slash; the title. No status dot unless T3 or the machine is disconnected. */
+.crumb{display:flex;align-items:center;gap:7px;min-width:0;flex:1;font-size:12px;white-space:nowrap}
+.crumb .pj{display:inline-flex;align-items:center;gap:5px;color:var(--muted-foreground);flex:none}
+.crumb .pj svg{width:11px;height:11px}
+.crumb .sl{color:var(--muted-foreground);opacity:.55}
+.crumb .tt{color:var(--foreground);font-weight:500;overflow:hidden;text-overflow:ellipsis}
+.crumb .tt small{font-weight:400;color:var(--muted-foreground);margin-left:6px}
+
 .pop .it.dim{opacity:.45}
 .pop .it svg{width:13px;height:13px;flex:none}
 .pop .it .sub{display:block;font-size:10.5px;color:var(--muted-foreground)}
@@ -244,7 +254,6 @@ const ph=t=>`<span class="ph">${t}</span>`;
 function ctx({dev='This Mac',devIcon='p-laptop',proj='No project',projIcon='p-folder',devOpen=false,projOpen=false,devPop='',projPop=''}={}){
   return `<div class="ctx">
     <span class="anchor"><span class="cx ${devOpen?'on':''}">${ic(devIcon)}${dev}<svg class="cv"><use href="#p-chev"/></svg></span>${devPop}</span>
-    <span class="sep"></span>
     <span class="anchor"><span class="cx ${projOpen?'on':''}">${ic(projIcon)}${proj}<svg class="cv"><use href="#p-chev"/></svg></span>${projPop}</span>
   </div>`;
 }
@@ -252,7 +261,7 @@ const cell=(html,cap,pad=0)=>`<div><div class="bg" style="padding-top:${14+pad}p
 
 const devPop=`<div class="pop">
   <div class="lab">Run on</div>
-  <div class="it sel">${ic('p-laptop')}<span>This Mac<span class="sub">client - Dylan Young</span></span><span class="r"><span class="on-dot"></span>${ic('p-check','ck')}</span></div>
+  <div class="it sel">${ic('p-laptop')}<span>This Mac<span class="sub">client - Dylan Young</span></span><span class="r"><span class="on-dot"></span></span></div>
   <div class="it">${ic('p-server')}<span>Dylan’s Mac mini<span class="sub">Linked · 6 projects</span></span><span class="r"><span class="on-dot"></span></span></div>
   <div class="it dim">${ic('p-laptop')}<span>dylans-hp<span class="sub">Offline</span></span><span class="r"><span class="on-dot off"></span></span></div>
   <hr><div class="ft">${ic('p-plus')}Link machines in T3</div></div>`;
@@ -261,7 +270,7 @@ const projPop=`<div class="pop" style="left:-96px;min-width:250px">
   <div class="srch">${ic('p-search')}<b>fl</b><span class="caret"></span></div>
   <div class="it">${ic('p-scratch')}<span>No project<span class="sub">Scratch chat, no repo</span></span></div>
   <div class="lab">On Dylan’s Mac mini</div>
-  <div class="it sel">${ic('p-folder')}<span>float<span class="sub">~/dev/float</span></span><span class="r">${ic('p-check','ck')}</span></div>
+  <div class="it sel">${ic('p-folder')}<span>float<span class="sub">~/dev/float</span></span></div>
   <div class="it">${ic('p-folder')}<span>flow-reports<span class="sub">~/dev/flow-reports</span></span></div>
   <hr><div class="ft"><span class="kbd2">↑↓</span> move <span class="kbd2">↵</span> pick</div></div>`;
 
@@ -269,17 +278,17 @@ document.getElementById('g1').innerHTML=[
   cell(shell({input:`<span class="caret"></span>${ph(' Ask anything, or paste a screenshot…')}`})+ctx(),
     `<b>1 · New chat.</b> A context row sits under the shell, like T3’s. Defaults: this Mac, No project. No branch or checkout picker.`),
   cell(shell({input:ph('Ask anything…')})+ctx({devOpen:true,devPop}),
-    `<b>2 · Run on.</b> Lists T3’s linked machines with live status. Offline ones are dimmed. Switching machines resets the project if it doesn’t exist there.`,200),
+    `<b>2 · Run on.</b> <span class="kbd">⌘</span><span class="kbd">H</span> opens it. Lists T3’s linked machines with live status dots, all on one line at the right. The current machine sits in a filled pill; no checkmark. Offline ones are dimmed. Switching machines resets the project if it doesn’t exist there.`,200),
   cell(shell({input:ph('Ask anything…')})+ctx({dev:'Mac mini',devIcon:'p-server',proj:'float',projOpen:true,projPop}),
     `<b>3 · Project.</b> Type to filter. No project is always first. Only projects on the chosen machine show. <span class="kbd">⇧</span><span class="kbd">⌘</span><span class="kbd">P</span> opens it.`,190),
-  cell(shell({tray:`<div class="tray-top"><div class="hdr"><span class="ib close"><svg><use href="#i-x"/></svg></span><span class="dot"></span><div class="ttl">Fix the panel resize<small style="display:inline-flex;align-items:center;gap:6px">${ic('p-folder').replace('<svg','<svg style="width:11px;height:11px"')}float · Mac mini</small></div><span class="ib"><svg><use href="#i-new"/></svg></span><span class="ib"><svg><use href="#i-open"/></svg></span></div><div class="msgs"><div class="msg-u">Why does the panel jump when the tray opens?</div><div class="msg-a"><p>The window resizes before SwiftUI lays out the tray, so it renders one frame at the old height.</p><div class="meta"><span class="ib"><svg><use href="#i-copy"/></svg></span>09:41</div></div></div></div>`,input:ph('Ask a follow-up…')}),
-    `<b>4 · After the first send.</b> Machine and project are fixed for the thread. They move into the header subtitle and the context row goes away. ⌘N starts fresh.`),
+  cell(shell({tray:`<div class="tray-top"><div class="hdr"><span class="ib close"><svg><use href="#i-x"/></svg></span><div class="crumb"><span class="pj">${ic('p-folder')}float · Mac mini</span><span class="sl">/</span><span class="tt">Fix the panel resize</span></div><span class="ib"><svg><use href="#i-new"/></svg></span><span class="ib"><svg><use href="#i-open"/></svg></span></div><div class="msgs"><div class="msg-u">Why does the panel jump when the tray opens?</div><div class="msg-a"><p>The window resizes before SwiftUI lays out the tray, so it renders one frame at the old height.</p><div class="meta"><span class="ib"><svg><use href="#i-copy"/></svg></span>09:41</div></div></div></div>`,input:ph('Ask a follow-up…')}),
+    `<b>4 · After the first send.</b> Machine and project are fixed for the thread. The header reads like T3: the project's icon and name (plus the machine when it isn't this Mac), a slash, then the title. No status dot. The context row goes away. ⌘N starts fresh.`),
 ].join('');
 
 const favPop=`<div class="pop right" style="min-width:290px">
   <div class="srch">${ic('p-search')}<span>Search models</span></div>
   <div class="tabs"><span class="tab on">${ic('p-star')}Favorites</span><span class="tab">${ic('g-claude')}</span><span class="tab">${ic('g-cursor')}</span><span class="tab">${ic('g-anti')}</span><span class="tab off">${ic('g-codex')}</span></div>
-  <div class="it sel">${ic('g-claude')}<span>Opus 5.5<span class="sub">Claude Code</span></span><span class="r">${ic('p-check','ck')}</span></div>
+  <div class="it sel">${ic('g-claude')}<span>Opus 5.5<span class="sub">Claude Code</span></span></div>
   <div class="it">${ic('g-claude')}<span>Sonnet 5.5<span class="sub">Claude Code</span></span></div>
   <div class="it">${ic('g-cursor')}<span>Composer 2.5<span class="sub">Cursor</span></span></div>
   <div class="it">${ic('g-anti')}<span>Gemini 4 Carbon<span class="sub">Antigravity</span></span></div>
@@ -290,7 +299,7 @@ const tabPop=`<div class="pop right" style="min-width:290px">
   <div class="srch">${ic('p-search')}<span>Search models</span></div>
   <div class="tabs"><span class="tab">${ic('p-star')}</span><span class="tab">${ic('g-claude')}</span><span class="tab on">${ic('g-cursor')}Cursor</span><span class="tab">${ic('g-anti')}</span><span class="tab off">${ic('g-codex')}</span></div>
   <div class="it">${ic('g-cursor')}<span>Composer 2.5</span><span class="r">${ic('p-star')}</span></div>
-  <div class="it sel">${ic('g-cursor')}<span>GPT-5.6 Sol</span><span class="r">${ic('p-check','ck')}</span></div>
+  <div class="it sel">${ic('g-cursor')}<span>GPT-5.6 Sol</span></div>
   <div class="it">${ic('g-cursor')}<span>Grok 4.7</span></div>
   <div class="it">${ic('g-cursor')}<span>Kimi K3</span></div>
   <hr><div class="ft">Effort<span class="seg"><span>Low</span><span>Med</span><span class="on">High</span><span>XHigh</span></span></div></div>`;

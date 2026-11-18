@@ -92,6 +92,29 @@ code{font-family:var(--font-mono);font-size:11.5px;background:var(--code-backgro
 .meta{display:flex;align-items:center;gap:4px;justify-content:flex-end;color:var(--muted-foreground);font-size:10.5px;margin:0 -4px 0 0}
 .meta .ib{width:20px;height:20px}.meta .ib svg{width:12px;height:12px}
 .working{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted-foreground)}
+/* Pixel loader (nordbones): 3x3 cells stepping every 300ms. */
+.pix{display:inline-grid;grid-template-columns:repeat(3,3px);gap:1px}
+.pix i{width:3px;height:3px;background:var(--primary);opacity:.25;animation:px 1.2s steps(1) infinite}
+.pix i:nth-child(1),.pix i:nth-child(5),.pix i:nth-child(9){animation-delay:0s}.pix i:nth-child(2),.pix i:nth-child(6),.pix i:nth-child(7){animation-delay:.3s}.pix i:nth-child(3),.pix i:nth-child(4),.pix i:nth-child(8){animation-delay:.6s}
+@keyframes px{0%{opacity:1}25%{opacity:.25}}
+/* T3's thinking shimmer (apps/web/src/index.css, live-activity-focus): muted text, a 4.5rem foreground band sweeping left to right, 2.2s, steps(30). */
+.shim{position:relative;display:inline-block;color:var(--muted-foreground)}
+.shim::after{content:attr(data-t);position:absolute;inset:0;color:var(--foreground);
+  -webkit-mask:linear-gradient(90deg,transparent 0,rgb(0 0 0/.12) .675rem,rgb(0 0 0/.55) 1.575rem,#000 2.25rem,rgb(0 0 0/.55) 2.925rem,rgb(0 0 0/.12) 3.825rem,transparent 4.5rem) no-repeat;
+  mask:linear-gradient(90deg,transparent 0,rgb(0 0 0/.12) .675rem,rgb(0 0 0/.55) 1.575rem,#000 2.25rem,rgb(0 0 0/.55) 2.925rem,rgb(0 0 0/.12) 3.825rem,transparent 4.5rem) no-repeat;
+  -webkit-mask-size:4.5rem 100%;mask-size:4.5rem 100%;-webkit-mask-position:-1.5rem 0;mask-position:-1.5rem 0;animation:shim 2.2s steps(30) infinite}
+@keyframes shim{from{-webkit-mask-position:-4.5rem 0;mask-position:-4.5rem 0}to{-webkit-mask-position:calc(100% + 4.5rem) 0;mask-position:calc(100% + 4.5rem) 0}}
+@media (prefers-reduced-motion:reduce){.shim::after{animation:none;opacity:0}.pix i{animation:none;opacity:.6}}
+/* Header crumb, as T3 shows a thread: project icon and name, muted; a slash; the title. */
+.crumb{display:flex;align-items:center;gap:7px;min-width:0;flex:1;font-size:12px;white-space:nowrap}
+.crumb .pj{display:inline-flex;align-items:center;gap:5px;color:var(--muted-foreground);flex:none}
+.crumb .pj svg{width:11px;height:11px}
+.crumb .sl{color:var(--muted-foreground);opacity:.55}
+.crumb .tt{color:var(--foreground);font-weight:500;overflow:hidden;text-overflow:ellipsis}
+.crumb .tt small{font-weight:400;color:var(--muted-foreground);margin-left:6px}
+/* Approval actions */
+.apv{display:flex;align-items:center;gap:6px}
+.apv .lnk{margin:8px 0 0 4px;font-size:11.5px;color:var(--muted-foreground);text-decoration:underline;text-decoration-color:color-mix(in oklab,var(--muted-foreground) 40%,transparent);text-underline-offset:2px}
 .pulse{display:inline-flex;gap:3px}
 .pulse i{width:4px;height:4px;border-radius:50%;background:var(--primary);animation:p 1.2s infinite}
 .pulse i:nth-child(2){animation-delay:.15s}.pulse i:nth-child(3){animation-delay:.3s}
@@ -191,6 +214,7 @@ code{font-family:var(--font-mono);font-size:11.5px;background:var(--code-backgro
     <symbol id="i-clip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l8.6-8.6a4 4 0 0 1 5.7 5.7l-8.6 8.6a2 2 0 0 1-2.8-2.8l8.5-8.5"/></symbol>
     <symbol id="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4"/></symbol>
     <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></symbol>
     <symbol id="i-burst" viewBox="0 0 256 257" preserveAspectRatio="xMidYMid"><path fill="#D97757" d="m50.228 170.321 50.357-28.257.843-2.463-.843-1.361h-2.462l-8.426-.518-28.775-.778-24.952-1.037-24.175-1.296-6.092-1.297L0 125.796l.583-3.759 5.12-3.434 7.324.648 16.202 1.101 24.304 1.685 17.629 1.037 26.118 2.722h4.148l.583-1.685-1.426-1.037-1.101-1.037-25.147-17.045-27.22-18.017-14.258-10.37-7.713-5.25-3.888-4.925-1.685-10.758 7-7.713 9.397.649 2.398.648 9.527 7.323 20.35 15.75L94.817 91.9l3.889 3.24 1.555-1.102.195-.777-1.75-2.917-14.453-26.118-15.425-26.572-6.87-11.018-1.814-6.61c-.648-2.723-1.102-4.991-1.102-7.778l7.972-10.823L71.42 0 82.05 1.426l4.472 3.888 6.61 15.101 10.694 23.786 16.591 32.34 4.861 9.592 2.592 8.879.973 2.722h1.685v-1.556l1.36-18.211 2.528-22.36 2.463-28.776.843-8.1 4.018-9.722 7.971-5.25 6.222 2.981 5.12 7.324-.713 4.73-3.046 19.768-5.962 30.98-3.889 20.739h2.268l2.593-2.593 10.499-13.934 17.628-22.036 7.778-8.749 9.073-9.657 5.833-4.601h11.018l8.1 12.055-3.628 12.443-11.342 14.388-9.398 12.184-13.48 18.147-8.426 14.518.778 1.166 2.01-.194 30.46-6.481 16.462-2.982 19.637-3.37 8.88 4.148.971 4.213-3.5 8.62-20.998 5.184-24.628 4.926-36.682 8.685-.454.324.519.648 16.526 1.555 7.065.389h17.304l32.21 2.398 8.426 5.574 5.055 6.805-.843 5.184-12.962 6.611-17.498-4.148-40.83-9.721-14-3.5h-1.944v1.167l11.666 11.406 21.387 19.314 26.767 24.887 1.36 6.157-3.434 4.86-3.63-.518-23.526-17.693-9.073-7.972-20.545-17.304h-1.36v1.814l4.73 6.935 25.017 37.59 1.296 11.536-1.814 3.76-6.481 2.268-7.13-1.297-14.647-20.544-15.1-23.138-12.185-20.739-1.49.843-7.194 77.448-3.37 3.953-7.778 2.981-6.48-4.925-3.436-7.972 3.435-15.749 4.148-20.544 3.37-16.333 3.046-20.285 1.815-6.74-.13-.454-1.49.194-15.295 20.999-23.267 31.433-18.406 19.702-4.407 1.75-7.648-3.954.713-7.064 4.277-6.286 25.47-32.405 15.36-20.092 9.917-11.6-.065-1.686h-.583L44.07 198.125l-12.055 1.555-5.185-4.86.648-7.972 2.463-2.593 20.35-13.999-.064.065Z"/></symbol>
     <symbol id="i-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></symbol>
     <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="M12 8v4M12 16h.01"/></symbol>
@@ -235,9 +259,12 @@ function footer({send='off', modelOpen=false}={}){
     <span class="ctl model ${modelOpen?'open':''}"><svg class="claude"><use href="#i-burst"/></svg>Opus 5.5<span class="bars"><i class="on" style="height:4px"></i><i class="on" style="height:7px"></i><i style="height:9px"></i><i style="height:11px"></i></span>${modelOpen?`<svg style="width:12px;height:12px"><use href="#i-chev"/></svg>`:''}</span>
     <span class="ctl">${ic('mic')}</span>${s}</div></div>`;
 }
-function trayTop({title, sub='No project', dot='var(--success)', openHover=false, closeHover=false, body}){
-  return `<div class="tray-top"><div class="hdr"><span class="ib close ${closeHover?'hv':''}" title="Close (Esc)">${ic('x')}</span><span class="dot" style="background:${dot}"></span>
-    <div class="ttl">${title}<small>${sub}</small></div>
+function trayTop({title, project=null, projectIcon='folder', offline=null, openHover=false, closeHover=false, body}){
+  const pj = project ? `<span class="pj">${projectIcon==='float' ? ic('float') : ic('folder')}${project}</span><span class="sl">/</span>` : '';
+  const head = offline
+    ? `<span class="dot" style="background:var(--muted-foreground)"></span><div class="crumb"><span class="tt">${title}<small>${offline}</small></span></div>`
+    : `<div class="crumb">${pj}<span class="tt">${title}</span></div>`;
+  return `<div class="tray-top"><div class="hdr"><span class="ib close ${closeHover?'hv':''}" title="Close (Esc)">${ic('x')}</span>${head}
     <span class="ib" title="New chat">${ic('new')}</span><span class="ib ${openHover?'hv':''}" title="Open in T3">${ic('open')}</span></div>
     <div class="msgs under">${body}</div></div>`;
 }
@@ -261,26 +288,26 @@ const states = [
    `<b>1 · Summoned.</b> <span class="kbd">⌥</span> <span class="kbd">Space</span> opens just the composer, focused. Same as your T3 one-line composer, nothing above it.`],
   [shell({input:`<div class="chips">${chip('Screenshot 09.38.png')}${chip('image.png',60)}</div>What's wrong with this layout on mobile?<span class="caret"></span>`, send:'on'}),
    `<b>2 · Pasted images.</b> <span class="kbd">⌘</span> <span class="kbd">V</span> adds removable chips inside the frosted input. Send ring lights up.`],
-  [shell({tray: trayTop({title:'Mobile layout bug', body:`<div class="msg-u"><div class="thumbs">${thumb()}${thumb(60)}</div>What's wrong with this layout on mobile?</div><div class="step">${ic('check')}Read 2 images</div><div class="working"><span class="pulse"><i></i><i></i><i></i></span>Working · 14s</div>`}),
+  [shell({tray: trayTop({title:'Mobile layout bug', body:`<div class="msg-u"><div class="thumbs">${thumb()}${thumb(60)}</div>What's wrong with this layout on mobile?</div><div class="step">${ic('check')}Read 2 images</div><div class="working"><span class="pix"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="shim" data-t="Thinking">Thinking</span><span>· 14s</span></div>`}),
      input: ph('Queue a follow-up…'), send:'stop'}),
-   `<b>3 · Working.</b> The tray slides up out of the input on first send. One status line, and send becomes a red stop ring.`],
-  [shell({tray: trayTop({title:'Mobile layout bug', closeHover:true, body:`<div class="msg-u"><div class="thumbs">${thumb()}${thumb(60)}</div>What's wrong with this layout on mobile?</div>` +
+   `<b>3 · Working.</b> The tray opens at its full height on first send. One status line: the pixel loader, then T3's shimmering "Thinking" text and the elapsed time. Send becomes a red stop ring.`],
+  [shell({tray: trayTop({title:'Mobile layout bug', project:'float', projectIcon:'float', closeHover:true, body:`<div class="msg-u"><div class="thumbs">${thumb()}${thumb(60)}</div>What's wrong with this layout on mobile?</div>` +
      reply(['The sidebar keeps its fixed <code>280px</code> width below the breakpoint, so the main column gets squeezed to about 90px.','Drop the fixed width under <code>md</code> and let the sidebar collapse into the header menu.'],'09:42')}),
      input: ph('Ask a follow-up…')}),
    `<b>4 · Replied.</b> Replies are plain text on the tray, with no bubble. Only your own messages sit in bubbles. Under it, as in T3: the copy button, then the time, left-aligned. The × at the top left (shown hovered) hides Float, same as <span class="kbd">Esc</span>.`],
-  [shell({tray: trayTop({title:'Clean up node_modules', dot:'var(--warning)', openHover:true, body:`<div class="msg-u">Find and delete stale node_modules folders under ~/repos</div><div class="notice warn">${ic('shield')}<div><b>Needs your approval</b>Wants to run <code>rm -rf</code> on 14 folders.<div><span class="btn pri">${ic('open')}Open in T3</span></div></div></div>`}),
-     input: ph('Waiting on approval in T3…')}),
-   `<b>5 · Needs input.</b> Approvals hand off to the thread in T3. Header dot turns amber.`],
-  [shell({tray: trayTop({title:'Clean up node_modules', dot:'var(--warning)', body:`<div class="msg-u">Find stale node_modules folders under ~/repos and clean them up</div><div class="ask"><div class="qh">Scope<span class="pg">1 of 2</span></div><div class="q">Which folders should I delete?</div>` +
+  [shell({tray: trayTop({title:'Clean up node_modules', body:`<div class="msg-u">Find and delete stale node_modules folders under ~/repos</div><div class="notice warn">${ic('shield')}<div><b>Needs your approval</b>Wants to run <code>rm -rf</code> on 14 folders.<div class="apv"><span class="btn pri">Allow</span><span class="btn ghost">Deny</span><span class="lnk">Open in T3</span></div></div></div>`}),
+     input: ph('Waiting on your approval…')}),
+   `<b>5 · Needs approval.</b> Approve or deny right here, and the run keeps going without opening T3. <span class="kbd">⌘</span><span class="kbd">↵</span> allows, <span class="kbd">Esc</span> leaves it pending. Open in T3 shows the full request.`],
+  [shell({tray: trayTop({title:'Clean up node_modules', body:`<div class="msg-u">Find stale node_modules folders under ~/repos and clean them up</div><div class="ask"><div class="qh">Scope<span class="pg">1 of 2</span></div><div class="q">Which folders should I delete?</div>` +
      `<div class="opt sel"><span class="kbd">1</span><div class="t"><b>Untouched for 30+ days</b><span>14 folders, 3.1 GB</span></div><svg><use href="#i-check"/></svg></div>` +
      `<div class="opt"><span class="kbd">2</span><div class="t"><b>All of them</b><span>41 folders, 9.8 GB</span></div><svg><use href="#i-check"/></svg></div>` +
      `<div class="opt"><span class="kbd">3</span><div class="t"><b>Just list them</b><span>Delete nothing yet</span></div><svg><use href="#i-check"/></svg></div>` +
      `<div class="af"><span class="btn pri">Next</span><small><span class="kbd">1</span>–<span class="kbd">3</span> pick · <span class="kbd">↵</span> confirm</small></div></div>`}),
      input: ph('Or type your own answer…')}),
-   `<b>6 · Asks a question.</b> When an agent asks you something, the question card shows in Float and the answer goes back through T3. Number keys pick, Return confirms, and typing in the input answers in your own words. Header dot turns amber. Tool approvals still open T3.`],
-  [shell({tray: trayTop({title:'Float', sub:'T3 not running', dot:'var(--muted-foreground)', body:`<div class="notice info">${ic('power')}<div><b>T3 Code isn't running</b>Your draft is saved. Launch T3 and Float sends it.<div style="display:flex;gap:6px"><span class="btn pri">Launch T3</span><span class="btn ghost">Not now</span></div></div></div>`}),
+   `<b>6 · Asks a question.</b> When an agent asks you something, the question card shows in Float and the answer goes back through T3. Number keys pick, Return confirms, and typing in the input answers in your own words. Tool approvals still open T3.`],
+  [shell({tray: trayTop({title:'Float', offline:'T3 not running', body:`<div class="notice info">${ic('power')}<div><b>T3 Code isn't running</b>Your draft is saved. Launch T3 and Float sends it.<div style="display:flex;gap:6px"><span class="btn pri">Launch T3</span><span class="btn ghost">Not now</span></div></div></div>`}),
      input: 'Summarise the diff in ~/repos/float since yesterday'}),
-   `<b>7 · T3 closed.</b> The tray opens just to show the notice. Draft and images survive.`],
+   `<b>7 · T3 closed.</b> The tray opens just to show the notice. Draft and images survive. The grey dot is the only status dot Float shows, and only while T3 or the thread's machine is disconnected.`],
   [shell({input: ph('Ask anything…'), modelOpen:true, style:'margin-top:118px',
      extra:`<div class="menu"><div class="sel"><svg class="claude" style="color:var(--claude)"><use href="#i-burst"/></svg>Opus 5.5<small>default</small></div><div><svg style="color:var(--claude)"><use href="#i-burst"/></svg>Sonnet 5.5</div><div><svg style="color:var(--claude)"><use href="#i-burst"/></svg>Haiku 5.5</div></div>`}),
    `<b>8 · Fast follow: model picker.</b> The model + effort control is already in the footer, so the menu drops in without moving anything.`],
