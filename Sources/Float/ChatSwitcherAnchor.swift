@@ -295,10 +295,18 @@ private struct ChatSwitcherView: View {
                         .font(.system(size: 12))
                         .foregroundStyle(Theme.text)
                         .lineLimit(1)
-                    Text(entry.reference.machineName.map { "\(entry.projectName) · \($0)" } ?? entry.projectName)
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(Theme.muted)
-                        .lineLimit(1)
+                    HStack(spacing: 3) {
+                        Text(entry.projectName)
+                            .lineLimit(1)
+                        if let machine = entry.reference.machineName {
+                            Image(systemName: "server.rack")
+                                .font(.system(size: 9))
+                                .help("On \(machine)")
+                                .accessibilityLabel("On \(machine)")
+                        }
+                    }
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(Theme.muted)
                 }
                 Spacer(minLength: 4)
                 status(entry, group: group)

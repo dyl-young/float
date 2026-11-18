@@ -333,7 +333,7 @@ struct FloatView: View {
                                 project: chat.threadProject, environmentID: chat.threadHeaderEnvironmentID,
                                 size: 11, fallbackTitle: project
                             )
-                            Text(chat.threadMachineName.map { "\(project) · \($0)" } ?? project)
+                            Text(project)
                                 .lineLimit(1)
                         }
                         .font(.system(size: 12))
@@ -368,11 +368,17 @@ struct FloatView: View {
             .padding(.leading, -6)
             .layoutPriority(1)
 
-            PanelDragHandle()
-                .frame(minWidth: 8, maxWidth: .infinity)
-                .frame(height: Self.headerHeight - 10)
-                .padding(.top, 10)
-                .accessibilityHidden(true)
+            if let machine = chat.threadMachineName {
+                // The thread's machine, outside the switcher button: its Run on glyph, named on hover.
+                Image(systemName: "server.rack")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(Theme.muted)
+                    .frame(width: 13, height: 13)
+                    .help("On \(machine)")
+                    .accessibilityLabel("On \(machine)")
+            }
+
+            Spacer(minLength: 8)
 
             if chat.hasConversation {
                 PanelButton(
@@ -389,6 +395,9 @@ struct FloatView: View {
         }
         .padding(.horizontal, Self.headerButtonInset)
         .frame(height: Self.headerHeight)
+        // One drag area behind the whole header: anything that isn't a button moves the window.
+        // The panel handles the top-edge resize strip before this sees the click.
+        .background(PanelDragHandle().accessibilityHidden(true))
         .task(id: chat.threadProjectLookup) { await chat.loadThreadProject() }
     }
 
