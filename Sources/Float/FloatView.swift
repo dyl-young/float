@@ -89,6 +89,11 @@ struct FloatView: View {
                             .strokeBorder(Theme.text.opacity(0.09), lineWidth: 1 / displayScale)
                             .allowsHitTesting(false)
                     }
+                    .overlay(alignment: .top) {
+                        PanelDragHandle()
+                            .frame(height: 6)
+                            .accessibilityHidden(true)
+                    }
                     .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .named(Self.shellSpace)) }) {
                         inputHeight = $0.height
                         inputTop = $0.minY
