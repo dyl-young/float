@@ -34,9 +34,13 @@ final class ChatState: ObservableObject {
     @Published private(set) var title: String?
     @Published private(set) var status: RunStatus = .idle {
         didSet {
-            if oldValue != status { dismissedStatusNotice = nil }
+            if oldValue != status {
+                dismissedStatusNotice = nil
+                if status == .running && !submitting { thinkingStartedAt = .now }
+            }
         }
     }
+    @Published private(set) var thinkingStartedAt: Date?
     @Published private(set) var submitting = false
     @Published private(set) var stopping = false
     @Published private(set) var stopAcknowledged = false
@@ -537,6 +541,7 @@ final class ChatState: ObservableObject {
         answeredQuestionSummary = nil
         needsT3 = false
         retrySendAfterLaunch = false
+        thinkingStartedAt = .now
         submitting = true
         stopAcknowledged = false
         watcher?.cancel()

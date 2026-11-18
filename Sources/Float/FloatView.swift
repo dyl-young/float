@@ -312,10 +312,10 @@ struct FloatView: View {
     private var statusLabel: String {
         if chat.needsT3 { return "T3 not running" }
         switch chat.status {
-        case .running: return "Working"
+        case .running: return "Thinking"
         case .waiting: return "Needs input"
         case .failed: return "Failed"
-        default: return chat.submitting ? "Working" : "Ready"
+        default: return chat.submitting ? "Thinking" : "Ready"
         }
     }
 
@@ -365,7 +365,7 @@ struct FloatView: View {
                 )
                 .id("\(request.requestId):\(question.id)")
             } else if isThinking {
-                ThinkingLoader(size: 16)
+                ThinkingActivity(startedAt: chat.thinkingStartedAt)
                     .padding(.leading, 2)
                     .padding(.vertical, 4)
             } else if chat.status == .waiting, !chat.statusNoticeDismissed {

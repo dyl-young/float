@@ -38,3 +38,58 @@ struct ThinkingLoader: View {
         }
     }
 }
+
+struct ThinkingActivity: View {
+    let startedAt: Date?
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var appearedAt = Date.now
+
+    private static let duration = 2.2
+    private static let steps = 30
+    private static let bandWidth: CGFloat = 72
+    // T3 live-activity-focus, with the rem stops converted to points.
+    private static let band = LinearGradient(stops: [
+        .init(color: .clear, location: 0),
+        .init(color: Theme.text.opacity(0.12), location: 10.8 / bandWidth),
+        .init(color: Theme.text.opacity(0.55), location: 25.2 / bandWidth),
+        .init(color: Theme.text, location: 36 / bandWidth),
+        .init(color: Theme.text.opacity(0.55), location: 46.8 / bandWidth),
+        .init(color: Theme.text.opacity(0.12), location: 61.2 / bandWidth),
+        .init(color: .clear, location: 1),
+    ], startPoint: .leading, endPoint: .trailing)
+
+    var body: some View {
+        let start = startedAt ?? appearedAt
+        let step = Self.duration / Double(Self.steps)
+        TimelineView(.periodic(from: start, by: reduceMotion ? 1 : step)) { context in
+            let elapsed = max(0, context.date.timeIntervalSince(start))
+            let progress = CGFloat(Int(elapsed / step) % Self.steps) / CGFloat(Self.steps)
+            HStack(spacing: 6) {
+                ThinkingLoader(size: 16)
+                    .accessibilityHidden(true)
+                Text("Thinking")
+                    .foregroundStyle(Theme.muted)
+                    .overlay {
+                        if !reduceMotion {
+                            Text("Thinking")
+                                .foregroundStyle(Theme.text)
+                                .mask(alignment: .leading) {
+                                    GeometryReader { geometry in
+                                        Self.band
+                                            .frame(width: Self.bandWidth)
+                                            .offset(x: -Self.bandWidth + progress * (geometry.size.width + 2 * Self.bandWidth))
+                                    }
+                                }
+                                .accessibilityHidden(true)
+                        }
+                    }
+                Text("· \(Int(elapsed))s")
+                    .foregroundStyle(Theme.muted)
+                    .monospacedDigit()
+            }
+            .font(.system(size: 12))
+            .accessibilityElement(children: .combine)
+        }
+    }
+}
