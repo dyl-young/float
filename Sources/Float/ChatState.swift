@@ -850,10 +850,11 @@ final class ChatState: ObservableObject {
 
     private func merge(_ snapshot: ThreadSnapshot) {
         var merged = Dictionary(uniqueKeysWithValues: messages.map { ($0.id, $0) })
-        for item in snapshot.items where item.type == "user_message" || item.type == "assistant_message" {
+        for item in snapshot.items where item.isChatMessageCandidate {
             let isUser = item.type == "user_message"
             let expanded = expandedText[item.id]
-            let text = expanded?.timestamp == item.updatedAt ? expanded?.text ?? "" : item.text ?? ""
+            let raw = expanded?.timestamp == item.updatedAt ? expanded?.text : nil
+            let text = item.chatText(expandedText: raw) ?? ""
             let attachments = isUser ? item.runId.flatMap { previews[$0] } ?? [] : []
             guard !text.isEmpty || !attachments.isEmpty else { continue }
             if isUser, let pending = pendingMessage, pending.runId == item.runId {
@@ -931,7 +932,8 @@ final class ChatState: ObservableObject {
     private func expandLongMessages(
         _ snapshot: ThreadSnapshot, reference: ThreadReference, generation version: Int
     ) async throws {
-        for item in snapshot.items where item.textTruncated && expandedText[item.id]?.timestamp != item.updatedAt {
+        for item in snapshot.items where item.isChatMessageCandidate && item.textTruncated
+            && expandedText[item.id]?.timestamp != item.updatedAt {
             let text = try await client.readRemainder(reference, item: item)
             guard generation == version, !Task.isCancelled else { return }
             expandedText[item.id] = (item.updatedAt, text)

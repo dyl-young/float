@@ -247,7 +247,7 @@ public struct T3Client: Sendable {
         // T3 reads forward for external clients unless given an upper bound.
         // Use the largest JSON-safe integer to request the newest page.
         try await readSnapshot([
-            "threadId": thread.threadId, "view": "messages", "limit": 40, "maxCharsPerItem": 20_000,
+            "threadId": thread.threadId, "view": "activity", "limit": 80, "maxCharsPerItem": 2_000,
             "beforePosition": before ?? 9_007_199_254_740_991, "runLimit": 1,
         ], thread: thread)
     }
@@ -306,7 +306,7 @@ public struct T3Client: Sendable {
         var offset = item.nextTextOffset
         while let start = offset {
             let page = try await readSnapshot([
-                "threadId": thread.threadId, "view": "messages",
+                "threadId": thread.threadId, "view": "activity",
                 "itemId": item.itemId, "textOffset": start, "maxCharsPerItem": 20_000,
             ], thread: thread)
             guard let part = page.items.first(where: { $0.itemId == item.itemId }) else { break }

@@ -665,42 +665,79 @@ private struct MarkdownReply: View {
 private struct MarkdownCodeBlock: View {
     let language: String?
     let text: String
+    @State private var wrapped = true
     @State private var copied = false
 
+    private var languageIcon: NSImage? {
+        guard let language else { return nil }
+        let asset: String
+        switch language.lowercased() {
+        case "swift", "html", "css", "json", "go": asset = language.lowercased()
+        case "python", "py": asset = "python"
+        case "javascript", "js", "jsx", "mjs", "cjs": asset = "javascript"
+        case "typescript", "ts", "tsx": asset = "typescript"
+        case "shell", "shellscript", "bash", "sh", "zsh", "fish": asset = "shell"
+        case "markdown", "md", "mdx": asset = "markdown"
+        case "yaml", "yml": asset = "yaml"
+        case "rust", "rs": asset = "rust"
+        default: return nil
+        }
+        guard let url = Bundle.main.url(forResource: asset, withExtension: "svg", subdirectory: "languages") else { return nil }
+        return NSImage(contentsOf: url)
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if let language {
-                Text(language)
-                    .font(.system(size: 10.5, weight: .medium, design: .monospaced))
-                    .foregroundStyle(Theme.muted)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                if let language, let languageIcon {
+                    Image(nsImage: languageIcon)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 13, height: 13)
+                        .accessibilityLabel(language)
+                        .help(language)
+                } else if let language {
+                    Text(language)
+                        .font(.system(size: 10.5, design: .monospaced))
+                        .foregroundStyle(Theme.muted)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                PanelButton(wrapped ? "Disable line wrap" : "Wrap lines",
+                            systemImage: "text.line.last.and.arrowtriangle.forward", size: 20) {
+                    wrapped.toggle()
+                }
+                PanelButton(copied ? "Copied" : "Copy code",
+                            systemImage: copied ? "checkmark" : "doc.on.doc", size: 20, action: copy)
             }
-            ScrollView(.horizontal) {
-                Text(text)
-                    .font(.system(size: 12.5, design: .monospaced))
-                    .foregroundStyle(Theme.text)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: true, vertical: true)
-                    .padding(.trailing, 24)
-                    .background(OverlayScrollers())
+            .padding(.leading, 10)
+            .padding(.trailing, 6)
+            .frame(height: 26)
+            if wrapped {
+                code.fixedSize(horizontal: false, vertical: true)
+            } else {
+                ScrollView(.horizontal) {
+                    code
+                        .fixedSize(horizontal: true, vertical: true)
+                        .background(OverlayScrollers())
+                }
+                .flashScrollKnobsOnHover()
             }
-            .flashScrollKnobsOnHover()
         }
-        .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.code, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay(alignment: .topTrailing) {
-            Button(action: copy) {
-                Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                    .font(.system(size: 10.5, weight: .medium))
-                    .foregroundStyle(Theme.muted)
-                    .frame(width: 22, height: 22)
-                    .background(Theme.raised, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .help(copied ? "Copied" : "Copy code")
-            .accessibilityLabel(copied ? "Copied" : "Copy code")
-            .padding(6)
-        }
+        .background(Theme.border.opacity(0.32), in: RoundedRectangle(cornerRadius: 8))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var code: some View {
+        Text(text)
+            .font(.system(size: 12, design: .monospaced))
+            .foregroundStyle(Theme.text)
+            .textSelection(.enabled)
+            .lineSpacing(3)
+            .padding(.horizontal, 12)
+            .padding(.top, 2)
+            .padding(.bottom, 10)
     }
 
     private func copy() {
