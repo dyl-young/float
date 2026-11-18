@@ -198,7 +198,7 @@ private struct ProjectPickerView: View {
     }
 
     private var listHeight: CGFloat {
-        let rows = 40 + CGFloat(filteredProjects.count * 38)
+        let rows = 65 + CGFloat(filteredProjects.count * 38)
             + (chat.loadingProjects || chat.projectCatalogFailed ? 38 : 0)
         return min(228, max(40, rows))
     }
@@ -257,6 +257,13 @@ private struct ProjectPickerView: View {
         ScrollView {
             LazyVStack(spacing: 2) {
                 projectRow(id: Self.scratch, title: "No project", subtitle: "Scratch chat, no repo")
+                Text("On \(chat.machineLabel)")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(Theme.muted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 8)
+                    .frame(height: 23, alignment: .bottom)
+                    .padding(.bottom, 2)
                 ForEach(filteredProjects) { project in
                     projectRow(
                         id: project.id, title: project.title,

@@ -172,8 +172,13 @@ final class ChatState: ObservableObject {
 
     var showsMachinePicker: Bool { machines.count > 1 }
 
+    var selectedMachineEnvironmentID: String? {
+        guard let machine = selectedMachine, !machine.isLocal else { return nil }
+        return machine.id
+    }
+
     var canChooseMachine: Bool {
-        reference == nil && !submitting && !loading && !loadingMachines
+        reference == nil && !submitting && !loading && !loadingMachines && !loadingProjects
     }
 
     func requestModelPicker() {
@@ -215,12 +220,16 @@ final class ChatState: ObservableObject {
 
     func reloadProjects() {
         guard !loadingProjects else { return }
+        let environmentID = selectedMachineEnvironmentID
+        let machineID = selectedMachine?.id
         loadingProjects = true
         projectCatalogFailed = false
         Task {
             defer { loadingProjects = false }
             do {
-                projects = try await client.projects()
+                let loaded = try await client.projects(environmentID: environmentID)
+                guard selectedMachine?.id == machineID else { return }
+                projects = loaded
                 selectedProjectID = T3ProjectPreference.resolvedID(
                     selectedProjectID, projects: projects
                 )
@@ -258,6 +267,8 @@ final class ChatState: ObservableObject {
                 selectedMachineID, machines: machines
             )
             defaults.set(selectedMachineID, forKey: "preferredMachineID")
+            projects = []
+            reloadProjects()
         }
     }
 
@@ -265,6 +276,9 @@ final class ChatState: ObservableObject {
         guard canChooseMachine, machine.isOnline else { return }
         selectedMachineID = machine.id
         defaults.set(machine.id, forKey: "preferredMachineID")
+        projects = []
+        projectCatalogFailed = false
+        reloadProjects()
         focusRequest += 1
     }
 
@@ -326,8 +340,11 @@ final class ChatState: ObservableObject {
         } else {
             Task { await reloadFavourites() }
         }
-        if projects.isEmpty { reloadProjects() }
-        if machines.isEmpty { reloadMachines() }
+        if machines.isEmpty {
+            reloadMachines()
+        } else if projects.isEmpty {
+            reloadProjects()
+        }
         if let reference { refresh(reference, force: watcher == nil) }
     }
 
