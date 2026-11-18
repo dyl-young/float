@@ -29,7 +29,7 @@ struct LocalRuntime: Decodable, Equatable, Sendable {
         return runtime
     }
 
-    func uploadURL(relativePath: String) throws -> URL {
+    func endpointURL(relativePath: String) throws -> URL {
         guard relativePath.hasPrefix("/"), !relativePath.hasPrefix("//"),
             let url = URL(string: relativePath, relativeTo: origin)?.absoluteURL,
             url.scheme == origin.scheme, url.host() == origin.host(), url.port == origin.port,
@@ -65,6 +65,13 @@ struct LocalCLI: Sendable {
     func issueInventoryReader() async throws -> LocalCredential {
         try await issue(
             subject: "float-provider-inventory", label: "Float provider inventory", ttl: "5m",
+            scopes: ["orchestration:read"]
+        )
+    }
+
+    func issueProjectFaviconReader() async throws -> LocalCredential {
+        try await issue(
+            subject: "float-project-icons", label: "Float project icons", ttl: "5m",
             scopes: ["orchestration:read"]
         )
     }
@@ -214,7 +221,7 @@ actor MCPTransport {
 
     func upload(_ data: Data, mimeType: String, relativePath: String) async throws {
         let runtime = try LocalRuntime.load(base: cli.base)
-        var request = URLRequest(url: try runtime.uploadURL(relativePath: relativePath))
+        var request = URLRequest(url: try runtime.endpointURL(relativePath: relativePath))
         request.httpMethod = "POST"
         request.setValue(mimeType, forHTTPHeaderField: "Content-Type")
         request.httpBody = data

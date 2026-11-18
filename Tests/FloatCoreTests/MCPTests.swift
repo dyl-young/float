@@ -17,11 +17,11 @@ import Testing
     #expect(result == ["value": "ok"])
 }
 
-@Test func onlyAcceptsSameOriginUploads() throws {
+@Test func onlyAcceptsSameOriginEndpoints() throws {
     let local = LocalRuntime(origin: try #require(URL(string: "http://127.0.0.1:3773")), pid: 1, startedAt: "")
-    #expect(try local.uploadURL(relativePath: "/assets/upload?token=a").port == 3773)
-    #expect(throws: T3Error.self) { try local.uploadURL(relativePath: "//example.com/upload") }
-    #expect(throws: T3Error.self) { try local.uploadURL(relativePath: "https://example.com/upload") }
+    #expect(try local.endpointURL(relativePath: "/assets/upload?token=a").port == 3773)
+    #expect(throws: T3Error.self) { try local.endpointURL(relativePath: "//example.com/upload") }
+    #expect(throws: T3Error.self) { try local.endpointURL(relativePath: "https://example.com/upload") }
 }
 
 @Test func translatesHostedThreadLinkToTheDesktop() throws {

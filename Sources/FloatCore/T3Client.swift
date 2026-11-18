@@ -43,6 +43,7 @@ public struct T3Client: Sendable {
     public let approvals: ApprovalAccess
     private let approvalRPC: ApprovalRPC
     private let inventoryRPC: ComposerInventoryRPC
+    private let faviconRPC: ProjectFaviconRPC
 
     public init(base: URL? = nil, executable: URL? = nil, desktopApp: URL? = nil) {
         let home = FileManager.default.homeDirectoryForCurrentUser
@@ -56,9 +57,20 @@ public struct T3Client: Sendable {
         let rpc = LocalRPC(base: resolvedBase)
         approvalRPC = ApprovalRPC(rpc: rpc, access: approvals)
         inventoryRPC = ComposerInventoryRPC(rpc: rpc, cli: cli)
+        faviconRPC = ProjectFaviconRPC(rpc: rpc, cli: cli)
     }
 
-    public func close() async { await transport.close() }
+    public func close() async {
+        await transport.close()
+        await faviconRPC.close()
+    }
+
+    public func projectFavicon(_ project: T3Project, environmentID: String?) async throws -> Data? {
+        // MCP project tools forward metadata to linked machines. The peer connection
+        // does not expose assets.createUrl or a remote RPC credential to Float.
+        guard environmentID == nil else { return nil }
+        return try await faviconRPC.data(cwd: project.workspaceRoot, path: project.faviconPath)
+    }
 
     public func modelCatalogue(search: String? = nil) async throws -> T3ModelCatalogue {
         do {

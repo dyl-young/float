@@ -6,7 +6,7 @@ enum ApprovalRPCError: Error {
     case commandFailed
 }
 
-/// Loopback V2 Effect RPC shared by approvals and provider inventory.
+/// Loopback V2 Effect RPC.
 struct LocalRPC: Sendable {
     private struct Ticket: Decodable { let ticket: String }
 
@@ -97,6 +97,24 @@ struct LocalRPC: Sendable {
             guard let reply = try await group.next() else { throw ApprovalRPCError.unavailable }
             return reply
         }
+    }
+
+    func projectFavicon(relativePath: String) async throws -> Data? {
+        let runtime = try LocalRuntime.load(base: base)
+        let url = try runtime.endpointURL(relativePath: relativePath)
+        guard url.path.hasPrefix("/api/assets/") else { throw ApprovalRPCError.invalidReply }
+        if url.lastPathComponent == "project-favicon-missing" { return nil }
+
+        // The server signs the URL. The GET does not need the RPC bearer.
+        let (file, response) = try await http.download(from: url)
+        defer { try? FileManager.default.removeItem(at: file) }
+        guard let response = response as? HTTPURLResponse else { throw ApprovalRPCError.invalidReply }
+        if response.statusCode == 404 { return nil }
+        guard response.statusCode == 200, response.mimeType?.hasPrefix("image/") == true,
+              let size = try file.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+              (1...10_000_000).contains(size)
+        else { throw ApprovalRPCError.invalidReply }
+        return try Data(contentsOf: file)
     }
 
     private func issueTicket(for runtime: LocalRuntime, credential: LocalCredential) async throws -> Ticket {
