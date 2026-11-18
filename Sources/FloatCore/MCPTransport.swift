@@ -54,6 +54,14 @@ struct LocalCLI: Sendable {
         try await issue(subject: "mcp-client", label: "Float", ttl: "1h")
     }
 
+    /// A five-minute owner session that may approve Float's own Auto sign-in (`AutoAccessGrant`).
+    func issueApprover() async throws -> LocalCredential {
+        try await issue(
+            subject: "float-auto-setup", label: "Float setup", ttl: "5m",
+            scopes: ["access:write", "orchestration:read", "orchestration:operate"]
+        )
+    }
+
     func issueApprovals() async throws -> LocalCredential {
         // Issuance operates on the local T3 database. Check the same live
         // runtime Float will use before provisioning a long-lived session.
@@ -78,12 +86,14 @@ struct LocalCLI: Sendable {
         return sessions.contains { $0.sessionId == sessionID }
     }
 
-    private func issue(subject: String, label: String, ttl: String) async throws -> LocalCredential {
-        let output = try await run([
-            "auth", "session", "issue",
-            "--scope", "orchestration:read", "--scope", "orchestration:operate",
-            "--subject", subject, "--label", label, "--ttl", ttl, "--json",
-        ])
+    private func issue(
+        subject: String, label: String, ttl: String,
+        scopes: [String] = ["orchestration:read", "orchestration:operate"]
+    ) async throws -> LocalCredential {
+        let output = try await run(
+            ["auth", "session", "issue"] + scopes.flatMap { ["--scope", $0] }
+                + ["--subject", subject, "--label", label, "--ttl", ttl, "--json"]
+        )
         guard let credential = try? JSONDecoder().decode(LocalCredential.self, from: output) else {
             throw T3Error.authorization
         }
@@ -246,7 +256,15 @@ actor MCPTransport {
         let cli = self.cli
         let http = self.http
         let task = Task {
-            let credential = try await cli.issue()
+            let credential: LocalCredential
+            do {
+                credential = try await AutoAccessGrant.credential(cli: cli, runtime: runtime, http: http)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                // An older T3, or a policy that refuses Auto: connect Supervised, as before.
+                credential = try await cli.issue()
+            }
             do {
                 let response = try await Self.rpc(
                     http: http, runtime: runtime, credential: credential, handshake: nil,

@@ -154,8 +154,10 @@ public struct T3Client: Sendable {
         projectName: String? = nil
     ) async throws -> ThreadReceipt {
         let selection: T3ModelSelection?
+        var catalogue: T3ModelCatalogue?
         if thread == nil, modelSelection == nil {
-            guard let preferred = T3Model.preferred(in: try await models()) else {
+            catalogue = try await modelCatalogue()
+            guard let preferred = T3Model.preferred(in: catalogue?.available ?? []) else {
                 throw T3Error.tool("Enable a supported provider in T3 Settings → Providers to send a prompt.")
             }
             selection = preferred.selection
@@ -211,9 +213,15 @@ public struct T3Client: Sendable {
             } else {
                 guard let selection else { throw T3Error.invalidResponse }
                 let title = Self.launchTitle(for: text, attachmentName: images.first?.name)
+                // Linked machines cap Float at the link's approved access, so they stay Supervised.
+                var runtimeMode = "approval-required"
+                if environmentID == nil {
+                    if catalogue == nil { catalogue = try await modelCatalogue() }
+                    runtimeMode = catalogue?.launchRuntimeMode(for: selection.instanceId) ?? runtimeMode
+                }
                 var arguments: [String: any Sendable] = [
                     "title": title, "message": text, "attachments": uploads,
-                    "runtimeMode": "approval-required", "interactionMode": "default",
+                    "runtimeMode": runtimeMode, "interactionMode": "default",
                     "clientRequestId": requestId.uuidString,
                     "modelSelection": selection.arguments,
                 ]

@@ -255,9 +255,32 @@ public struct T3ModelProvider: Identifiable, Equatable, Sendable {
 
 public struct T3ModelCatalogue: Equatable, Sendable {
     public let providers: [T3ModelProvider]
+    /// The broadest mode T3 lets Float start threads in: `auto` once Float signs in for Auto.
+    public let runtimeMode: String?
+
+    public init(runtimeMode: String? = nil, providers: [T3ModelProvider]) {
+        self.providers = providers
+        self.runtimeMode = runtimeMode
+    }
 
     public var available: [T3Model] {
         providers.filter(\.enabled).flatMap(\.models)
+    }
+
+    /// T3's runtime modes, narrowest first.
+    static let runtimeModes = ["approval-required", "auto-accept-edits", "auto", "full-access"]
+
+    /// The mode a new thread on `instanceId` starts in: `preferred`, capped at what T3 allows Float,
+    /// stepping down to the broadest mode the provider offers. T3 refuses an explicit mode the
+    /// provider doesn't list, so this never sends one.
+    public func launchRuntimeMode(for instanceId: String, preferred: String = "auto") -> String {
+        let order = Self.runtimeModes
+        guard let ceiling = runtimeMode.flatMap(order.firstIndex(of:)),
+              let wanted = order.firstIndex(of: preferred) else { return "approval-required" }
+        let limit = min(ceiling, wanted)
+        guard let supported = providers.first(where: { $0.instanceId == instanceId })?.runtimeModes,
+              !supported.isEmpty else { return order[limit] }
+        return order[...limit].reversed().first(where: supported.contains) ?? "approval-required"
     }
 }
 
@@ -279,9 +302,10 @@ struct T3ModelCatalog: Decodable, Sendable {
     }
 
     let providers: [Provider]
+    let runtimeMode: String?
 
     var catalogue: T3ModelCatalogue {
-        T3ModelCatalogue(providers: providers.map { provider in
+        T3ModelCatalogue(runtimeMode: runtimeMode, providers: providers.map { provider in
             let name = provider.displayName ?? provider.driverKind
             return T3ModelProvider(
                 instanceId: provider.providerInstanceId,
