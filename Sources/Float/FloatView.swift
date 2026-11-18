@@ -15,6 +15,7 @@ struct FloatView: View {
     @Environment(\.displayScale) private var displayScale
     @State private var isMachinePickerOpen = false
     @State private var isProjectPickerOpen = false
+    @StateObject private var composerMenu = ComposerMenuState()
     @State private var editorHeight: CGFloat = 28
     @State private var inputHeight: CGFloat = 44
     @State private var composerHeight: CGFloat = 86
@@ -66,6 +67,14 @@ struct FloatView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .preferredColorScheme(.dark)
         .onChange(of: trayVisible, initial: true) { resize(compactHeight, trayVisible) }
+        .task(id: composerMenu.trigger == nil ? nil : chat.composerInventoryTarget) {
+            if composerMenu.trigger != nil, let target = chat.composerInventoryTarget {
+                await composerMenu.load(target, chat: chat)
+            }
+        }
+        .onChange(of: chat.modelPickerRequest) { composerMenu.close() }
+        .onChange(of: chat.projectPickerRequest) { composerMenu.close() }
+        .onChange(of: chat.machinePickerRequest) { composerMenu.close() }
         .onChange(of: compactHeight) {
             if !trayVisible { resize(compactHeight, false) }
         }
@@ -84,6 +93,7 @@ struct FloatView: View {
             VStack(spacing: 0) {
                 input
                     .background { inputBackdrop.clipShape(inputShape) }
+                    .background(ComposerMenuAnchor(chat: chat, menu: composerMenu))
                     .overlay(alignment: .top) {
                         if showsTray {
                             TrayShape(side: .top)
@@ -531,7 +541,8 @@ struct FloatView: View {
                 ComposerEditor(
                     text: Binding(get: { chat.composerText }, set: chat.setComposerText),
                     height: $editorHeight, focusRequest: chat.focusRequest,
-                    editable: chat.composerEditable, submit: chat.confirmOrSend,
+                    editable: chat.composerEditable, chat: chat, menu: composerMenu,
+                    submit: chat.confirmOrSend,
                     pickOption: chat.selectQuestionOption(at:), pasteImages: chat.pasteImages
                 )
                 .frame(height: editorHeight)

@@ -42,6 +42,7 @@ public struct T3Client: Sendable {
 
     public let approvals: ApprovalAccess
     private let approvalRPC: ApprovalRPC
+    private let inventoryRPC: ComposerInventoryRPC
 
     public init(base: URL? = nil, executable: URL? = nil, desktopApp: URL? = nil) {
         let home = FileManager.default.homeDirectoryForCurrentUser
@@ -52,7 +53,9 @@ public struct T3Client: Sendable {
         transport = MCPTransport(cli: cli)
         let approvals = ApprovalAccess(cli: cli)
         self.approvals = approvals
-        approvalRPC = ApprovalRPC(base: resolvedBase, access: approvals)
+        let rpc = LocalRPC(base: resolvedBase)
+        approvalRPC = ApprovalRPC(rpc: rpc, access: approvals)
+        inventoryRPC = ComposerInventoryRPC(rpc: rpc, cli: cli)
     }
 
     public func close() async { await transport.close() }
@@ -70,6 +73,10 @@ public struct T3Client: Sendable {
         ].contains(error.code) {
             throw T3Error.serverUnavailable
         }
+    }
+
+    public func composerInventory(instanceID: String, cwd: String?) async throws -> T3ComposerInventory {
+        try await inventoryRPC.inventory(instanceID: instanceID, cwd: cwd)
     }
 
     public func models() async throws -> [T3Model] {

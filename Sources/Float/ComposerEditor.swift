@@ -1,4 +1,5 @@
 import AppKit
+import FloatCore
 import SwiftUI
 
 struct ComposerEditor: NSViewRepresentable {
@@ -6,6 +7,8 @@ struct ComposerEditor: NSViewRepresentable {
     @Binding var height: CGFloat
     let focusRequest: Int
     let editable: Bool
+    let chat: ChatState
+    let menu: ComposerMenuState
     let submit: () -> Void
     let pickOption: (Int) -> Bool
     let pasteImages: (NSPasteboard) -> Bool
@@ -38,6 +41,8 @@ struct ComposerEditor: NSViewRepresentable {
         editor.autoresizingMask = [.width]
         editor.setAccessibilityLabel("Prompt")
         editor.delegate = context.coordinator
+        context.coordinator.editor = editor
+        menu.apply = { [weak coordinator = context.coordinator] in coordinator?.apply($0) }
         scroll.documentView = editor
         return scroll
     }
@@ -46,6 +51,10 @@ struct ComposerEditor: NSViewRepresentable {
         guard let editor = scroll.documentView as? PromptTextView else { return }
         context.coordinator.parent = self
         editor.submit = submit
+        editor.menuKey = { [weak menu, weak chat] event in
+            guard let chat else { return false }
+            return menu?.handle(event, chat: chat) == true
+        }
         editor.pickOption = pickOption
         editor.pasteImages = pasteImages
         editor.isEditable = editable
@@ -62,12 +71,14 @@ struct ComposerEditor: NSViewRepresentable {
             guard let editor, let coordinator else { return }
             coordinator.measure(editor)
             if shouldFocus, editor.window?.isVisible == true { editor.window?.makeFirstResponder(editor) }
+            coordinator.updateTrigger(editor, edited: false)
         }
     }
 
     @MainActor final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: ComposerEditor
         var focusedRequest: Int?
+        weak var editor: PromptTextView?
         let editorUndoManager = UndoManager()
 
         init(_ parent: ComposerEditor) { self.parent = parent }
@@ -75,9 +86,39 @@ struct ComposerEditor: NSViewRepresentable {
         func undoManager(for view: NSTextView) -> UndoManager? { editorUndoManager }
 
         func textDidChange(_ notification: Notification) {
-            guard let editor = notification.object as? NSTextView else { return }
+            guard let editor = notification.object as? PromptTextView else { return }
             parent.text = editor.string
+            updateTrigger(editor, edited: true)
             measure(editor)
+        }
+
+        func textViewDidChangeSelection(_ notification: Notification) {
+            guard let editor = notification.object as? PromptTextView else { return }
+            updateTrigger(editor, edited: false)
+        }
+
+        func updateTrigger(_ editor: PromptTextView, edited: Bool) {
+            let trigger = parent.editable && parent.chat.activeQuestion == nil
+                && editor.window?.isVisible == true && !editor.hasMarkedText()
+                ? ComposerTrigger.detect(in: editor.string, selection: editor.selectedRange()) : nil
+            parent.menu.update(trigger, edited: edited)
+        }
+
+        func apply(_ item: ComposerCompletion) {
+            guard let editor, editor.isEditable, !editor.hasMarkedText(),
+                  let trigger = parent.menu.trigger,
+                  trigger == ComposerTrigger.detect(in: editor.string, selection: editor.selectedRange())
+            else { return }
+            let replacement = item.replacement
+            let range = replacement.hasSuffix(" ") ? trigger.replacementRange(in: editor.string) : trigger.range
+            guard editor.shouldChangeText(in: range, replacementString: replacement) else { return }
+            parent.menu.close()
+            editor.breakUndoCoalescing()
+            editor.replaceCharacters(in: range, with: replacement)
+            editor.setSelectedRange(NSRange(location: range.location + replacement.utf16.count, length: 0))
+            editor.didChangeText()
+            editor.breakUndoCoalescing()
+            if case .builtin(let command) = item { parent.chat.runComposerCommand(command) }
         }
 
         func measure(_ editor: NSTextView) {
@@ -116,6 +157,7 @@ private final class EditorScrollView: NSScrollView {
 
 final class PromptTextView: NSTextView {
     var submit: (() -> Void)?
+    var menuKey: ((NSEvent) -> Bool)?
     var pickOption: ((Int) -> Bool)?
     var pasteImages: ((NSPasteboard) -> Bool)?
 
@@ -126,6 +168,7 @@ final class PromptTextView: NSTextView {
             super.keyDown(with: event)
             return
         }
+        if menuKey?(event) == true { return }
         if modifiers.intersection(editingModifiers).isEmpty,
             string.isEmpty, let character = event.charactersIgnoringModifiers,
             let number = Int(character), (1...9).contains(number),

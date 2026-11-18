@@ -74,6 +74,7 @@ final class ChatState: ObservableObject {
     @Published private(set) var projectCatalogFailed = false
     @Published private(set) var selectedProjectID: String?
     @Published private(set) var threadProjectID: String?
+    @Published private var threadWorktreePath: String?
     @Published private var loadedThreadProject: T3Project?
     @Published private var cachedProjectName: String?
     private var projectsEnvironmentID: String?
@@ -186,6 +187,34 @@ final class ChatState: ObservableObject {
     var selectedCatalogModel: T3Model? {
         models.first { $0.selection.matches(selectedModel) }
             ?? pickedCatalogModel.flatMap { $0.selection.matches(selectedModel) ? $0 : nil }
+    }
+
+    private var composerProvider: T3ModelProvider? {
+        modelProviders.first { $0.instanceId == selectedModel?.instanceId }
+    }
+
+    var composerProviderName: String {
+        composerProvider?.displayName ?? selectedCatalogModel?.provider ?? selectedModel?.instanceId ?? "this provider"
+    }
+
+    var composerDriverKind: String? { composerProvider?.driverKind ?? selectedCatalogModel?.driverKind }
+
+    var composerInventoryTarget: ComposerMenuState.InventoryTarget? {
+        let environment = reference == nil ? selectedMachineEnvironmentID : reference?.environmentID
+        guard environment == nil, let instanceID = selectedModel?.instanceId else { return nil }
+        let cwd = reference == nil ? selectedProject?.workspaceRoot : threadWorktreePath ?? threadProject?.workspaceRoot
+        return .init(instanceID: instanceID, cwd: cwd)
+    }
+
+    func loadComposerInventory(_ target: ComposerMenuState.InventoryTarget) async throws -> T3ComposerInventory {
+        try await client.composerInventory(instanceID: target.instanceID, cwd: target.cwd)
+    }
+
+    func runComposerCommand(_ command: ComposerCompletion.Builtin) {
+        switch command {
+        case .clear: newChat()
+        case .model: requestModelPicker()
+        }
     }
 
     var modelLabel: String {
@@ -520,6 +549,7 @@ final class ChatState: ObservableObject {
         images = []
         reference = nil
         threadProjectID = nil
+        threadWorktreePath = nil
         loadedThreadProject = nil
         cachedProjectName = nil
         pendingLaunchMachine = nil
@@ -1025,6 +1055,7 @@ final class ChatState: ObservableObject {
     }
 
     private func applyThreadMetadata(_ thread: ThreadSnapshot.Thread) {
+        if threadWorktreePath != thread.worktreePath { threadWorktreePath = thread.worktreePath }
         let projectChanged = threadProjectID != thread.projectId
         let serverTitle = thread.title.isEmpty ? nil : thread.title
         let titleChanged = serverTitle.map { $0 != title } ?? false

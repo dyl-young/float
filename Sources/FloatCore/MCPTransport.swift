@@ -62,6 +62,13 @@ struct LocalCLI: Sendable {
         )
     }
 
+    func issueInventoryReader() async throws -> LocalCredential {
+        try await issue(
+            subject: "float-provider-inventory", label: "Float provider inventory", ttl: "5m",
+            scopes: ["orchestration:read"]
+        )
+    }
+
     func issueApprovals() async throws -> LocalCredential {
         // Issuance operates on the local T3 database. Check the same live
         // runtime Float will use before provisioning a long-lived session.

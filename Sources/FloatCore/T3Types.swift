@@ -371,6 +371,7 @@ public struct ThreadSnapshot: Decodable, Sendable {
         }
 
         public let titleRegeneration: TitleRegeneration?
+        public let worktreePath: String?
         public let projectId: String
         public let title: String
         public let status: RunStatus
