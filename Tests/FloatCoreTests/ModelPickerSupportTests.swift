@@ -110,3 +110,29 @@ private func provider(
     #expect(favourites?.first?["provider"] as? String == "claudeAgent-work")
     #expect(favourites?.first?["model"] as? String == "claude-opus-5-5")
 }
+
+@Test func favouritesStorePreservesSettingsSymlink() async throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: "float-favourites-symlink-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let targetDirectory = directory.appending(path: "shared")
+    let target = targetDirectory.appending(path: "settings.json")
+    let linkDirectory = directory.appending(path: "userdata")
+    let link = linkDirectory.appending(path: "settings.json")
+    try FileManager.default.createDirectory(at: targetDirectory, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: linkDirectory, withIntermediateDirectories: true)
+    try Data(#"{"responseStreamingMode":"turn"}"#.utf8).write(to: target)
+    try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+
+    let store = T3ModelFavouritesStore(settingsURL: link)
+    let favourite = T3ModelKey(instanceId: "codex", model: "gpt-5.6-sol")
+    #expect(try await store.setFavourite(true, key: favourite) == [favourite])
+
+    let values = try link.resourceValues(forKeys: [.isSymbolicLinkKey])
+    #expect(values.isSymbolicLink == true)
+    let saved = try JSONSerialization.jsonObject(with: Data(contentsOf: target)) as? [String: Any]
+    #expect(saved?["responseStreamingMode"] as? String == "turn")
+    #expect((saved?["favorites"] as? [[String: String]]) == [
+        ["provider": "codex", "model": "gpt-5.6-sol"],
+    ])
+}

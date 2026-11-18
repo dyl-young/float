@@ -116,12 +116,13 @@ public actor T3ModelFavouritesStore {
         root["favorites"] = favourites
             .sorted { ($0.instanceId, $0.model) < ($1.instanceId, $1.model) }
             .map { ["provider": $0.instanceId, "model": $0.model] }
-        let directory = settingsURL.deletingLastPathComponent()
+        let writeURL = settingsURL.resolvingSymlinksInPath()
+        let directory = writeURL.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let data = try JSONSerialization.data(
             withJSONObject: root, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         )
-        try data.write(to: settingsURL, options: .atomic)
+        try data.write(to: writeURL, options: .atomic)
         return favourites
     }
 
