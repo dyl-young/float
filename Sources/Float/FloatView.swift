@@ -448,7 +448,7 @@ struct FloatView: View {
         let open: (() -> Void)? = chat.reference?.desktopURL == nil ? nil : { chat.openThread() }
         return ApprovalCard(request: chat.activeApproval, count: chat.pendingApprovals.count,
                             preview: chat.approvalPreview, optIn: optIn,
-                            busy: chat.approvalAccessBusy || chat.respondingToApproval,
+                            busy: chat.stopping || chat.approvalAccessBusy || chat.respondingToApproval,
                             error: chat.approvalError ?? chat.approvalAccessError, openInT3: open,
                             respond: chat.respondToApproval)
     }
@@ -940,12 +940,12 @@ private struct QuestionCard: View {
                 if position > 1 {
                     Button("Back") { chat.goBackQuestion() }
                         .floatPillButtonStyle(tint: nil)
-                        .disabled(chat.answeringQuestion)
+                        .disabled(chat.stopping || chat.answeringQuestion)
                         .help("Back · ⌘[")
                 }
                 Button(chat.isLastQuestion ? "Send answer" : "Next", action: chat.confirmQuestion)
                     .floatPillButtonStyle()
-                    .disabled(!chat.questionCanAdvance || chat.answeringQuestion)
+                    .disabled(chat.stopping || !chat.questionCanAdvance || chat.answeringQuestion)
             }
             .padding(.top, 8)
         }
@@ -981,7 +981,7 @@ private struct QuestionCard: View {
             .contentShape(Rectangle())
         }
         .floatButtonStyle()
-        .disabled(chat.answeringQuestion)
+        .disabled(chat.stopping || chat.answeringQuestion)
         .accessibilityLabel("Jump to question")
         .accessibilityValue("\(position) of \(request.questions.count)")
         .popover(isPresented: $showingSteps, arrowEdge: .bottom) {
@@ -1078,7 +1078,7 @@ private struct QuestionCard: View {
             .contentShape(Rectangle())
         }
         .floatButtonStyle(in: row, highlight: .background)
-        .disabled(chat.answeringQuestion)
+        .disabled(chat.stopping || chat.answeringQuestion)
         .padding(.horizontal, -4)
         .accessibilityValue(selected ? "Selected" : "Not selected")
     }

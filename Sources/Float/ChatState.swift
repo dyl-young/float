@@ -164,7 +164,7 @@ final class ChatState: ObservableObject {
         return hasConversation ? "Ask a follow-up…" : "Ask anything, or paste a screenshot…"
     }
     var composerEditable: Bool { activeQuestion?.allowsCustom != false }
-    var showsStop: Bool { submitting || (status == .running && !stopAcknowledged) || stopping }
+    var showsStop: Bool { submitting || stopping || (status.isInProgress && !stopAcknowledged) }
     var canStop: Bool { showsStop && !stopping }
     var canSend: Bool {
         !submitting && !stopping && !loading && status != .running && status != .waiting &&
@@ -804,7 +804,7 @@ final class ChatState: ObservableObject {
     }
 
     func confirmQuestion() {
-        guard !answeringQuestion, var flow = questionFlow, flow.activeQuestion != nil else { return }
+        guard !stopping, !answeringQuestion, var flow = questionFlow, flow.activeQuestion != nil else { return }
         switch flow.confirm() {
         case nil:
             questionError = "Pick an answer to continue."
@@ -826,7 +826,7 @@ final class ChatState: ObservableObject {
             Task {
                 do {
                     try await client.answer(request, answers: answers, thread: reference)
-                    guard generation == version else { return }
+                    guard generation == version, !stopAcknowledged, status != .stopped else { return }
                     answeredQuestionSummary = summary
                     if pendingQuestion?.requestId == request.requestId {
                         resetQuestion()
@@ -848,13 +848,25 @@ final class ChatState: ObservableObject {
         do {
             let accepted = try await client.stop(reference, runId: runId)
             guard generation == version else { return }
-            stopAcknowledged = accepted && status == .running
+            if accepted {
+                stopAcknowledged = status.isInProgress
+                clearStoppedRequests()
+            }
         } catch {
             guard generation == version else { return }
             showError(error)
         }
         stopping = false
         refresh(reference, force: true)
+    }
+
+    private func clearStoppedRequests() {
+        closeQuestionSteps()
+        resetQuestion()
+        pendingApprovals = []
+        approvalPreview = nil
+        answeredQuestionSummary = nil
+        approvalSummary = nil
     }
 
     func loadOlder() {
@@ -958,15 +970,25 @@ final class ChatState: ObservableObject {
                         earliest = page.earlierPosition
                         hasOlderMessages = earliest != nil
                     }
-                    updateApprovalPreview(from: page)
-                    try await updateQuestion(from: page, thread: reference)
-                    guard generation == version, !Task.isCancelled else { return }
-                    status = page.thread.pendingRequestCount > 0 ? .waiting : page.thread.status
-                    await updateApprovals(from: page, thread: reference, generation: version)
-                    guard generation == version, !Task.isCancelled else { return }
-                    activeRunId = page.recentRuns?.first { $0.status == .running }?.runId
+                    let nextStatus = page.thread.pendingRequestCount > 0 ? .waiting : page.thread.status
+                    let runID = page.thread.activeRunId ?? page.recentRuns?.first { $0.status.isInProgress }?.runId
+                    if !nextStatus.isInProgress || (runID != nil && activeRunId != nil && runID != activeRunId) {
+                        stopAcknowledged = false
+                    }
+                    activeRunId = runID
+                    if nextStatus == .stopped {
+                        clearStoppedRequests()
+                    } else if !stopAcknowledged {
+                        updateApprovalPreview(from: page)
+                        try await updateQuestion(from: page, thread: reference)
+                        guard generation == version, !Task.isCancelled else { return }
+                    }
+                    status = nextStatus
+                    if nextStatus != .stopped, !stopAcknowledged {
+                        await updateApprovals(from: page, thread: reference, generation: version)
+                        guard generation == version, !Task.isCancelled else { return }
+                    }
                     updateFailure(from: page)
-                    if status != .running { stopAcknowledged = false }
                     loading = false
                     connectionFailures = 0
                     threadMachineDisconnected = false
@@ -1091,14 +1113,14 @@ final class ChatState: ObservableObject {
     }
 
     @discardableResult func allowVisibleApproval() -> Bool {
-        guard activeQuestion == nil, approvalAccessEnabled,
+        guard !stopping, activeQuestion == nil, approvalAccessEnabled,
               let request = activeApproval, request.allowedDecisions.contains(.allow) else { return false }
         respondToApproval(.allow, requestID: request.id)
         return true
     }
 
     func respondToApproval(_ decision: ApprovalDecision, requestID: String) {
-        guard activeQuestion == nil, !respondingToApproval, !approvalAccessBusy, approvalAccessEnabled,
+        guard !stopping, activeQuestion == nil, !respondingToApproval, !approvalAccessBusy, approvalAccessEnabled,
               let request = activeApproval, request.id == requestID, request.allowedDecisions.contains(decision),
               let reference, reference.environmentID == nil else { return }
         let version = generation
@@ -1110,7 +1132,7 @@ final class ChatState: ObservableObject {
             }
             do {
                 try await client.respondToApproval(request, decision: decision, thread: reference)
-                guard generation == version else { return }
+                guard generation == version, !stopAcknowledged, status != .stopped else { return }
                 answeredApprovalIDs.insert(request.id)
                 approvalSummary = "\(decision == .allow ? "Allowed" : "Denied"): \(request.summary)"
                 pendingApprovals.removeAll { $0.id == request.id }
@@ -1135,6 +1157,7 @@ final class ChatState: ObservableObject {
             return
         }
         let question = try await client.pendingQuestion(thread)
+        try Task.checkCancellation()
         guard question?.requestId != pendingQuestion?.requestId else { return }
         guard let question else {
             resetQuestion()

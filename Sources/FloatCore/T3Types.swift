@@ -337,6 +337,8 @@ public struct ThreadReceipt: Sendable {
 public enum RunStatus: Equatable, Sendable {
     case idle, running, waiting, completed, failed, stopped, unknown
 
+    public var isInProgress: Bool { self == .running || self == .waiting }
+
     init(_ value: String) {
         switch value {
         case "idle": self = .idle
@@ -373,6 +375,7 @@ public struct ThreadSnapshot: Decodable, Sendable {
         public let title: String
         public let status: RunStatus
         public let pendingRequestCount: Int
+        public let activeRunId: String?
         public let link: URL?
         public let providerInstanceId: String?
         public let model: String?
