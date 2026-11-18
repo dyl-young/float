@@ -69,7 +69,11 @@ public struct T3ModelSelection: Codable, Hashable, Sendable {
         self.model = model
     }
 
-    var arguments: [String: String] { ["instanceId": instanceId, "model": model] }
+    var arguments: [String: any Sendable] { ["instanceId": instanceId, "model": model] }
+
+    public func matches(_ other: Self?) -> Bool {
+        instanceId == other?.instanceId && model == other?.model
+    }
 
     public var fallbackLabel: String {
         guard model.hasPrefix("gpt-") else { return model }
@@ -78,12 +82,61 @@ public struct T3ModelSelection: Codable, Hashable, Sendable {
     }
 }
 
+public enum T3ModelOptionValue: Codable, Hashable, Sendable {
+    case string(String)
+    case boolean(Bool)
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let value = try? container.decode(String.self) {
+            self = .string(value)
+        } else {
+            self = .boolean(try container.decode(Bool.self))
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .string(let value): try container.encode(value)
+        case .boolean(let value): try container.encode(value)
+        }
+    }
+
+    public var string: String? {
+        if case .string(let value) = self { return value }
+        return nil
+    }
+}
+
+public struct T3ModelOption: Codable, Equatable, Sendable {
+    public let id: String
+    public let values: [T3ModelOptionValue]
+    public let defaultValue: T3ModelOptionValue?
+
+    enum CodingKeys: String, CodingKey {
+        case id, values
+        case defaultValue = "default"
+    }
+
+    public var isEffort: Bool {
+        let normalized = id.lowercased().filter(\.isLetter)
+        return normalized == "effort" || normalized == "reasoningeffort"
+    }
+
+    public var stringValues: [String] { values.compactMap(\.string) }
+    public var defaultString: String? { defaultValue?.string }
+}
+
 public struct T3Model: Identifiable, Equatable, Sendable {
     public var id: T3ModelSelection { selection }
     public let selection: T3ModelSelection
     public let label: String
     public let provider: String
     public let driverKind: String
+    public let options: [T3ModelOption]
+
+    public var effortOption: T3ModelOption? { options.first(where: \.isEffort) }
 
     public var shortLabel: String {
         let brand: String?
@@ -105,10 +158,41 @@ public struct T3Model: Identifiable, Equatable, Sendable {
     }
 
     public static func preferred(in models: [Self], saved: T3ModelSelection? = nil) -> Self? {
-        models.first { $0.selection == saved }
+        models.first { $0.selection.matches(saved) }
             ?? models.first { $0.selection.instanceId == "claudeAgent" && $0.selection.model == "claude-opus-5-5" }
             ?? models.first { $0.selection.instanceId == "codex" && $0.selection.model == "gpt-6.1-sol" }
             ?? models.first
+    }
+}
+
+public struct T3ModelProvider: Identifiable, Equatable, Sendable {
+    public var id: String { instanceId }
+    public let instanceId: String
+    public let driverKind: String
+    public let displayName: String
+    public let constraints: [String]
+    public let runtimeModes: [String]?
+    public let omittedModels: Int
+    public let models: [T3Model]
+
+    public var enabled: Bool {
+        constraints.isEmpty && (runtimeModes?.contains("approval-required") ?? true)
+    }
+
+    public var disabledReason: String? {
+        if let constraint = constraints.first { return constraint }
+        if runtimeModes?.contains("approval-required") == false {
+            return "This provider does not support approval-required runs."
+        }
+        return nil
+    }
+}
+
+public struct T3ModelCatalogue: Equatable, Sendable {
+    public let providers: [T3ModelProvider]
+
+    public var available: [T3Model] {
+        providers.filter(\.enabled).flatMap(\.models)
     }
 }
 
@@ -117,6 +201,7 @@ struct T3ModelCatalog: Decodable, Sendable {
         struct Model: Decodable, Sendable {
             let id: String
             let label: String?
+            let options: [T3ModelOption]?
         }
 
         let providerInstanceId: String
@@ -124,26 +209,31 @@ struct T3ModelCatalog: Decodable, Sendable {
         let displayName: String?
         let constraints: [String]
         let runtimeModes: [String]?
+        let omittedModels: Int?
         let models: [Model]
     }
 
     let providers: [Provider]
 
-    var available: [T3Model] {
-        providers.filter { provider in
-            ["codex", "claudeAgent", "antigravity"].contains(provider.driverKind)
-                && provider.constraints.isEmpty
-                && (provider.runtimeModes?.contains("approval-required") ?? true)
-        }
-            .flatMap { provider in
-                provider.models.map { model in
+    var catalogue: T3ModelCatalogue {
+        T3ModelCatalogue(providers: providers.map { provider in
+            let name = provider.displayName ?? provider.driverKind
+            return T3ModelProvider(
+                instanceId: provider.providerInstanceId,
+                driverKind: provider.driverKind,
+                displayName: name,
+                constraints: provider.constraints,
+                runtimeModes: provider.runtimeModes,
+                omittedModels: provider.omittedModels ?? 0,
+                models: provider.models.map { model in
                     let selection = T3ModelSelection(instanceId: provider.providerInstanceId, model: model.id)
                     return T3Model(
                         selection: selection, label: model.label ?? selection.fallbackLabel,
-                        provider: provider.displayName ?? provider.driverKind, driverKind: provider.driverKind
+                        provider: name, driverKind: provider.driverKind, options: model.options ?? []
                     )
                 }
-            }
+            )
+        })
     }
 }
 

@@ -32,16 +32,23 @@ public struct T3Client: Sendable {
 
     public func close() async { await transport.close() }
 
-    public func models() async throws -> [T3Model] {
+    public func modelCatalogue(search: String? = nil) async throws -> T3ModelCatalogue {
         do {
+            var arguments: [String: any Sendable] = [:]
+            arguments["search"] = search
             return try await transport.call(
-                "orchestrator_capabilities", [:], result: T3ModelCatalog.self, retryExpiredSession: true
-            ).available
+                "orchestrator_capabilities", arguments,
+                result: T3ModelCatalog.self, retryExpiredSession: true
+            ).catalogue
         } catch let error as URLError where [
             .cannotConnectToHost, .networkConnectionLost, .notConnectedToInternet, .timedOut,
         ].contains(error.code) {
             throw T3Error.serverUnavailable
         }
+    }
+
+    public func models() async throws -> [T3Model] {
+        try await modelCatalogue().available
     }
 
     public func send(

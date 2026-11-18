@@ -52,6 +52,7 @@ final class ChatState: ObservableObject {
     @Published private(set) var focusRequest = 0
     @Published private(set) var modelPickerRequest = 0
     @Published private(set) var models: [T3Model] = []
+    @Published private(set) var modelProviders: [T3ModelProvider] = []
     @Published private(set) var loadingModels = false
     @Published private(set) var modelCatalogFailed = false
     @Published private var threadModel: T3ModelSelection?
@@ -111,7 +112,7 @@ final class ChatState: ObservableObject {
         savedModel == nil && selectedModel == defaultModel?.selection
     }
 
-    var selectedCatalogModel: T3Model? { models.first { $0.selection == selectedModel } }
+    var selectedCatalogModel: T3Model? { models.first { $0.selection.matches(selectedModel) } }
 
     var modelLabel: String {
         selectedCatalogModel?.label
@@ -134,7 +135,9 @@ final class ChatState: ObservableObject {
         Task {
             defer { loadingModels = false }
             do {
-                models = try await client.models()
+                let catalogue = try await client.modelCatalogue()
+                modelProviders = catalogue.providers
+                models = catalogue.available
             } catch {
                 modelCatalogFailed = true
             }
@@ -144,8 +147,12 @@ final class ChatState: ObservableObject {
     func selectModel(_ model: T3Model?) {
         guard canChooseModel, let selection = (model ?? defaultModel)?.selection else { return }
         savedModel = model?.selection
-        if reference != nil { nextModel = selection == threadModel ? nil : selection }
+        if reference != nil { nextModel = selection.matches(threadModel) ? nil : selection }
         defaults.set(savedModel.flatMap { try? JSONEncoder().encode($0) }, forKey: "preferredModel")
+        focusRequest += 1
+    }
+
+    func restoreComposerFocus() {
         focusRequest += 1
     }
 
@@ -203,6 +210,15 @@ final class ChatState: ObservableObject {
         }
     }
 
+    func openProviderSettings(_ instanceId: String) {
+        let encoded = instanceId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? instanceId
+        if let url = URL(string: "t3code://app/settings/providers?instanceId=\(encoded)"),
+            NSWorkspace.shared.open(url) {
+            return
+        }
+        launchT3()
+    }
+
     func launchT3() {
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.t3tools.t3code") else {
             needsT3 = true
@@ -236,7 +252,9 @@ final class ChatState: ObservableObject {
         let deadline = clock.now.advanced(by: .seconds(30))
         while clock.now < deadline {
             do {
-                models = try await client.models()
+                let catalogue = try await client.modelCatalogue()
+                modelProviders = catalogue.providers
+                models = catalogue.available
                 modelCatalogFailed = false
                 needsT3 = false
                 if shouldSend {
