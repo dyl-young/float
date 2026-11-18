@@ -53,6 +53,7 @@ final class ChatState: ObservableObject {
     @Published private(set) var modelPickerRequest = 0
     @Published private(set) var models: [T3Model] = []
     @Published private(set) var modelProviders: [T3ModelProvider] = []
+    @Published private(set) var favouriteModelKeys: Set<T3ModelKey> = []
     @Published private(set) var loadingModels = false
     @Published private(set) var modelCatalogFailed = false
     @Published private var threadModel: T3ModelSelection?
@@ -64,6 +65,8 @@ final class ChatState: ObservableObject {
 
     private let defaults: UserDefaults
     private let client: T3Client
+    private let favouritesStore: T3ModelFavouritesStore
+    private var modelEfforts: [String: String]
     private var watcher: Task<Void, Never>?
     private var previews: [String: [Data]] = [:]
     private var earliest: Int?
@@ -75,9 +78,17 @@ final class ChatState: ObservableObject {
     private var activeRunId: String?
     private var retrySendAfterLaunch = false
 
-    init(client: T3Client, defaults: UserDefaults = .standard) {
+    init(
+        client: T3Client, defaults: UserDefaults = .standard,
+        favouritesStore: T3ModelFavouritesStore? = nil
+    ) {
         self.defaults = defaults
         self.client = client
+        self.favouritesStore = favouritesStore ?? T3ModelFavouritesStore(
+            settingsURL: FileManager.default.homeDirectoryForCurrentUser
+                .appending(path: ".t3/userdata/settings.json")
+        )
+        modelEfforts = defaults.dictionary(forKey: "modelEfforts") as? [String: String] ?? [:]
         draft = defaults.string(forKey: "draft") ?? ""
         if let data = defaults.data(forKey: "preferredModel") {
             savedModel = try? JSONDecoder().decode(T3ModelSelection.self, from: data)
@@ -109,7 +120,7 @@ final class ChatState: ObservableObject {
     var defaultModel: T3Model? { T3Model.preferred(in: models) }
 
     var usesDefaultModel: Bool {
-        savedModel == nil && selectedModel == defaultModel?.selection
+        savedModel == nil && defaultModel?.selection.matches(selectedModel) == true
     }
 
     var selectedCatalogModel: T3Model? { models.first { $0.selection.matches(selectedModel) } }
@@ -138,6 +149,7 @@ final class ChatState: ObservableObject {
                 let catalogue = try await client.modelCatalogue()
                 modelProviders = catalogue.providers
                 models = catalogue.available
+                await reloadFavourites()
             } catch {
                 modelCatalogFailed = true
             }
@@ -156,10 +168,60 @@ final class ChatState: ObservableObject {
         focusRequest += 1
     }
 
+    func isFavourite(_ model: T3Model) -> Bool {
+        favouriteModelKeys.contains(T3ModelKey(model.selection))
+    }
+
+    func toggleFavourite(_ model: T3Model) {
+        let key = T3ModelKey(model.selection)
+        let wasFavourite = favouriteModelKeys.contains(key)
+        if wasFavourite {
+            favouriteModelKeys.remove(key)
+        } else {
+            favouriteModelKeys.insert(key)
+        }
+        Task {
+            do {
+                favouriteModelKeys = try await favouritesStore.setFavourite(!wasFavourite, key: key)
+            } catch {
+                if wasFavourite {
+                    favouriteModelKeys.insert(key)
+                } else {
+                    favouriteModelKeys.remove(key)
+                }
+            }
+        }
+    }
+
+    func effort(for model: T3Model) -> String? {
+        guard let option = model.effortOption else { return nil }
+        let saved = modelEfforts[T3ModelKey(model.selection).storageKey]
+        if let saved, option.stringValues.contains(saved) { return saved }
+        return option.defaultString ?? option.stringValues.first
+    }
+
+    func setEffort(_ value: String, for model: T3Model) {
+        guard model.effortOption?.stringValues.contains(value) == true else { return }
+        modelEfforts[T3ModelKey(model.selection).storageKey] = value
+        defaults.set(modelEfforts, forKey: "modelEfforts")
+    }
+
+    func searchModelProviders(_ query: String) async -> [T3ModelProvider] {
+        do {
+            return try await client.modelCatalogue(search: T3ModelSearch.serverQuery(query)).providers
+        } catch {
+            return modelProviders
+        }
+    }
+
     func revealed() {
         visible = true
         focusRequest += 1
-        if models.isEmpty { reloadModels() }
+        if models.isEmpty {
+            reloadModels()
+        } else {
+            Task { await reloadFavourites() }
+        }
         if let reference { refresh(reference, force: watcher == nil) }
     }
 
@@ -285,7 +347,7 @@ final class ChatState: ObservableObject {
         let attachments = images
         let request = UUID()
         let target = reference
-        let selection = target == nil ? selectedModel : nextModel
+        let selection = selectedModel.map(selectionForSend)
         clearNotice()
         needsT3 = false
         retrySendAfterLaunch = false
@@ -630,6 +692,26 @@ final class ChatState: ObservableObject {
     private func persist() {
         defaults.set(reference.flatMap { try? JSONEncoder().encode($0) }, forKey: "thread")
         defaults.set(previews.isEmpty ? nil : try? PropertyListEncoder().encode(previews), forKey: "previews")
+    }
+
+    private func selectionForSend(_ selection: T3ModelSelection) -> T3ModelSelection {
+        guard let model = modelProviders.flatMap(\.models).first(where: {
+            $0.selection.matches(selection)
+        }), let option = model.effortOption, let effort = effort(for: model),
+            effort != "default"
+        else {
+            return T3ModelSelection(instanceId: selection.instanceId, model: selection.model)
+        }
+        return T3ModelSelection(
+            instanceId: selection.instanceId, model: selection.model,
+            options: [T3ModelOptionSelection(id: option.id, value: effort)]
+        )
+    }
+
+    private func reloadFavourites() async {
+        if let saved = try? await favouritesStore.load() {
+            favouriteModelKeys = saved
+        }
     }
 
     private func addImage(_ data: Data, name: String) {

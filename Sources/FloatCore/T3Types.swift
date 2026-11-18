@@ -63,13 +63,19 @@ public struct ThreadReference: Codable, Equatable, Sendable {
 public struct T3ModelSelection: Codable, Hashable, Sendable {
     public let instanceId: String
     public let model: String
+    public let options: [T3ModelOptionSelection]?
 
-    public init(instanceId: String, model: String) {
+    public init(instanceId: String, model: String, options: [T3ModelOptionSelection]? = nil) {
         self.instanceId = instanceId
         self.model = model
+        self.options = options
     }
 
-    var arguments: [String: any Sendable] { ["instanceId": instanceId, "model": model] }
+    var arguments: [String: any Sendable] {
+        var result: [String: any Sendable] = ["instanceId": instanceId, "model": model]
+        if let options { result["options"] = options.map(\.arguments) }
+        return result
+    }
 
     public func matches(_ other: Self?) -> Bool {
         instanceId == other?.instanceId && model == other?.model
@@ -80,6 +86,18 @@ public struct T3ModelSelection: Codable, Hashable, Sendable {
         let parts = model.dropFirst(4).split(separator: "-")
         return "GPT-" + parts.map { $0.capitalized }.joined(separator: " ")
     }
+}
+
+public struct T3ModelOptionSelection: Codable, Hashable, Sendable {
+    public let id: String
+    public let value: String
+
+    public init(id: String, value: String) {
+        self.id = id
+        self.value = value
+    }
+
+    var arguments: [String: String] { ["id": id, "value": value] }
 }
 
 public enum T3ModelOptionValue: Codable, Hashable, Sendable {

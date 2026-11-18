@@ -54,6 +54,7 @@ private final class ModelPickerPanelController {
     private weak var parent: NSWindow?
     private weak var chat: ChatState?
     private let panel: ModelPickerPanel
+    private let keyboard = ModelPickerKeyboard()
     private var localMonitor: Any?
     private var globalMonitor: Any?
     private var onClose: (() -> Void)?
@@ -76,7 +77,9 @@ private final class ModelPickerPanelController {
     func show(onClose: @escaping () -> Void) {
         guard let anchor, let parent else { return }
         self.onClose = onClose
-        let content = ModelPickerView(chat: chat!, close: { [weak self] in self?.close() })
+        let content = ModelPickerView(
+            chat: chat!, keyboard: keyboard, close: { [weak self] in self?.close() }
+        )
         panel.contentView = NSHostingView(rootView: content)
 
         let anchorFrame = parent.convertToScreen(anchor.convert(anchor.bounds, to: nil))
@@ -114,6 +117,22 @@ private final class ModelPickerPanelController {
                 close()
                 return nil
             }
+            if event.type == .keyDown {
+                let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
+                if modifiers == .command, let value = event.charactersIgnoringModifiers,
+                    let number = Int(value), (1...9).contains(number) {
+                    keyboard.send(.tab(number - 1))
+                    return nil
+                }
+                if modifiers.isEmpty {
+                    switch event.keyCode {
+                    case 125: keyboard.send(.move(1)); return nil
+                    case 126: keyboard.send(.move(-1)); return nil
+                    case 36, 76: keyboard.send(.pick); return nil
+                    default: break
+                    }
+                }
+            }
             if event.type != .keyDown, event.window !== panel {
                 close()
             }
@@ -133,24 +152,50 @@ private final class ModelPickerPanelController {
 
 }
 
+@MainActor
+private final class ModelPickerKeyboard: ObservableObject {
+    enum Command {
+        case tab(Int)
+        case move(Int)
+        case pick
+    }
+
+    struct Event {
+        let id = UUID()
+        let command: Command
+    }
+
+    @Published private(set) var event: Event?
+
+    func send(_ command: Command) {
+        event = Event(command: command)
+    }
+}
+
 private struct ModelPickerView: View {
     private static let favourites = "favourites"
 
     @ObservedObject var chat: ChatState
+    @ObservedObject var keyboard: ModelPickerKeyboard
     let close: () -> Void
 
     @State private var search = ""
     @State private var selectedTab: String
-    @State private var favourites: Set<T3ModelSelection> = []
     @State private var hovered: T3ModelSelection?
     @State private var highlighted: T3ModelSelection?
-    @State private var efforts: [T3ModelSelection: String] = [:]
+    @State private var searchProviders: [T3ModelProvider]
     @FocusState private var searchFocused: Bool
 
-    init(chat: ChatState, close: @escaping () -> Void) {
+    init(chat: ChatState, keyboard: ModelPickerKeyboard, close: @escaping () -> Void) {
         self.chat = chat
+        self.keyboard = keyboard
         self.close = close
-        _selectedTab = State(initialValue: chat.selectedModel?.instanceId ?? Self.favourites)
+        _selectedTab = State(
+            initialValue: chat.favouriteModelKeys.isEmpty
+                ? chat.selectedModel?.instanceId ?? Self.favourites
+                : Self.favourites
+        )
+        _searchProviders = State(initialValue: chat.modelProviders)
     }
 
     private var providers: [T3ModelProvider] {
@@ -163,12 +208,18 @@ private struct ModelPickerView: View {
 
     private var displayedModels: [T3Model] {
         if !search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return chat.modelProviders.flatMap(\.models).filter { matches($0, query: search) }
+            return searchGroups.flatMap(\.models)
         }
         if selectedTab == Self.favourites {
-            return chat.modelProviders.flatMap(\.models).filter { favourites.contains($0.selection) }
+            return chat.modelProviders.filter(\.enabled).flatMap(\.models).filter {
+                chat.favouriteModelKeys.contains(T3ModelKey($0.selection))
+            }
         }
         return selectedProvider?.models ?? []
+    }
+
+    private var searchGroups: [T3ModelSearchGroup] {
+        T3ModelSearch.groups(providers: searchProviders, query: search)
     }
 
     private var effortModel: T3Model? {
@@ -205,6 +256,23 @@ private struct ModelPickerView: View {
             searchFocused = true
         }
         .onExitCommand(perform: close)
+        .onChange(of: search) {
+            highlighted = displayedModels.first?.selection
+        }
+        .onChange(of: keyboard.event?.id) {
+            if let command = keyboard.event?.command { handle(command) }
+        }
+        .task(id: search) {
+            let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !query.isEmpty else {
+                searchProviders = chat.modelProviders
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(120))
+            guard !Task.isCancelled else { return }
+            searchProviders = await chat.searchModelProviders(query)
+            highlighted = displayedModels.first?.selection
+        }
     }
 
     private var searchField: some View {
@@ -282,7 +350,9 @@ private struct ModelPickerView: View {
     }
 
     @ViewBuilder private var list: some View {
-        if let provider = selectedProvider, !provider.enabled, search.isEmpty {
+        if !search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            searchList
+        } else if let provider = selectedProvider, !provider.enabled {
             VStack(alignment: .leading, spacing: 8) {
                 Text("\(provider.displayName) is turned off in T3.")
                     .font(.system(size: 11.5))
@@ -324,6 +394,50 @@ private struct ModelPickerView: View {
         }
     }
 
+    private var searchList: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 2) {
+                ForEach(searchGroups) { group in
+                    Text(group.provider.displayName)
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundStyle(Theme.muted)
+                        .padding(.horizontal, 8)
+                        .padding(.top, 5)
+                        .frame(height: 24, alignment: .leading)
+                    if group.models.isEmpty {
+                        HStack(spacing: 8) {
+                            ProviderGlyph(driverKind: group.provider.driverKind)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("No match")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(Theme.muted)
+                                if let reason = group.noMatchReason {
+                                    Text(reason)
+                                        .font(.system(size: 10.5))
+                                        .foregroundStyle(Theme.muted)
+                                        .lineLimit(2)
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 8)
+                        .frame(minHeight: 36)
+                        .opacity(0.55)
+                    } else {
+                        ForEach(group.models) { model in modelRow(model) }
+                    }
+                }
+                if searchGroups.isEmpty {
+                    Text("No match")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(Theme.muted)
+                        .padding(8)
+                }
+            }
+        }
+        .scrollIndicators(.visible)
+        .frame(maxHeight: .infinity)
+    }
+
     private var defaultRow: some View {
         HStack(spacing: 8) {
             Image(systemName: "arrow.uturn.backward")
@@ -353,7 +467,7 @@ private struct ModelPickerView: View {
 
     private func modelRow(_ model: T3Model) -> some View {
         let isCurrent = !chat.usesDefaultModel && model.selection.matches(chat.selectedModel)
-        let isFavourite = favourites.contains(model.selection)
+        let isFavourite = chat.isFavourite(model)
         return HStack(spacing: 8) {
             ProviderGlyph(driverKind: model.driverKind)
             VStack(alignment: .leading, spacing: 1) {
@@ -361,7 +475,7 @@ private struct ModelPickerView: View {
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.text)
                     .lineLimit(1)
-                if selectedTab == Self.favourites || !search.isEmpty {
+                if selectedTab == Self.favourites && search.isEmpty {
                     Text(model.provider)
                         .font(.system(size: 10.5))
                         .foregroundStyle(Theme.muted)
@@ -371,11 +485,7 @@ private struct ModelPickerView: View {
             Spacer()
             if hovered == model.selection || isFavourite {
                 Button {
-                    if isFavourite {
-                        favourites.remove(model.selection)
-                    } else {
-                        favourites.insert(model.selection)
-                    }
+                    chat.toggleFavourite(model)
                 } label: {
                     Image(systemName: isFavourite ? "star.fill" : "star")
                         .font(.system(size: 10.5, weight: .medium))
@@ -392,7 +502,7 @@ private struct ModelPickerView: View {
             }
         }
         .padding(.horizontal, 8)
-        .frame(minHeight: selectedTab == Self.favourites || !search.isEmpty ? 36 : 28)
+        .frame(minHeight: selectedTab == Self.favourites && search.isEmpty ? 36 : 28)
         .background(isCurrent || highlighted == model.selection ? Theme.text.opacity(0.08) : .clear,
             in: RoundedRectangle(cornerRadius: 6, style: .continuous))
         .contentShape(Rectangle())
@@ -407,7 +517,7 @@ private struct ModelPickerView: View {
     }
 
     private func effortRow(model: T3Model, option: T3ModelOption) -> some View {
-        let selected = efforts[model.selection] ?? option.defaultString ?? option.stringValues.first
+        let selected = chat.effort(for: model)
         return HStack(spacing: 6) {
             Text("Effort")
                 .font(.system(size: 10.5))
@@ -416,7 +526,7 @@ private struct ModelPickerView: View {
             HStack(spacing: 2) {
                 ForEach(option.stringValues, id: \.self) { value in
                     Button {
-                        efforts[model.selection] = value
+                        chat.setEffort(value, for: model)
                     } label: {
                         Text(effortLabel(value))
                             .font(.system(size: 10.5))
@@ -467,13 +577,34 @@ private struct ModelPickerView: View {
         }
     }
 
-    private func matches(_ model: T3Model, query: String) -> Bool {
-        let normalizedQuery = normalize(query)
-        return normalize([model.label, model.selection.model, model.provider].joined(separator: " "))
-            .contains(normalizedQuery)
-    }
-
-    private func normalize(_ value: String) -> String {
-        String(value.lowercased().filter { $0.isLetter || $0.isNumber })
+    private func handle(_ command: ModelPickerKeyboard.Command) {
+        switch command {
+        case .tab(let index):
+            let tabs = [Self.favourites] + providers.map(\.instanceId)
+            guard tabs.indices.contains(index) else { return }
+            search = ""
+            selectedTab = tabs[index]
+            highlighted = displayedModels.first?.selection
+        case .move(let direction):
+            let models = displayedModels
+            guard !models.isEmpty else { return }
+            let current = models.firstIndex { $0.selection.matches(highlighted) }
+            let index: Int
+            if let current {
+                index = (current + direction + models.count) % models.count
+            } else {
+                index = direction > 0 ? 0 : models.count - 1
+            }
+            highlighted = models[index].selection
+        case .pick:
+            if let model = displayedModels.first(where: { $0.selection.matches(highlighted) })
+                ?? displayedModels.first {
+                chat.selectModel(model)
+                close()
+            } else if selectedTab == Self.favourites && search.isEmpty {
+                chat.selectModel(nil)
+                close()
+            }
+        }
     }
 }
