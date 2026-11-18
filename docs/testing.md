@@ -32,3 +32,7 @@ Dylan filters test sessions out of T3's sidebar by project, so every test chat m
 - Capture the Float window by window ID with `screencapture -x -o -l<windowID>`. It works while the screen is locked.
 - Save captures under `design/qa/<batch>/` and commit them.
 - Never capture or commit secrets such as bearer tokens.
+
+## Synthetic key events
+
+When a harness sends synthetic key events because the screen is locked, make them match a real keyboard. macOS sets `.function` and `.numericPad` on every arrow key and on Page Up and Down, Home and End. A synthetic ↑ or ↓ without those flags passes tests that real keys then fail. That's how the skills menu shipped with ↑↓ broken (`8be3aeb`). Any key handling that checks modifiers should look only at ⇧, ⌃, ⌥ and ⌘.
