@@ -167,7 +167,7 @@ private struct ProjectPickerView: View {
 
     @State private var search = ""
     @State private var hoveredID: String?
-    @State private var highlightedID: String
+    @State private var highlightedID: String?
     @FocusState private var searchFocused: Bool
 
     init(
@@ -178,7 +178,6 @@ private struct ProjectPickerView: View {
         self.keyboard = keyboard
         self.height = height
         self.close = close
-        _highlightedID = State(initialValue: chat.selectedProject?.id ?? Self.scratch)
     }
 
     private var filteredProjects: [T3Project] {
@@ -203,9 +202,8 @@ private struct ProjectPickerView: View {
                 .strokeBorder(Theme.border, lineWidth: 1)
         }
         .preferredColorScheme(.dark)
-        .onAppear {
-            searchFocused = true
-        }
+        .defaultFocus($searchFocused, true)
+        .onAppear { searchFocused = true }
         .onExitCommand(perform: close)
         .onChange(of: search) {
             highlightedID = choiceIDs.first ?? Self.scratch
@@ -222,6 +220,7 @@ private struct ProjectPickerView: View {
                 .foregroundStyle(Theme.muted)
             TextField("Search projects", text: $search)
                 .textFieldStyle(.plain)
+                .focusEffectDisabled()
                 .font(.system(size: 11.5))
                 .foregroundStyle(Theme.text)
                 .focused($searchFocused)
@@ -264,7 +263,7 @@ private struct ProjectPickerView: View {
                             .foregroundStyle(Theme.muted)
                         Spacer()
                         Button("Retry", action: chat.reloadProjects)
-                            .buttonStyle(.plain)
+                            .floatButtonStyle()
                             .font(.system(size: 11.5, weight: .medium))
                             .foregroundStyle(Theme.accent)
                     }
@@ -305,9 +304,10 @@ private struct ProjectPickerView: View {
         .padding(.horizontal, 8)
         .frame(height: 36)
         .background(
-            isCurrent ? Theme.selection : highlightedID == id || hoveredID == id ? Theme.text.opacity(0.06) : .clear,
+            (highlightedID == id || hoveredID == id) ? Theme.text.opacity(0.06) : .clear,
             in: RoundedRectangle(cornerRadius: 8, style: .continuous)
         )
+        .background(isCurrent ? Theme.selection : .clear, in: RoundedRectangle(cornerRadius: 8))
         .contentShape(Rectangle())
         .onHover { hoveredID = $0 ? id : nil }
         .onTapGesture {
@@ -317,16 +317,17 @@ private struct ProjectPickerView: View {
     }
 
     private func handle(_ command: ProjectPickerKeyboard.Command) {
+        let selectedID = highlightedID ?? chat.selectedProject?.id ?? Self.scratch
         switch command {
         case .move(let direction):
             hoveredID = nil
             guard !choiceIDs.isEmpty else { return }
-            let current = choiceIDs.firstIndex(of: highlightedID)
+            let current = choiceIDs.firstIndex(of: selectedID)
             let index = current.map { ($0 + direction + choiceIDs.count) % choiceIDs.count }
                 ?? (direction > 0 ? 0 : choiceIDs.count - 1)
             highlightedID = choiceIDs[index]
         case .pick:
-            let project = filteredProjects.first { $0.id == (hoveredID ?? highlightedID) }
+            let project = filteredProjects.first { $0.id == (hoveredID ?? selectedID) }
             chat.selectProject(project)
             close()
         }

@@ -165,6 +165,7 @@ private final class FloatApp: NSObject, NSApplicationDelegate, NSWindowDelegate 
     private func installMenu() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.image = .floatCloud()
+        item.button?.focusRingType = .none
         item.button?.toolTip = hotKey == nil ? "Float · ⌥Space is unavailable" : "Float · ⌥Space"
 
         let menu = NSMenu()

@@ -207,7 +207,7 @@ struct FloatView: View {
                             .background(Theme.raised, in: Capsule())
                             .overlay { Capsule().strokeBorder(Theme.hairline, lineWidth: 1) }
                     }
-                    .buttonStyle(.plain)
+                    .floatButtonStyle(in: Capsule())
                     .padding(.bottom, inputHeight + 7)
                 }
             }
@@ -219,7 +219,7 @@ struct FloatView: View {
         VStack(alignment: .leading, spacing: 12) {
             if chat.hasOlderMessages {
                 Button("Load older messages", action: chat.loadOlder)
-                    .buttonStyle(.plain)
+                    .floatButtonStyle()
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(Theme.accent)
                     .disabled(chat.loadingOlder)
@@ -432,7 +432,7 @@ struct FloatView: View {
                             .frame(width: 12, height: 22, alignment: .leading)
                             .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .floatButtonStyle()
                     .help(copiedMessage == message.id ? "Copied" : "Copy response")
                     .accessibilityLabel(copiedMessage == message.id ? "Copied" : "Copy response")
                     if let date = message.date {
@@ -572,7 +572,7 @@ struct FloatView: View {
                 }
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .floatButtonStyle(in: Circle())
         .accessibilityLabel(stopping ? "Stop" : "Send")
         .help(stopping ? "Stop · ⌘." : "Send · Return")
         .disabled(!enabled)
@@ -760,7 +760,6 @@ private struct RightAlignedFlowLayout: Layout {
 private struct ModelButton: View {
     @ObservedObject var chat: ChatState
     @Environment(\.isEnabled) private var enabled
-    @State private var hovered = false
 
     var body: some View {
         Button(action: chat.requestModelPicker) {
@@ -784,19 +783,16 @@ private struct ModelButton: View {
             .offset(y: -0.5)
             .padding(.horizontal, 8)
             .frame(height: 26)
-            .background(hovered && enabled ? Color.white.opacity(0.08) : .clear, in: Capsule())
             .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
+        .floatButtonStyle(in: Capsule())
         .fixedSize()
-        .onHover { hovered = $0 }
     }
 }
 
 private struct ProjectContextButton: View {
     @ObservedObject var chat: ChatState
     @Environment(\.isEnabled) private var enabled
-    @State private var hovered = false
 
     var body: some View {
         Button(action: chat.requestProjectPicker) {
@@ -814,24 +810,20 @@ private struct ProjectContextButton: View {
             .foregroundStyle(enabled ? Theme.muted : Theme.muted.opacity(0.5))
             .padding(.horizontal, 7)
             .frame(height: 22)
-            .background(hovered && enabled ? Theme.text.opacity(0.07) : .clear,
-                in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .floatButtonStyle(in: RoundedRectangle(cornerRadius: 9))
         .fixedSize()
         .disabled(!chat.canChooseProject)
         .help("Choose project · ⇧⌘P")
         .accessibilityLabel("Project")
         .accessibilityValue(chat.projectLabel)
-        .onHover { hovered = $0 }
     }
 }
 
 private struct MachineContextButton: View {
     @ObservedObject var chat: ChatState
     @Environment(\.isEnabled) private var enabled
-    @State private var hovered = false
 
     var body: some View {
         Button(action: chat.requestMachinePicker) {
@@ -849,19 +841,14 @@ private struct MachineContextButton: View {
             .foregroundStyle(enabled ? Theme.muted : Theme.muted.opacity(0.5))
             .padding(.horizontal, 7)
             .frame(height: 22)
-            .background(
-                hovered && enabled ? Theme.text.opacity(0.07) : .clear,
-                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
-            )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .floatButtonStyle(in: RoundedRectangle(cornerRadius: 9))
         .fixedSize()
         .disabled(!chat.canChooseMachine)
         .help("Choose machine · ⇧⌘H")
         .accessibilityLabel("Run on")
         .accessibilityValue(chat.machineLabel)
-        .onHover { hovered = $0 }
     }
 }
 
@@ -950,7 +937,7 @@ private struct QuestionCard: View {
                         .frame(height: 24)
                         .background(Theme.accent, in: Capsule())
                 }
-                .buttonStyle(.plain)
+                .floatButtonStyle(in: Capsule())
                 .disabled(!chat.questionCanAdvance || chat.answeringQuestion)
                 .opacity(chat.questionCanAdvance && !chat.answeringQuestion ? 1 : 0.45)
 
@@ -1015,7 +1002,7 @@ private struct QuestionCard: View {
             )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .floatButtonStyle()
         .disabled(chat.answeringQuestion)
         .padding(.horizontal, -3)
         .onHover { hoveredOption = $0 ? index : nil }
@@ -1132,7 +1119,7 @@ private struct NoticeCard: View {
                 }
             }
         }
-        .buttonStyle(.plain)
+        .floatButtonStyle(in: Capsule())
     }
 }
 
@@ -1197,7 +1184,6 @@ private struct PanelButton: View {
     let action: () -> Void
 
     @Environment(\.isEnabled) private var enabled
-    @State private var hovered = false
 
     init(
         _ title: String, accessibilityLabel: String? = nil,
@@ -1228,16 +1214,13 @@ private struct PanelButton: View {
     var body: some View {
         Button(action: action) {
             glyphView
-                .foregroundStyle(hovered && enabled ? Theme.text : Theme.muted.opacity(enabled ? 1 : 0.4))
+                .foregroundStyle(Theme.muted.opacity(enabled ? 1 : 0.4))
                 .frame(width: size, height: size)
-                .background(hovered && enabled ? Color.white.opacity(0.08) : .clear,
-                    in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .floatButtonStyle()
         .help(title)
         .accessibilityLabel(accessibilityTitle)
-        .onHover { hovered = $0 }
     }
 
     @ViewBuilder private var glyphView: some View {

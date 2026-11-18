@@ -118,7 +118,7 @@ struct ApprovalCard: View {
                         .underline()
                         .foregroundStyle(Theme.muted)
                 }
-                .buttonStyle(.plain)
+                .floatButtonStyle()
             }
         }
     }
@@ -136,6 +136,6 @@ struct ApprovalCard: View {
                 }
                 .opacity(busy ? 0.55 : 1)
         }
-        .buttonStyle(.plain)
+        .floatButtonStyle(in: Capsule())
     }
 }

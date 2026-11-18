@@ -89,6 +89,8 @@ private final class MachinePickerPanelController {
         panel.setFrame(NSRect(x: origin.x, y: origin.y, width: 236, height: height), display: true)
         parent.addChildWindow(panel, ordered: .above)
         panel.makeKeyAndOrderFront(nil)
+        // Keep arrow navigation active without focusing the footer on open.
+        panel.makeFirstResponder(nil)
         installMonitors()
     }
 
@@ -158,13 +160,12 @@ private struct MachinePickerView: View {
     let close: () -> Void
 
     @State private var hoveredID: String?
-    @State private var highlightedID: String
+    @State private var highlightedID: String?
 
     init(chat: ChatState, keyboard: MachinePickerKeyboard, close: @escaping () -> Void) {
         self.chat = chat
         self.keyboard = keyboard
         self.close = close
-        _highlightedID = State(initialValue: chat.selectedMachine?.id ?? "")
     }
 
     private var choices: [T3Machine] { chat.machines.filter(\.isOnline) }
@@ -204,7 +205,7 @@ private struct MachinePickerView: View {
                 .frame(height: 30)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .floatButtonStyle()
         }
         .padding(4)
         .frame(width: 236)
@@ -248,9 +249,10 @@ private struct MachinePickerView: View {
         .frame(height: 40)
         .opacity(machine.isOnline ? 1 : 0.45)
         .background(
-            current ? Theme.selection : machine.isOnline && (highlightedID == machine.id || hoveredID == machine.id) ? Theme.text.opacity(0.06) : .clear,
+            machine.isOnline && (highlightedID == machine.id || hoveredID == machine.id) ? Theme.text.opacity(0.06) : .clear,
             in: RoundedRectangle(cornerRadius: 8, style: .continuous)
         )
+        .background(current ? Theme.selection : .clear, in: RoundedRectangle(cornerRadius: 8))
         .contentShape(Rectangle())
         .onHover { hoveredID = $0 && machine.isOnline ? machine.id : nil }
         .onTapGesture {
@@ -271,15 +273,16 @@ private struct MachinePickerView: View {
 
     private func handle(_ command: MachinePickerKeyboard.Command) {
         guard !choices.isEmpty else { return }
+        let selectedID = highlightedID ?? chat.selectedMachine?.id
         switch command {
         case .move(let direction):
             hoveredID = nil
-            let current = choices.firstIndex { $0.id == highlightedID }
+            let current = choices.firstIndex { $0.id == selectedID }
             let index = current.map { ($0 + direction + choices.count) % choices.count }
                 ?? (direction > 0 ? 0 : choices.count - 1)
             highlightedID = choices[index].id
         case .pick:
-            guard let machine = choices.first(where: { $0.id == (hoveredID ?? highlightedID) }) else { return }
+            guard let machine = choices.first(where: { $0.id == (hoveredID ?? selectedID) }) else { return }
             chat.selectMachine(machine)
             close()
         }

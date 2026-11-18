@@ -23,6 +23,7 @@ struct ComposerEditor: NSViewRepresentable {
 
         let editor = PromptTextView(frame: NSRect(x: 0, y: 0, width: 460, height: 24))
         editor.backgroundColor = .clear
+        editor.focusRingType = .none
         editor.isRichText = false
         editor.importsGraphics = false
         editor.allowsUndo = true

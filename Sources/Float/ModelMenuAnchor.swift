@@ -173,7 +173,7 @@ private struct ModelRowTrailingIcons: View {
                         .foregroundStyle(Theme.muted)
                         .frame(width: 18, height: 22)
                 }
-                .buttonStyle(.plain)
+                .floatButtonStyle()
                 .help(isFavourite ? "Remove from Favourites" : "Add to Favourites")
             } else if state.showsRestingFavourite {
                 Image(systemName: "star.fill")
@@ -286,6 +286,7 @@ private struct ModelPickerView: View {
                 .strokeBorder(Theme.border, lineWidth: 1)
         }
         .preferredColorScheme(.dark)
+        .defaultFocus($searchFocused, true)
         .onAppear {
             if selectedTab != Self.favourites,
                 !providers.contains(where: { $0.instanceId == selectedTab }) {
@@ -320,6 +321,7 @@ private struct ModelPickerView: View {
                 .foregroundStyle(Theme.muted)
             TextField("Search models", text: $search)
                 .textFieldStyle(.plain)
+                .focusEffectDisabled()
                 .font(.system(size: 11.5))
                 .foregroundStyle(Theme.text)
                 .focused($searchFocused)
@@ -347,7 +349,7 @@ private struct ModelPickerView: View {
                     .foregroundStyle(Theme.muted)
                     .frame(width: 24, height: 24)
             }
-            .buttonStyle(.plain)
+            .floatButtonStyle()
             .disabled(chat.loadingModels)
             .help("Reload models")
         }
@@ -383,7 +385,7 @@ private struct ModelPickerView: View {
             .opacity(enabled || selected ? 1 : 0.4)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .floatButtonStyle()
         .help(selected ? "" : name)
     }
 
@@ -395,16 +397,18 @@ private struct ModelPickerView: View {
                 Text("\(provider.pickerName) is turned off in T3.")
                     .font(.system(size: 11.5))
                     .foregroundStyle(Theme.muted)
-                Button("Open T3 settings") {
+                Button {
                     chat.openProviderSettings(provider.instanceId)
                     close()
+                } label: {
+                    Text("Open T3 settings")
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundStyle(Theme.canvas)
+                        .padding(.horizontal, 10)
+                        .frame(height: 24)
+                        .background(Theme.accent, in: Capsule())
                 }
-                .buttonStyle(.plain)
-                .font(.system(size: 11.5, weight: .medium))
-                .foregroundStyle(Theme.canvas)
-                .padding(.horizontal, 10)
-                .frame(height: 24)
-                .background(Theme.accent, in: Capsule())
+                .floatButtonStyle(in: Capsule())
             }
             .padding(.horizontal, 8)
             .padding(.top, 10)
@@ -498,10 +502,10 @@ private struct ModelPickerView: View {
         .padding(.horizontal, 8)
         .frame(minHeight: selectedTab == Self.favourites && search.isEmpty ? 36 : 28)
         .background(
-            isCurrent ? Theme.selection : highlighted == row || hovered == model.selection
-                ? Theme.text.opacity(0.06) : .clear,
+            highlighted == row || hovered == model.selection ? Theme.text.opacity(0.06) : .clear,
             in: RoundedRectangle(cornerRadius: 8, style: .continuous)
         )
+        .background(isCurrent ? Theme.selection : .clear, in: RoundedRectangle(cornerRadius: 8))
         .contentShape(Rectangle())
         .id(row)
         .onHover {
@@ -536,7 +540,7 @@ private struct ModelPickerView: View {
                                 in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                             .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .floatButtonStyle()
                     .help(effortName(value))
                     .accessibilityLabel(effortName(value))
                 }
