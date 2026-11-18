@@ -378,3 +378,68 @@ request ID, `read` returned the question, and this answer:
 
 was accepted by `respond`. The run resumed automatically and completed with
 `You picked Blue.`
+
+## Approvals
+
+The running macOS Nightly server accepted a separately issued headless bearer
+session on the V2 RPC socket. Float's existing `mcp-client` session was
+rejected at the upgrade. Both checks used five-minute sessions on loopback.
+The headless session reached `orchestration.getThreadProjection` and returned
+a typed thread-not-found result for a generated ID. The probe revoked both
+sessions afterwards.
+
+### Read and respond
+
+- The V2 RPC socket is `/ws?orchestrationProtocol=2`. The desktop calls
+  `orchestration.dispatchCommand` with a `runtime-request.respond` command.
+  It carries a fresh `commandId`, the `threadId`, the exact pending
+  `requestId`, and a provider decision such as `accept` or `decline`.
+  Optional feedback depends on the provider. T3 resolves the pending request
+  and forwards the decision to the live provider session.
+- Read the thread through `orchestration.getThreadProjection` or
+  `orchestration.subscribeThread`. Join pending `runtimeRequests` with
+  `approval_request` turn items by `requestId`. The item includes
+  `requestKind`, and may include `prompt`, `reason`, `appName`, and provider
+  options. If the provider includes a command or paths, they are part of the
+  displayed request details. The contract does not promise separate command
+  and path fields for every provider.
+- MCP activity exposes the approval prompt and reason as text. Its timeline
+  item ID differs from the runtime request ID, and `t3_pending_request`
+  lists, reads, and responds to user-input questions only. The pending count
+  can signal that a handoff is needed.
+
+### Credentials and scope
+
+- T3's desktop renderer gets its local bearer via the Electron preload bridge
+  (`getLocalEnvironmentBearerToken`). The regular same-origin web client can
+  use an HttpOnly browser session from `POST /api/auth/browser-session`.
+  Bearer clients can mint short-lived RPC upgrade tickets via
+  `POST /api/auth/websocket-ticket/rpc`; the local headless probe used an
+  Authorization header. Neither desktop nor browser credentials are exposed
+  as an external client integration. Float reads the loopback origin from
+  `userdata/server-runtime.json` and gets a separate credential for MCP.
+- T3 documents headless sessions in `docs/user/remote-access.md`,
+  `docs/internals/environment-auth.md`, and the installed CLI's help.
+  `t3 auth session issue --base-dir <t3-home> --subject <client>` accepts
+  explicit repeated `--scope` flags, `--ttl`, and `--json`. The local owner
+  can issue a session without a browser or a first-run pairing command.
+  A pairing grant can also issue a separate session within the granted
+  scopes. It has the same authorization limitations.
+- Issuance returns the bearer, session ID, and expiry. T3 persists session
+  metadata and revocation state in the environment database. The bearer is
+  available at issuance and is not returned by `t3 auth session list`.
+  `t3 auth session revoke <session-id> --base-dir <t3-home>` revokes it. A
+  native client could hold a short-lived credential in memory, or use the
+  Keychain if persistence were required.
+- In `apps/server/src/auth/RpcAuthorization.ts`, the projection requires
+  `orchestration:read` and dispatch requires `orchestration:operate`.
+  The latter also permits launching full-access runs and other orchestration
+  mutations. The contract has no approval-only or per-thread scope for this
+  command. The MCP subject is deliberately barred from RPC, where its
+  runtime-mode ceiling would no longer apply. A linked environment would
+  also require a grant for its own RPC surface.
+
+Float keeps the Open in T3 handoff. The supported headless credential grants
+broader access than approval responses require. An approval-specific scoped
+endpoint or an extension of the existing pending-request MCP contract would
+provide a path for the in-app controls.
