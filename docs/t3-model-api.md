@@ -160,3 +160,104 @@ include the project title or workspace path. Float must resolve that ID against
 `t3_project_list` or `t3_project_read` and use the matching title in the
 header. The thread read also exposes `branch` and `worktreePath`, but Float
 does not show or change them.
+
+## Machines
+
+### Listing machines
+
+The read-only MCP tool is `t3_environment_links`. Its result has:
+
+- `environmentId`: the environment ID of the local T3 server that Float called.
+  This is how Float identifies This Mac.
+- `links`: the other machines, each with `environmentId`, the machine-name
+  `label`, `status` (`reachable`, `unreachable`, or `expired`), `access`,
+  `expiresAt`, and nullable `lastError`.
+- `notListed`: guidance for linking a machine that is not in the result.
+
+The result does not include a local-machine label, user name, device kind, or
+project count. Float therefore presents the top-level environment as
+`This Mac`, uses the app's local user name for its second line, and treats link
+rows as linked machines. A linked machine is online only when its status is
+`reachable`; both `unreachable` and `expired` are unavailable. Float gets the
+project count separately by paging `t3_project_list` for each reachable
+environment. The laptop and server glyphs are presentation, not API fields.
+
+If Linked environments is off, `t3_environment_links` fails with
+`code: "orchestration_error"` and the message says to turn it on in
+Settings → Labs.
+
+### Projects on a linked machine
+
+`t3_project_list` accepts `environmentId`. Float passes a linked machine's ID
+and follows `nextCursor` exactly as for local projects. Omitting
+`environmentId`, or passing the top-level local ID, runs the call locally.
+
+### Launching on a linked machine
+
+`t3_thread_launch` accepts `environmentId` together with `projectId`. Float
+passes both, omits `scratch`, and does not pass `workspaceStrategy`. T3 removes
+`environmentId` before forwarding the call and the linked T3 server defaults
+the omitted strategy to `{ "type": "root" }`, using that project's registered
+checkout. Float never creates or asks for a branch, checkout, or worktree.
+
+Forwarded launches cannot currently carry attachments. T3 rejects a linked
+launch with non-empty `attachments` using `code: "invalid_request"` and
+`"A launch in a linked environment cannot carry attachments yet."`
+
+The linked-machine QA launch call is:
+
+```json
+{
+  "name": "t3_thread_launch",
+  "arguments": {
+    "environmentId": "<reachable-linked-environment-id>",
+    "projectId": "<project-id-from-that-environment>",
+    "title": "Float linked machine QA",
+    "message": "Reply with one short line containing the current working directory.",
+    "runtimeMode": "approval-required",
+    "interactionMode": "default",
+    "clientRequestId": "<new-uuid>",
+    "modelSelection": {
+      "instanceId": "<Gemini-provider-instance-id>",
+      "model": "<Gemini-3.8-Flash-model-id>"
+    }
+  }
+}
+```
+
+There is deliberately no `scratch`, `workspaceStrategy`, branch, worktree, or
+attachments field.
+
+### Following a remote thread
+
+Every later MCP call must keep the same `environmentId` as well as the remote
+`threadId`: `t3_thread_read`, `t3_thread_send`, `t3_thread_configure`,
+`t3_thread_interrupt`, and `t3_pending_request` for question answers all take
+it. The same applies to paged reads. An environment ID equal to the local
+top-level ID is treated as local.
+
+The MCP thread link is
+`t3-thread://v2/<environmentId>/<threadId>`. Float opens it in the desktop app
+as `t3code://threads/<environmentId>/<threadId>`, percent-encoding both IDs.
+The machine-linking settings route is `/settings/connections`, so the desktop
+deep link is `t3code://app/settings/connections`; launching T3 Code is the
+fallback.
+
+### Offline and expired links
+
+The offline result is the same for project list, launch, read, send, configure,
+interrupt, and pending-request calls because they all use the forwarding
+layer:
+
+- An unreachable link fails with `code: "orchestration_error"` and either
+  `"<label> did not answer at ..."` or `"The linked environment stopped answering."`.
+- An expired link fails with `code: "capability_denied"` and
+  `"The link to <label> expired. Link it again..."`.
+- A removed or unknown link fails with `code: "invalid_request"` and says that
+  the environment is not linked.
+- A revoked credential or incompatible linked T3 version is a
+  `capability_denied` failure. A remote server or protocol failure is an
+  `orchestration_error`.
+
+Float should use the selected machine's known label for the friendly notice
+rather than exposing those transport messages.
