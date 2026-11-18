@@ -355,6 +355,8 @@ struct FloatView: View {
                     count: request.questions.count
                 )
                 .id("\(request.requestId):\(question.id)")
+            } else if let preview = chat.approvalPreview {
+                approvalCard(preview)
             } else if isThinking {
                 ThinkingActivity(startedAt: chat.thinkingStartedAt)
                     .padding(.leading, 2)
@@ -380,6 +382,14 @@ struct FloatView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func approvalCard(_ preview: String) -> ApprovalCard {
+        let canOptIn = chat.reference?.environmentID == nil && !chat.approvalAccessEnabled
+        let optIn: (() -> Void)? = canOptIn ? { chat.enableApprovals() } : nil
+        let open: (() -> Void)? = chat.reference?.desktopURL == nil ? nil : { chat.openThread() }
+        return ApprovalCard(preview: preview, optIn: optIn, busy: chat.approvalAccessBusy,
+                            error: chat.approvalAccessError, openInT3: open)
     }
 
     // MARK: Messages

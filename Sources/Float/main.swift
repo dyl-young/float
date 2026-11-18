@@ -14,6 +14,7 @@ private final class FloatApp: NSObject, NSApplicationDelegate, NSWindowDelegate 
     private var panel: FloatPanel?
     private var statusItem: NSStatusItem?
     private var statusMenu: NSMenu?
+    private var approvalMenuItem: NSMenuItem?
     private var hotKey: EventHotKeyRef?
     private var hotKeyHandler: EventHandlerRef?
     private var compactHeight: CGFloat = 79
@@ -25,7 +26,8 @@ private final class FloatApp: NSObject, NSApplicationDelegate, NSWindowDelegate 
         let env = ProcessInfo.processInfo.environment
         let client = T3Client(
             base: env["FLOAT_T3_BASE_DIR"].map { URL(fileURLWithPath: $0, isDirectory: true) },
-            executable: env["FLOAT_T3_EXECUTABLE"].map { URL(fileURLWithPath: $0) }
+            executable: env["FLOAT_T3_EXECUTABLE"].map { URL(fileURLWithPath: $0) },
+            desktopApp: NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.t3tools.t3code")
         )
         chat = ChatState(client: client)
         sizing = PanelSizing()
@@ -35,6 +37,7 @@ private final class FloatApp: NSObject, NSApplicationDelegate, NSWindowDelegate 
     func applicationDidFinishLaunching(_ notification: Notification) {
         installHotkey()
         installMenu()
+        chat.startApprovalMaintenance()
         show()
     }
 
@@ -173,6 +176,10 @@ private final class FloatApp: NSObject, NSApplicationDelegate, NSWindowDelegate 
             menu.addItem(unavailable)
         }
         menu.addItem(.separator())
+        let approvals = NSMenuItem(title: "Answer approvals in Float", action: #selector(toggleApprovals), keyEquivalent: "")
+        approvals.target = self
+        menu.addItem(approvals)
+        approvalMenuItem = approvals
         menu.addItem(withTitle: "Quit Float", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         item.button?.target = self
         item.button?.action = #selector(statusItemClicked(_:))
@@ -184,10 +191,20 @@ private final class FloatApp: NSObject, NSApplicationDelegate, NSWindowDelegate 
     @objc private func statusItemClicked(_ button: NSStatusBarButton) {
         let event = NSApp.currentEvent
         if event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true {
+            approvalMenuItem?.state = chat.approvalAccessEnabled ? .on : .off
             let bottom = button.isFlipped ? button.bounds.maxY : button.bounds.minY
             statusMenu?.popUp(positioning: nil, at: NSPoint(x: button.bounds.minX, y: bottom), in: button)
         } else {
             toggle()
+        }
+    }
+
+    @objc private func toggleApprovals() {
+        guard !chat.approvalAccessBusy else { return }
+        if chat.approvalAccessEnabled {
+            chat.disableApprovals()
+        } else {
+            show()
         }
     }
 

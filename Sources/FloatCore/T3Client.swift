@@ -40,15 +40,16 @@ public struct T3Client: Sendable {
     private let transport: MCPTransport
     private let scratchRoot: URL
 
-    public init(base: URL? = nil, executable: URL? = nil) {
+    public let approvals: ApprovalAccess
+
+    public init(base: URL? = nil, executable: URL? = nil, desktopApp: URL? = nil) {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let standardBase = home.appending(path: ".t3")
         let resolvedBase = base ?? standardBase
         scratchRoot = resolvedBase.appending(path: "scratch").resolvingSymlinksInPath()
-        transport = MCPTransport(cli: LocalCLI(
-            base: resolvedBase,
-            executable: executable ?? standardBase.appending(path: "bin/t3")
-        ))
+        let cli = LocalCLI(base: resolvedBase, executable: executable, desktopApp: desktopApp)
+        transport = MCPTransport(cli: cli)
+        approvals = ApprovalAccess(cli: cli)
     }
 
     public func close() async { await transport.close() }

@@ -1,6 +1,6 @@
 import Foundation
 
-private final class NoRedirects: NSObject, URLSessionTaskDelegate {
+final class NoRedirects: NSObject, URLSessionTaskDelegate {
     func urlSession(
         _ session: URLSession, task: URLSessionTask,
         willPerformHTTPRedirection response: HTTPURLResponse,
@@ -39,7 +39,7 @@ struct LocalRuntime: Decodable, Equatable, Sendable {
     }
 }
 
-struct LocalCredential: Decodable, Sendable {
+struct LocalCredential: Codable, Sendable {
     let sessionId: String
     let token: String
     let expiresAt: String
@@ -47,38 +47,95 @@ struct LocalCredential: Decodable, Sendable {
 
 struct LocalCLI: Sendable {
     let base: URL
-    let executable: URL
+    let executable: URL?
+    let desktopApp: URL?
 
     func issue() async throws -> LocalCredential {
-        let output = try await run([
-            "auth", "session", "issue",
-            "--scope", "orchestration:read", "--scope", "orchestration:operate",
-            "--subject", "mcp-client", "--label", "Float", "--ttl", "1h", "--json",
-        ])
-        guard let credentials = try? JSONDecoder().decode(LocalCredential.self, from: output) else {
-            throw T3Error.authorization
-        }
-        return credentials
+        try await issue(subject: "mcp-client", label: "Float", ttl: "1h")
+    }
+
+    func issueApprovals() async throws -> LocalCredential {
+        // Issuance operates on the local T3 database. Check the same live
+        // runtime Float will use before provisioning a long-lived session.
+        _ = try LocalRuntime.load(base: base)
+        return try await issue(subject: "float-approvals", label: "Float approvals", ttl: "30d")
     }
 
     func revoke(_ credential: LocalCredential) async {
-        _ = try? await run(["auth", "session", "revoke", credential.sessionId])
+        try? await revoke(sessionID: credential.sessionId)
+    }
+
+    func revoke(sessionID: String) async throws {
+        _ = try await run(["auth", "session", "revoke", sessionID])
+    }
+
+    func hasSession(_ sessionID: String) async throws -> Bool {
+        struct Session: Decodable { let sessionId: String }
+        let output = try await run(["auth", "session", "list", "--json"])
+        guard let sessions = try? JSONDecoder().decode([Session].self, from: output) else {
+            throw T3Error.authorization
+        }
+        return sessions.contains { $0.sessionId == sessionID }
+    }
+
+    private func issue(subject: String, label: String, ttl: String) async throws -> LocalCredential {
+        let output = try await run([
+            "auth", "session", "issue",
+            "--scope", "orchestration:read", "--scope", "orchestration:operate",
+            "--subject", subject, "--label", label, "--ttl", ttl, "--json",
+        ])
+        guard let credential = try? JSONDecoder().decode(LocalCredential.self, from: output) else {
+            throw T3Error.authorization
+        }
+        return credential
+    }
+
+    private func command() throws -> (executable: URL, prefix: [String]) {
+        let files = FileManager.default
+        if let executable {
+            guard files.isExecutableFile(atPath: executable.path) else { throw T3Error.cliUnavailable }
+            return (executable, [])
+        }
+        let path = ProcessInfo.processInfo.environment["PATH", default: ""]
+        let candidates = path.split(separator: ":").filter { $0.hasPrefix("/") }
+            .map { URL(fileURLWithPath: String($0), isDirectory: true).appending(path: "t3") }
+            + [base.appending(path: "bin/t3"),
+               files.homeDirectoryForCurrentUser.appending(path: ".t3/bin/t3")]
+        if let shim = candidates.first(where: { files.isExecutableFile(atPath: $0.path) }) {
+            return (shim, [])
+        }
+        // The desktop's own CLI shim uses Electron in Node mode with this entry.
+        if let desktopApp, let bundle = Bundle(url: desktopApp),
+           let executable = bundle.executableURL, let resources = bundle.resourceURL,
+           files.isExecutableFile(atPath: executable.path) {
+            let archive = resources.appending(path: "app.asar")
+            if files.fileExists(atPath: archive.path) {
+                return (executable, [archive.path + "/apps/server/dist/bin.mjs"])
+            }
+        }
+        throw T3Error.cliUnavailable
     }
 
     private func run(_ arguments: [String]) async throws -> Data {
         try await Task.detached {
-            guard FileManager.default.isExecutableFile(atPath: executable.path) else {
-                throw T3Error.cliUnavailable
-            }
+            let command = try command()
             let process = Process()
             let output = Pipe()
-            process.executableURL = executable
-            process.arguments = arguments + ["--base-dir", base.path]
+            process.executableURL = command.executable
+            process.arguments = command.prefix + arguments + ["--base-dir", base.path]
+            if !command.prefix.isEmpty {
+                var environment = ProcessInfo.processInfo.environment
+                environment["ELECTRON_RUN_AS_NODE"] = "1"
+                process.environment = environment
+            }
             process.standardOutput = output
             process.standardError = FileHandle.nullDevice
-            // Float is already a local client. Never let a CLI helper read terminal input.
             process.standardInput = FileHandle.nullDevice
-            try process.run()
+            do {
+                try process.run()
+            } catch {
+                throw T3Error.cliUnavailable
+            }
             let data = output.fileHandleForReading.readDataToEndOfFile()
             process.waitUntilExit()
             guard process.terminationStatus == 0 else { throw T3Error.authorization }
