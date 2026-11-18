@@ -4,16 +4,6 @@ import ImageIO
 import SwiftUI
 import UniformTypeIdentifiers
 
-struct ChatMessage: Identifiable, Equatable {
-    var id: String
-    let runId: String?
-    let position: Int
-    let isUser: Bool
-    var text: String
-    let date: Date?
-    let previews: [Data]
-}
-
 enum NoticeKind {
     case input
     case connection
@@ -126,6 +116,8 @@ final class ChatState: ObservableObject {
             }
         }
     }
+
+    var groupedMessages: [ChatMessage] { ChatMessage.groupReplies(in: messages) }
 
     var hasConversation: Bool { reference != nil || submitting }
     var hasTrayNotice: Bool { notice != nil && noticeKind != .input }

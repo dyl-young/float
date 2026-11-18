@@ -225,7 +225,7 @@ struct FloatView: View {
                     .disabled(chat.loadingOlder)
                     .frame(maxWidth: .infinity)
             }
-            ForEach(chat.messages) { messageView($0) }
+            ForEach(chat.groupedMessages) { messageView($0) }
             activity
         }
         .padding(.horizontal, 14)
