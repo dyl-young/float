@@ -249,7 +249,7 @@ struct FloatView: View {
                 )
                 .disabled(chat.submitting)
                 PanelButton(
-                    "Open in T3", systemImage: "arrow.up.forward.square",
+                    openInT3: "Open in T3",
                     size: Self.headerButtonSize, action: chat.openThread
                 )
                 .disabled(chat.reference?.desktopURL == nil)
@@ -280,7 +280,9 @@ struct FloatView: View {
     }
 
     private var openAction: NoticeAction? {
-        chat.reference?.desktopURL == nil ? nil : NoticeAction(title: "Open in T3", handle: { chat.openThread() })
+        chat.reference?.desktopURL == nil ? nil : NoticeAction(
+            title: "Open in T3", icon: .openInT3, handle: { chat.openThread() }
+        )
     }
 
     private var isThinking: Bool {
@@ -758,8 +760,16 @@ private struct ModelButton: View {
 }
 
 private struct NoticeAction {
+    enum Icon { case openInT3 }
     let title: String
+    var icon: Icon?
     let handle: () -> Void
+
+    init(title: String, icon: Icon? = nil, handle: @escaping () -> Void) {
+        self.title = title
+        self.icon = icon
+        self.handle = handle
+    }
 }
 
 private struct NoticeCard: View {
@@ -851,17 +861,22 @@ private struct NoticeCard: View {
 
     private func noticeButton(_ action: NoticeAction, primary: Bool) -> some View {
         Button(action: action.handle) {
-            Text(action.title)
-                .font(.system(size: 11.5, weight: .medium))
-                .foregroundStyle(primary ? Theme.canvas : Theme.muted)
-                .padding(.horizontal, 10)
-                .frame(height: 24)
-                .background(primary ? tint : Color.clear, in: Capsule())
-                .overlay {
-                    if !primary {
-                        Capsule().strokeBorder(Theme.hairline, lineWidth: 1)
-                    }
+            HStack(spacing: 5) {
+                if action.icon == .openInT3 {
+                    OpenInT3Glyph(size: 12)
                 }
+                Text(action.title)
+                    .font(.system(size: 11.5, weight: .medium))
+            }
+            .foregroundStyle(primary ? Theme.canvas : Theme.muted)
+            .padding(.horizontal, 10)
+            .frame(height: 24)
+            .background(primary ? tint : Color.clear, in: Capsule())
+            .overlay {
+                if !primary {
+                    Capsule().strokeBorder(Theme.hairline, lineWidth: 1)
+                }
+            }
         }
         .buttonStyle(.plain)
     }
@@ -978,9 +993,14 @@ private struct ImagePreview: View {
 }
 
 private struct PanelButton: View {
+    private enum Glyph {
+        case system(String)
+        case openInT3
+    }
+
     let title: String
     let accessibilityTitle: String
-    let systemImage: String
+    private let glyph: Glyph
     let size: CGFloat
     let glyphSize: CGFloat?
     let action: () -> Void
@@ -995,7 +1015,20 @@ private struct PanelButton: View {
     ) {
         self.title = title
         accessibilityTitle = accessibilityLabel ?? title
-        self.systemImage = systemImage
+        glyph = .system(systemImage)
+        self.size = size
+        self.glyphSize = glyphSize
+        self.action = action
+    }
+
+    init(
+        openInT3 title: String, accessibilityLabel: String? = nil,
+        size: CGFloat = 30, glyphSize: CGFloat? = nil,
+        action: @escaping () -> Void
+    ) {
+        self.title = title
+        accessibilityTitle = accessibilityLabel ?? title
+        glyph = .openInT3
         self.size = size
         self.glyphSize = glyphSize
         self.action = action
@@ -1003,8 +1036,7 @@ private struct PanelButton: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: glyphSize ?? (size < 20 ? 9 : size < 26 ? 11 : 13), weight: .medium))
+            glyphView
                 .foregroundStyle(hovered && enabled ? Theme.text : Theme.muted.opacity(enabled ? 1 : 0.4))
                 .frame(width: size, height: size)
                 .background(hovered && enabled ? Color.white.opacity(0.08) : .clear,
@@ -1015,5 +1047,28 @@ private struct PanelButton: View {
         .help(title)
         .accessibilityLabel(accessibilityTitle)
         .onHover { hovered = $0 }
+    }
+
+    @ViewBuilder private var glyphView: some View {
+        let iconSize = glyphSize ?? (size < 20 ? 9 : size < 26 ? 11 : 13)
+        switch glyph {
+        case .system(let name):
+            Image(systemName: name)
+                .font(.system(size: iconSize, weight: .medium))
+        case .openInT3:
+            OpenInT3Glyph(size: iconSize)
+        }
+    }
+}
+
+private struct OpenInT3Glyph: View {
+    let size: CGFloat
+
+    var body: some View {
+        OpenInT3Shape()
+            .stroke(style: StrokeStyle(
+                lineWidth: max(1, size / 10), lineCap: .round, lineJoin: .round
+            ))
+            .frame(width: size, height: size)
     }
 }

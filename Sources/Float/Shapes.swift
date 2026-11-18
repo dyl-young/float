@@ -39,6 +39,44 @@ struct TrayShape: Shape {
     }
 }
 
+/// The external-link mark from Float's design, drawn on its original 24-unit grid.
+struct OpenInT3Shape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let scale = min(rect.width, rect.height) / 24
+        let origin = CGPoint(
+            x: rect.midX - 12 * scale,
+            y: rect.midY - 12 * scale
+        )
+        func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+            CGPoint(x: origin.x + x * scale, y: origin.y + y * scale)
+        }
+
+        var path = Path()
+        path.move(to: point(15, 3))
+        path.addLine(to: point(21, 3))
+        path.addLine(to: point(21, 9))
+
+        path.move(to: point(10, 14))
+        path.addLine(to: point(21, 3))
+
+        path.move(to: point(18, 13))
+        path.addLine(to: point(18, 19))
+        path.addArc(
+            tangent1End: point(18, 21), tangent2End: point(16, 21), radius: 2 * scale
+        )
+        path.addLine(to: point(5, 21))
+        path.addArc(
+            tangent1End: point(3, 21), tangent2End: point(3, 19), radius: 2 * scale
+        )
+        path.addLine(to: point(3, 8))
+        path.addArc(
+            tangent1End: point(3, 6), tangent2End: point(5, 6), radius: 2 * scale
+        )
+        path.addLine(to: point(11, 6))
+        return path
+    }
+}
+
 /// The Float cloud, drawn on a 24-unit grid (bounds roughly x 4–21.5, y 6–18).
 struct CloudShape: Shape {
     func path(in rect: CGRect) -> Path {
