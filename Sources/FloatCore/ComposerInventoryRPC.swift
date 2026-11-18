@@ -32,22 +32,33 @@ struct ComposerInventoryRPC: Sendable {
 
     func inventory(instanceID: String, cwd: String?) async throws -> T3ComposerInventory {
         let credential = try await cli.issueInventoryReader()
+        let result: T3ComposerInventory
         do {
-            let result: ProviderResponse
-            if let cwd {
-                result = try await rpc.call("server.refreshProviders", WorkspaceInput(instanceId: instanceID, cwd: cwd),
-                                            credential: credential)
-            } else {
-                result = try await rpc.call("server.getConfig", ConfigInput(), credential: credential)
-            }
-            await cli.revoke(credential)
-            guard let provider = result.providers.first(where: { $0.instanceId == instanceID }) else { return .empty }
-            let workspace = provider.workspaceSnapshots?.first { $0.cwd == cwd }
-            return T3ComposerInventory(skills: workspace?.skills ?? provider.skills ?? [],
-                                       commands: workspace?.slashCommands ?? provider.slashCommands ?? [])
+            result = try await readInventory(instanceID: instanceID, cwd: cwd, credential: credential)
         } catch {
             await cli.revoke(credential)
             throw error
         }
+        await cli.revoke(credential)
+        return result
+    }
+
+    private func readInventory(
+        instanceID: String, cwd: String?, credential: LocalCredential
+    ) async throws -> T3ComposerInventory {
+        if let cwd {
+            let result: ProviderResponse = try await rpc.call(
+                "server.refreshProviders", WorkspaceInput(instanceId: instanceID, cwd: cwd), credential: credential
+            )
+            if let workspace = result.providers.first(where: { $0.instanceId == instanceID })?
+                .workspaceSnapshots?.first(where: { $0.cwd == cwd }) {
+                return T3ComposerInventory(skills: workspace.skills, commands: workspace.slashCommands)
+            }
+            try Task.checkCancellation()
+        }
+        // The on-demand refresh omits machine lists for providers without a cwd snapshot.
+        let config: ProviderResponse = try await rpc.call("server.getConfig", ConfigInput(), credential: credential)
+        guard let provider = config.providers.first(where: { $0.instanceId == instanceID }) else { return .empty }
+        return T3ComposerInventory(skills: provider.skills ?? [], commands: provider.slashCommands ?? [])
     }
 }

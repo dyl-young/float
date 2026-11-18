@@ -91,15 +91,15 @@ final class ComposerMenuState: ObservableObject {
             return false
         }
         let items = sections(for: chat).flatMap(\.items)
-        let selected = selection(in: items)
+        guard let selected = selection(in: items) else { return false }
         switch event.keyCode {
         case 125, 126:
-            if let selected, let index = items.firstIndex(of: selected) {
+            if let index = items.firstIndex(of: selected) {
                 let offset = event.keyCode == 125 ? 1 : -1
                 highlightedID = items[(index + offset + items.count) % items.count].id
             }
         case 36, 76, 48:
-            if !event.isARepeat, let selected { apply?(selected) }
+            if !event.isARepeat { apply?(selected) }
         default:
             return false
         }
