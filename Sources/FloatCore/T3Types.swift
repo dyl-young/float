@@ -171,7 +171,7 @@ public struct T3ModelOption: Codable, Equatable, Sendable {
 
     public var isEffort: Bool {
         let normalized = id.lowercased().filter(\.isLetter)
-        return ["effort", "reasoningeffort", "thinkinglevel"].contains(normalized)
+        return ["effort", "reasoningeffort", "thinkinglevel", "thoughtlevel"].contains(normalized)
     }
 
     public var stringValues: [String] { values.compactMap(\.string) }

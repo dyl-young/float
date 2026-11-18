@@ -1051,8 +1051,11 @@ final class ChatState: ObservableObject {
 
     private func updateApprovalPreview(from snapshot: ThreadSnapshot) {
         let pending = snapshot.thread.pendingRequestCount > 0
-            ? snapshot.items.first { $0.type == "approval_request" && $0.status == "running" } : nil
-        let preview = pending.map { $0.text ?? "Review this request in T3." }
+            ? snapshot.items.first(where: \.isPendingApproval) : nil
+        let preview = pending.map { item in
+            if item.text == "Ran command" { return "The agent wants to run a command." }
+            return item.text ?? "Review this request in T3."
+        }
         if approvalPreview != preview { approvalPreview = preview }
     }
 

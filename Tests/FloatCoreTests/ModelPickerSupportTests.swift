@@ -55,7 +55,7 @@ private func provider(
 }
 
 @Test func effortOptionRecognizesEveryT3ProviderID() {
-    for id in ["effort", "reasoningEffort", "reasoning_effort", "thinking_level"] {
+    for id in ["effort", "reasoningEffort", "reasoning_effort", "thinking_level", "thought_level"] {
         let option = T3ModelOption(
             id: id, values: [.string("low"), .string("high")],
             defaultValue: .string("low")
@@ -66,7 +66,7 @@ private func provider(
 }
 
 @Test func effortSelectionUsesTheProvidersOwnOptionID() {
-    for id in ["effort", "reasoningEffort", "reasoning_effort", "thinking_level"] {
+    for id in ["effort", "reasoningEffort", "reasoning_effort", "thinking_level", "thought_level"] {
         let effortModel = model(
             "model", label: "Model", instanceId: "provider", provider: "Provider",
             driver: "custom",
