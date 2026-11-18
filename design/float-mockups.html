@@ -187,6 +187,12 @@ code{font-family:var(--font-mono);font-size:11.5px;background:var(--code-backgro
 .send.off{color:var(--muted-foreground);opacity:.6}
 .send.stop{color:var(--destructive)}
 .send.stop i{width:8px;height:8px;border-radius:2px;background:currentColor}
+/* While a run is going and the input has text: the follow-up button (steer or queue, T3's setting) sits left of the stop ring, so stop never moves. */
+.send.fu{color:var(--primary)}
+/* Steered and queued messages: your bubble with a small muted label above it, as T3 marks them. */
+.fu-lab{align-self:flex-end;display:flex;align-items:center;gap:4px;font-size:10.5px;color:var(--muted-foreground);margin:2px 2px -4px 0}
+.fu-lab svg{width:11px;height:11px}
+.msg-u.queued{opacity:.6;border:1px dashed var(--line)}
 
 .drop{position:absolute;inset:6px;border-radius:12px;border:1.5px dashed color-mix(in oklab, var(--primary) 70%, transparent);background:color-mix(in oklab, var(--primary) 12%, transparent);display:grid;place-items:center;font-size:12px;color:var(--primary);z-index:2}
 .menu{position:absolute;right:52px;bottom:42px;width:170px;border-radius:10px;background:var(--popover);border:1px solid var(--line);box-shadow:0 12px 30px -8px rgba(0,0,0,.6);padding:4px;font-size:12px;z-index:3}
@@ -225,6 +231,8 @@ code{font-family:var(--font-mono);font-size:11.5px;background:var(--code-backgro
     <symbol id="i-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></symbol>
     <symbol id="i-clip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l8.6-8.6a4 4 0 0 1 5.7 5.7l-8.6 8.6a2 2 0 0 1-2.8-2.8l8.5-8.5"/></symbol>
     <symbol id="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4"/></symbol>
+    <symbol id="i-steer" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 0 1 4-4h12"/></symbol>
+    <symbol id="i-queue" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 12H3"/><path d="M16 6H3"/><path d="M16 18H3"/><path d="M18 9v6"/><path d="M21 12h-6"/></symbol>
     <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></symbol>
     <symbol id="i-wrap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h15a3 3 0 1 1 0 6h-4"/><path d="m16 16-2 2 2 2"/><path d="M3 18h7"/></symbol>
     <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></symbol>
@@ -266,7 +274,9 @@ code{font-family:var(--font-mono);font-size:11.5px;background:var(--code-backgro
 <script>
 const ic = (id) => `<svg><use href="#i-${id}"/></svg>`;
 function footer({send='off', modelOpen=false}={}){
-  const s = send==='stop' ? `<span class="send stop"><i></i></span>` : `<span class="send ${send==='on'?'':'off'}">${ic('up')}</span>`;
+  const s = send==='stop' ? `<span class="send stop"><i></i></span>` :
+    send==='steer' ? `<span class="send fu">${ic('steer')}</span><span class="send stop"><i></i></span>` :
+    send==='queue' ? `<span class="send fu">${ic('queue')}</span><span class="send stop"><i></i></span>` : `<span class="send ${send==='on'?'':'off'}">${ic('up')}</span>`;
   return `<div class="tray-foot"><div class="foot">
     <span class="ctl">${ic('clip')}</span><span class="spacer"></span>
     <span class="ctl model ${modelOpen?'open':''}"><svg class="claude"><use href="#i-burst"/></svg>Opus 5.5<span class="bars"><i class="on" style="height:4px"></i><i class="on" style="height:7px"></i><i style="height:9px"></i><i style="height:11px"></i></span>${modelOpen?`<svg style="width:12px;height:12px"><use href="#i-chev"/></svg>`:''}</span>
@@ -304,6 +314,9 @@ const states = [
   [shell({tray: trayTop({title:'Mobile layout bug', body:`<div class="msg-u"><div class="thumbs">${thumb()}${thumb(60)}</div>What's wrong with this layout on mobile?</div><div class="step">${ic('check')}Read 2 images</div><div class="working"><span class="pix"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="shim" data-t="Thinking">Thinking</span><span>· 14s</span></div>`}),
      input: ph('Queue a follow-up…'), send:'stop'}),
    `<b>3 · Working.</b> The tray opens at its full height on first send. One status line: the pixel loader, then T3's shimmering "Thinking" text and the elapsed time. Send becomes a red stop ring.`],
+  [shell({tray: trayTop({title:'Mobile layout bug', project:'float', projectIcon:'float', body:`<div class="msg-u">What's wrong with this layout on mobile?</div><div class="step">${ic('check')}Read 2 images</div><div class="fu-lab">${ic('steer')}Steer · waiting to be read</div><div class="msg-u">Only look at the sidebar, not the header</div><div class="fu-lab">${ic('queue')}Queued · sends when this turn ends<span class="ib" style="width:16px;height:16px">${ic('x')}</span></div><div class="msg-u queued">Then check the tablet breakpoint too</div><div class="working"><span class="pix"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="shim" data-t="Thinking">Thinking</span><span>· 14s</span></div>`}),
+     input: `Also keep the 280px width on desktop<span class="caret"></span>`, send:'steer'}),
+   `<b>3b · Follow-ups while it works.</b> Type while the agent runs and send as usual. Float follows T3's follow-up setting: <b>steer</b> (the default) slips the message into the running turn; <b>queue</b> holds it for the next turn. <span class="kbd">↵</span> does the setting, <span class="kbd">⌘</span><span class="kbd">↵</span> the other one, as in T3. The follow-up button (steer arrow or queue icon) appears left of the stop ring only while there's text; the stop ring never moves. Your message shows at once with T3's label: "Steer · waiting to be read" until the agent reads it, then "Steer". A queued message is dimmed with an × to take it back. Where the provider can't steer, it queues.`],
   [shell({tray: trayTop({title:'Mobile layout bug', project:'float', projectIcon:'float', closeHover:true, body:`<div class="msg-u"><div class="thumbs">${thumb()}${thumb(60)}</div>What's wrong with this layout on mobile?</div>` +
      reply(['The sidebar keeps its fixed <code>280px</code> width below the breakpoint, so the main column gets squeezed to about 90px. Drop it under <code>md</code>:',
        `</p><div class="cb"><div class="ch"><svg class="lg" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="4" fill="#663399"/><path d="M9 7 7.6 17M14.4 7 13 17M6.5 10.2h11M6 13.8h11" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg><span class="sp"></span><span class="ib">${ic('wrap')}</span><span class="ib">${ic('copy')}</span></div><pre><span class="tk-k">@media</span> (<span class="tk-f">max-width</span>: <span class="tk-s">768px</span>) {
