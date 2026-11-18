@@ -259,3 +259,18 @@ private func provider(
         T3ModelOptionSelection(id: "effort", value: "high"),
     ])
 }
+
+@Test func modelSelectionPrefersSavedThenFirstAvailableFavourite() {
+    let first = model("first", label: "First", instanceId: "codex", provider: "Codex", driver: "codex")
+    let second = model("second", label: "Second", instanceId: "codex", provider: "Codex", driver: "codex")
+    let third = model("third", label: "Third", instanceId: "claudeAgent", provider: "Claude", driver: "claudeAgent")
+    let stale = T3ModelSelection(instanceId: "codex", model: "removed")
+    let models = [first, second, third]
+    let favourites = Set([T3ModelKey(third.selection), T3ModelKey(second.selection), T3ModelKey(stale)])
+
+    #expect(T3Model.preferred(in: models, saved: first.selection, favourites: favourites) == first)
+    #expect(T3Model.preferred(in: models, favourites: favourites) == second)
+    #expect(T3Model.preferred(in: models, saved: stale, favourites: favourites) == second)
+    #expect(T3Model.preferred(in: models, saved: stale, favourites: [T3ModelKey(stale)]) == first)
+    #expect(T3Model.preferred(in: [], favourites: favourites) == nil)
+}

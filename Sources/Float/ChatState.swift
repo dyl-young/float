@@ -160,22 +160,18 @@ final class ChatState: ObservableObject {
     var canStop: Bool { showsStop && !stopping }
     var canSend: Bool {
         !submitting && !stopping && !loading && status != .running && status != .waiting &&
-            (reference != nil || !loadingProjects) &&
+            (reference != nil || (!loadingProjects && (!loadingModels || !models.isEmpty))) &&
             (!draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !images.isEmpty)
     }
 
     var selectedModel: T3ModelSelection? {
-        if reference != nil { return nextModel ?? threadModel }
+        if let threadSelection = nextModel ?? threadModel, reference != nil { return threadSelection }
         if let pickedCatalogModel, pickedCatalogModel.selection.matches(savedModel) {
             return pickedCatalogModel.selection
         }
-        return T3Model.preferred(in: models, saved: savedModel)?.selection
-    }
-
-    var defaultModel: T3Model? { T3Model.preferred(in: models) }
-
-    var usesDefaultModel: Bool {
-        savedModel == nil && defaultModel?.selection.matches(selectedModel) == true
+        return T3Model.preferred(
+            in: models, saved: savedModel, favourites: favouriteModelKeys
+        )?.selection
     }
 
     var selectedCatalogModel: T3Model? {
@@ -265,22 +261,39 @@ final class ChatState: ObservableObject {
         Task {
             defer { loadingModels = false }
             do {
-                let catalogue = try await client.modelCatalogue()
-                modelProviders = catalogue.providers
-                models = catalogue.available
-                await reloadFavourites()
+                try await loadModelCatalogue()
             } catch {
                 modelCatalogFailed = true
             }
         }
     }
 
-    func selectModel(_ model: T3Model?) {
-        guard canChooseModel, let selection = (model ?? defaultModel)?.selection else { return }
+    private func loadModelCatalogue() async throws {
+        let catalogue = try await client.modelCatalogue()
+        await reloadFavourites()
+        let saved = savedModel
+        var savedSearchMatch: T3Model?
+        if let saved,
+            let provider = catalogue.providers.first(where: { $0.id == saved.instanceId }),
+            provider.enabled, provider.omittedModels > 0,
+            !provider.models.contains(where: { $0.selection.matches(saved) }) {
+            // T3 can omit a model from the initial list while still returning it in search.
+            let results = try? await client.modelCatalogue(search: saved.model)
+            savedSearchMatch = results?.available.first { $0.selection.matches(saved) }
+            if results == nil { savedSearchMatch = pickedCatalogModel }
+        }
+        if savedModel == saved { pickedCatalogModel = savedSearchMatch }
+        models = catalogue.available
+        modelProviders = catalogue.providers
+    }
+
+    func selectModel(_ model: T3Model) {
+        guard canChooseModel else { return }
+        let selection = model.selection
         pickedCatalogModel = model
-        savedModel = model?.selection
+        savedModel = selection
         if reference != nil { nextModel = selection.matches(threadModel) ? nil : selection }
-        defaults.set(savedModel.flatMap { try? JSONEncoder().encode($0) }, forKey: "preferredModel")
+        defaults.set(try? JSONEncoder().encode(selection), forKey: "preferredModel")
         focusRequest += 1
     }
 
@@ -512,9 +525,7 @@ final class ChatState: ObservableObject {
         let deadline = clock.now.advanced(by: .seconds(30))
         while clock.now < deadline {
             do {
-                let catalogue = try await client.modelCatalogue()
-                modelProviders = catalogue.providers
-                models = catalogue.available
+                try await loadModelCatalogue()
                 modelCatalogFailed = false
                 needsT3 = false
                 if shouldSend {

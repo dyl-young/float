@@ -221,10 +221,11 @@ public struct T3Model: Identifiable, Equatable, Sendable {
         return label
     }
 
-    public static func preferred(in models: [Self], saved: T3ModelSelection? = nil) -> Self? {
+    public static func preferred(
+        in models: [Self], saved: T3ModelSelection? = nil, favourites: Set<T3ModelKey> = []
+    ) -> Self? {
         models.first { $0.selection.matches(saved) }
-            ?? models.first { $0.selection.instanceId == "claudeAgent" && $0.selection.model == "claude-opus-5-5" }
-            ?? models.first { $0.selection.instanceId == "codex" && $0.selection.model == "gpt-6.1-sol" }
+            ?? models.first { favourites.contains(T3ModelKey($0.selection)) }
             ?? models.first
     }
 }

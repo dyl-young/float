@@ -195,15 +195,9 @@ private struct ModelPickerView: View {
     let close: () -> Void
 
     @State private var search = ""
-    @State private var defaultHovered = false
     @State private var selectedTab: String
     @State private var hovered: T3ModelSelection?
-    private enum Row: Hashable {
-        case t3Default
-        case model(T3ModelKey)
-    }
-
-    @State private var highlighted: Row?
+    @State private var highlighted: T3ModelKey?
     @State private var searchProviders: [T3ModelProvider]
     @FocusState private var searchFocused: Bool
 
@@ -253,17 +247,13 @@ private struct ModelPickerView: View {
         T3ModelSearch.turnedOffProviders(providers: chat.modelProviders, query: search)
     }
 
-    private var showsDefaultRow: Bool {
-        selectedTab == Self.favourites && search.isEmpty
-    }
-
-    private var rows: [Row] {
-        (showsDefaultRow ? [.t3Default] : []) + displayedModels.map { .model(T3ModelKey($0.selection)) }
+    private var rows: [T3ModelKey] {
+        displayedModels.map { T3ModelKey($0.selection) }
     }
 
     private var effortModel: T3Model? {
         guard search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-            !chat.usesDefaultModel, selectedProvider?.enabled != false,
+            selectedProvider?.enabled != false,
             let current = chat.selectedCatalogModel
         else { return nil }
         return current
@@ -422,14 +412,11 @@ private struct ModelPickerView: View {
         } else {
             ScrollView {
                 LazyVStack(spacing: 2) {
-                    if showsDefaultRow {
-                        defaultRow
-                    }
                     ForEach(displayedModels) { model in
                         modelRow(model)
                     }
                     if displayedModels.isEmpty {
-                        Text(search.isEmpty ? "No favourites yet" : "No match")
+                        Text(selectedTab == Self.favourites ? "No favourites yet" : "No models available")
                             .font(.system(size: 11.5))
                             .foregroundStyle(Theme.muted)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -475,37 +462,9 @@ private struct ModelPickerView: View {
         .frame(maxHeight: .infinity)
     }
 
-    private var defaultRow: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "arrow.uturn.backward")
-                .font(.system(size: 10.5, weight: .medium))
-                .foregroundStyle(Theme.muted)
-                .frame(width: 13)
-            Text("Use T3 default")
-                .font(.system(size: 12))
-                .foregroundStyle(Theme.text)
-            Spacer()
-
-        }
-        .padding(.horizontal, 8)
-        .frame(height: 28)
-        .background(
-            chat.usesDefaultModel ? Theme.selection
-                : defaultHovered || highlighted == .t3Default ? Theme.text.opacity(0.06) : .clear,
-            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-        )
-        .id(Row.t3Default)
-        .onHover { defaultHovered = $0 }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            chat.selectModel(nil)
-            close()
-        }
-    }
-
     private func modelRow(_ model: T3Model) -> some View {
-        let row = Row.model(T3ModelKey(model.selection))
-        let isCurrent = !chat.usesDefaultModel && model.selection.matches(chat.selectedModel)
+        let row = T3ModelKey(model.selection)
+        let isCurrent = model.selection.matches(chat.selectedModel)
         let isFavourite = chat.isFavourite(model)
         return HStack(spacing: 8) {
             ProviderGlyph(driverKind: model.driverKind)
@@ -614,15 +573,10 @@ private struct ModelPickerView: View {
                 highlighted = rows[index]
             }
         case .pick:
-            switch highlighted ?? rows.first {
-            case .t3Default:
-                chat.selectModel(nil)
-            case .model(let key):
-                guard let model = displayedModels.first(where: { T3ModelKey($0.selection) == key }) else { return }
-                chat.selectModel(model)
-            case nil:
-                return
-            }
+            guard let key = highlighted ?? rows.first,
+                let model = displayedModels.first(where: { T3ModelKey($0.selection) == key })
+            else { return }
+            chat.selectModel(model)
             close()
         }
     }
