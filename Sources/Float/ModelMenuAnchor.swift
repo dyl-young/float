@@ -58,6 +58,8 @@ private final class ModelPickerPanelController {
     private var localMonitor: Any?
     private var globalMonitor: Any?
     private var onClose: (() -> Void)?
+    private var anchorFrame = NSRect.zero
+    private var visibleFrame = NSRect.zero
 
     init(anchor: NSView, parent: NSWindow, chat: ChatState) {
         self.anchor = anchor
@@ -78,18 +80,15 @@ private final class ModelPickerPanelController {
         guard let anchor, let parent else { return }
         self.onClose = onClose
         let content = ModelPickerView(
-            chat: chat!, keyboard: keyboard, close: { [weak self] in self?.close() }
+            chat: chat!, keyboard: keyboard,
+            resize: { [weak self] height in self?.resize(to: height) },
+            close: { [weak self] in self?.close() }
         )
         panel.contentView = NSHostingView(rootView: content)
 
-        let anchorFrame = parent.convertToScreen(anchor.convert(anchor.bounds, to: nil))
-        let visible = parent.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
-        var origin = NSPoint(x: anchorFrame.maxX - panel.frame.width, y: anchorFrame.maxY + 6)
-        origin.x = min(max(visible.minX + 6, origin.x), visible.maxX - panel.frame.width - 6)
-        if origin.y + panel.frame.height > visible.maxY {
-            origin.y = anchorFrame.minY - panel.frame.height - 6
-        }
-        panel.setFrameOrigin(origin)
+        anchorFrame = parent.convertToScreen(anchor.convert(anchor.bounds, to: nil))
+        visibleFrame = parent.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
+        resize(to: panel.frame.height)
         parent.addChildWindow(panel, ordered: .above)
         panel.makeKeyAndOrderFront(nil)
         installMonitors()
@@ -107,6 +106,19 @@ private final class ModelPickerPanelController {
         let completion = onClose
         onClose = nil
         completion?()
+    }
+
+    private func resize(to height: CGFloat) {
+        let height = min(346, max(112, ceil(height)))
+        var origin = NSPoint(x: anchorFrame.maxX - panel.frame.width, y: anchorFrame.maxY + 6)
+        origin.x = min(
+            max(visibleFrame.minX + 6, origin.x),
+            visibleFrame.maxX - panel.frame.width - 6
+        )
+        if origin.y + height > visibleFrame.maxY {
+            origin.y = anchorFrame.minY - height - 6
+        }
+        panel.setFrame(NSRect(origin: origin, size: NSSize(width: 290, height: height)), display: true)
     }
 
     private func installMonitors() {
@@ -177,6 +189,7 @@ private struct ModelPickerView: View {
 
     @ObservedObject var chat: ChatState
     @ObservedObject var keyboard: ModelPickerKeyboard
+    let resize: (CGFloat) -> Void
     let close: () -> Void
 
     @State private var search = ""
@@ -186,9 +199,13 @@ private struct ModelPickerView: View {
     @State private var searchProviders: [T3ModelProvider]
     @FocusState private var searchFocused: Bool
 
-    init(chat: ChatState, keyboard: ModelPickerKeyboard, close: @escaping () -> Void) {
+    init(
+        chat: ChatState, keyboard: ModelPickerKeyboard,
+        resize: @escaping (CGFloat) -> Void, close: @escaping () -> Void
+    ) {
         self.chat = chat
         self.keyboard = keyboard
+        self.resize = resize
         self.close = close
         _selectedTab = State(
             initialValue: chat.favouriteModelKeys.isEmpty
@@ -227,21 +244,48 @@ private struct ModelPickerView: View {
         return chat.modelProviders.flatMap(\.models).first { $0.selection.matches(target) }
     }
 
+    private var showsEffort: Bool {
+        effortModel?.effortOption?.stringValues.isEmpty == false
+    }
+
+    private var showsHint: Bool {
+        search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && selectedTab == Self.favourites
+    }
+
+    private var listHeight: CGFloat {
+        if !search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let height = searchGroups.reduce(CGFloat.zero) { total, group in
+                total + 24 + (group.models.isEmpty ? 36 : CGFloat(group.models.count * 30))
+            }
+            return min(210, max(36, height))
+        }
+        if selectedProvider?.enabled == false { return 70 }
+        let defaultHeight: CGFloat = selectedTab == Self.favourites ? 30 : 0
+        let rowHeight: CGFloat = selectedTab == Self.favourites ? 38 : 30
+        return min(210, max(36, defaultHeight + CGFloat(displayedModels.count) * rowHeight))
+    }
+
+    private var pickerHeight: CGFloat {
+        8 + 32 + (search.isEmpty ? 28 : 0) + listHeight
+            + (showsEffort ? 33 : 0) + (showsHint ? 28 : 0)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             searchField
             if search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 tabs
             }
-            list
+            list.frame(height: listHeight)
             if let model = effortModel, let option = model.effortOption, !option.stringValues.isEmpty {
                 Divider().overlay(Theme.border)
                 effortRow(model: model, option: option)
             }
-            hintRow
+            if showsHint { hintRow }
         }
         .padding(4)
-        .frame(width: 290, height: 300, alignment: .top)
+        .frame(width: 290, height: pickerHeight, alignment: .top)
         .background(Theme.raised)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
@@ -254,6 +298,7 @@ private struct ModelPickerView: View {
                 selectedTab = providers.first?.instanceId ?? Self.favourites
             }
             searchFocused = true
+            resize(pickerHeight)
         }
         .onExitCommand(perform: close)
         .onChange(of: search) {
@@ -273,6 +318,7 @@ private struct ModelPickerView: View {
             searchProviders = await chat.searchModelProviders(query)
             highlighted = displayedModels.first?.selection
         }
+        .onChange(of: pickerHeight) { resize(pickerHeight) }
     }
 
     private var searchField: some View {
