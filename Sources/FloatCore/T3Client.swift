@@ -18,6 +18,10 @@ public struct T3Client: Sendable {
     private struct Interruption: Decodable {
         let status: String
     }
+    private struct ProjectPage: Decodable {
+        let projects: [T3Project]
+        let nextCursor: Int?
+    }
 
     private let transport: MCPTransport
 
@@ -49,6 +53,28 @@ public struct T3Client: Sendable {
 
     public func models() async throws -> [T3Model] {
         try await modelCatalogue().available
+    }
+
+    public func projects() async throws -> [T3Project] {
+        do {
+            var projects: [T3Project] = []
+            var cursor: Int?
+            repeat {
+                var arguments: [String: any Sendable] = ["limit": 100]
+                arguments["cursor"] = cursor
+                let page = try await transport.call(
+                    "t3_project_list", arguments, result: ProjectPage.self,
+                    retryExpiredSession: true
+                )
+                projects.append(contentsOf: page.projects)
+                cursor = page.nextCursor
+            } while cursor != nil
+            return projects.filter(\.isAvailable)
+        } catch let error as URLError where [
+            .cannotConnectToHost, .networkConnectionLost, .notConnectedToInternet, .timedOut,
+        ].contains(error.code) {
+            throw T3Error.serverUnavailable
+        }
     }
 
     public func send(

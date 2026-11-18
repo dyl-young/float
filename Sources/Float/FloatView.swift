@@ -26,6 +26,7 @@ struct FloatView: View {
 
     private static let headerHeight: CGFloat = 38
     private static let headerFadeHeight: CGFloat = 14
+    private static let contextRowHeight: CGFloat = 30
     private nonisolated static let shellSpace = "Float shell"
     private static let latest = "Latest message"
     private static let headerButtonSize: CGFloat = 24
@@ -36,14 +37,27 @@ struct FloatView: View {
     private let inputShape = RoundedRectangle(cornerRadius: Theme.radius)
 
     private var showsTray: Bool { chat.hasConversation || chat.hasTrayNotice }
+    private var showsContextRow: Bool { !chat.hasConversation }
 
     private var panelHeight: CGFloat {
-        guard showsTray else { return composerHeight }
+        let contextHeight = showsContextRow ? Self.contextRowHeight : 0
+        guard showsTray else { return composerHeight + contextHeight }
         let timeline = chat.hasConversation ? max(56, timelineHeight) : timelineHeight
-        return min(sizing.maximumHeight, composerHeight + Self.headerHeight + timeline)
+        return min(sizing.maximumHeight, composerHeight + Self.headerHeight + timeline) + contextHeight
     }
 
     var body: some View {
+        VStack(spacing: 0) {
+            shell
+            if showsContextRow { projectContextRow }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        .preferredColorScheme(.dark)
+        .onAppear { resize(panelHeight, showsTray, sizing.isDragging) }
+        .onChange(of: panelHeight) { _, value in resize(value, showsTray, sizing.isDragging) }
+    }
+
+    private var shell: some View {
         VStack(spacing: 0) {
             if showsTray {
                 tray.padding(.bottom, -inputHeight)
@@ -94,10 +108,18 @@ struct FloatView: View {
                 .accessibilityHidden(true)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-        .preferredColorScheme(.dark)
-        .onAppear { resize(panelHeight, showsTray, sizing.isDragging) }
-        .onChange(of: panelHeight) { _, value in resize(value, showsTray, sizing.isDragging) }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var projectContextRow: some View {
+        HStack(spacing: 0) {
+            ProjectContextButton(chat: chat)
+                .background(ProjectMenuAnchor(chat: chat, request: chat.projectPickerRequest))
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 8)
+        .padding(.top, 8)
+        .frame(height: Self.contextRowHeight, alignment: .top)
     }
 
     @ViewBuilder private var inputBackdrop: some View {
@@ -755,6 +777,41 @@ private struct ModelButton: View {
         }
         .buttonStyle(.plain)
         .fixedSize()
+        .onHover { hovered = $0 }
+    }
+}
+
+private struct ProjectContextButton: View {
+    @ObservedObject var chat: ChatState
+    @Environment(\.isEnabled) private var enabled
+    @State private var hovered = false
+
+    var body: some View {
+        Button(action: chat.requestProjectPicker) {
+            HStack(spacing: 5) {
+                Image(systemName: chat.selectedProject == nil ? "pencil" : "folder")
+                    .font(.system(size: 10.5, weight: .medium))
+                    .frame(width: 12)
+                Text(chat.projectLabel)
+                    .font(.system(size: 11.5))
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+                    .opacity(0.7)
+            }
+            .foregroundStyle(enabled ? Theme.muted : Theme.muted.opacity(0.5))
+            .padding(.horizontal, 7)
+            .frame(height: 22)
+            .background(hovered && enabled ? Theme.text.opacity(0.07) : .clear,
+                in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+        .disabled(!chat.canChooseProject)
+        .help("Choose project · ⇧⌘P")
+        .accessibilityLabel("Project")
+        .accessibilityValue(chat.projectLabel)
         .onHover { hovered = $0 }
     }
 }

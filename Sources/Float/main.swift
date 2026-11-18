@@ -98,6 +98,7 @@ private final class FloatApp: NSObject, NSApplicationDelegate, NSWindowDelegate 
         panel.dismiss = { [weak self] in self?.hide() }
         panel.startNewChat = { [weak self] in self?.chat.newChat() }
         panel.openModelPicker = { [weak self] in self?.chat.requestModelPicker() }
+        panel.openProjectPicker = { [weak self] in self?.chat.requestProjectPicker() }
         panel.stopRun = { [weak self] in self?.chat.stop() }
         let host = NSHostingView(rootView: FloatView(chat: chat, sizing: sizing, resize: {
             [weak self] height, trayVisible, resizing in

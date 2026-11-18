@@ -51,11 +51,16 @@ final class ChatState: ObservableObject {
     @Published private(set) var canLaunchT3 = false
     @Published private(set) var focusRequest = 0
     @Published private(set) var modelPickerRequest = 0
+    @Published private(set) var projectPickerRequest = 0
     @Published private(set) var models: [T3Model] = []
     @Published private(set) var modelProviders: [T3ModelProvider] = []
     @Published private(set) var favouriteModelKeys: Set<T3ModelKey> = []
     @Published private(set) var loadingModels = false
     @Published private(set) var modelCatalogFailed = false
+    @Published private(set) var projects: [T3Project] = []
+    @Published private(set) var loadingProjects = false
+    @Published private(set) var projectCatalogFailed = false
+    @Published private(set) var selectedProjectID: String?
     @Published private var threadModel: T3ModelSelection?
     @Published private var nextModel: T3ModelSelection?
     @Published private var savedModel: T3ModelSelection?
@@ -90,6 +95,7 @@ final class ChatState: ObservableObject {
         )
         modelEfforts = defaults.dictionary(forKey: "modelEfforts") as? [String: String] ?? [:]
         draft = defaults.string(forKey: "draft") ?? ""
+        selectedProjectID = defaults.string(forKey: "preferredProjectID")
         if let data = defaults.data(forKey: "preferredModel") {
             savedModel = try? JSONDecoder().decode(T3ModelSelection.self, from: data)
         }
@@ -135,8 +141,22 @@ final class ChatState: ObservableObject {
         !submitting && !loading && status != .running && status != .waiting
     }
 
+    var selectedProject: T3Project? {
+        projects.first { $0.id == selectedProjectID }
+    }
+
+    var projectLabel: String { selectedProject?.title ?? "No project" }
+
+    var canChooseProject: Bool {
+        reference == nil && !submitting && !loading
+    }
+
     func requestModelPicker() {
         if canChooseModel { modelPickerRequest += 1 }
+    }
+
+    func requestProjectPicker() {
+        if canChooseProject { projectPickerRequest += 1 }
     }
 
     func reloadModels() {
@@ -161,6 +181,32 @@ final class ChatState: ObservableObject {
         savedModel = model?.selection
         if reference != nil { nextModel = selection.matches(threadModel) ? nil : selection }
         defaults.set(savedModel.flatMap { try? JSONEncoder().encode($0) }, forKey: "preferredModel")
+        focusRequest += 1
+    }
+
+    func reloadProjects() {
+        guard !loadingProjects else { return }
+        loadingProjects = true
+        projectCatalogFailed = false
+        Task {
+            defer { loadingProjects = false }
+            do {
+                projects = try await client.projects()
+                selectedProjectID = T3ProjectPreference.resolvedID(
+                    selectedProjectID, projects: projects
+                )
+                defaults.set(selectedProjectID, forKey: "preferredProjectID")
+            } catch {
+                projects = []
+                projectCatalogFailed = true
+            }
+        }
+    }
+
+    func selectProject(_ project: T3Project?) {
+        guard canChooseProject else { return }
+        selectedProjectID = project?.id
+        defaults.set(selectedProjectID, forKey: "preferredProjectID")
         focusRequest += 1
     }
 
@@ -222,6 +268,7 @@ final class ChatState: ObservableObject {
         } else {
             Task { await reloadFavourites() }
         }
+        if projects.isEmpty { reloadProjects() }
         if let reference { refresh(reference, force: watcher == nil) }
     }
 
