@@ -48,7 +48,13 @@ final class ChatState: ObservableObject {
     @Published private(set) var approvalAccessEnabled = false
     @Published private(set) var approvalAccessBusy = false
     @Published private(set) var approvalAccessError: String?
+    @Published private(set) var pendingApprovals: [ApprovalRequest] = []
+    @Published private(set) var respondingToApproval = false
+    @Published private(set) var approvalError: String?
+    @Published private(set) var approvalSummary: String?
     private var approvalMaintenance: Task<Void, Never>?
+    private var nextApprovalRead = Date.distantPast
+    private var answeredApprovalIDs: Set<String> = []
     @Published private(set) var questionIndex = 0
     @Published private(set) var questionDrafts: [String: T3QuestionDraft] = [:]
     @Published private(set) var questionError: String?
@@ -146,6 +152,8 @@ final class ChatState: ObservableObject {
         }
         return questions[questionIndex]
     }
+    var activeApproval: ApprovalRequest? { pendingApprovals.first }
+
     var questionCanAdvance: Bool {
         guard let question = activeQuestion else { return false }
         return T3QuestionAnswerBuilder.resolve(question, draft: questionDrafts[question.id]) != nil
@@ -163,6 +171,7 @@ final class ChatState: ObservableObject {
         if let question = activeQuestion {
             return question.allowsCustom ? "Or type your own answer…" : "Pick an answer above…"
         }
+        if activeApproval != nil || approvalPreview != nil { return "Waiting on your approval…" }
         return hasConversation ? "Ask a follow-up…" : "Ask anything, or paste a screenshot…"
     }
     var composerEditable: Bool { activeQuestion?.allowsCustom != false }
@@ -467,7 +476,12 @@ final class ChatState: ObservableObject {
     private func maintainApprovalAccess() async {
         guard !approvalAccessBusy else { return }
         do {
-            approvalAccessEnabled = try await client.approvals.maintain()
+            let enabled = try await client.approvals.maintain()
+            if approvalAccessEnabled && !enabled {
+                if approvalPreview == nil { approvalPreview = activeApproval?.summary }
+                pendingApprovals = []
+            }
+            approvalAccessEnabled = enabled
         } catch {
             // Keep the last known state if Keychain or the local CLI is
             // temporarily unavailable. The next refresh can retry.
@@ -475,7 +489,7 @@ final class ChatState: ObservableObject {
     }
 
     func enableApprovals() {
-        guard reference?.environmentID == nil, approvalPreview != nil else { return }
+        guard let reference, reference.environmentID == nil, approvalPreview != nil else { return }
         setApprovalAccess(enabled: true)
     }
 
@@ -486,6 +500,7 @@ final class ChatState: ObservableObject {
     private func setApprovalAccess(enabled: Bool) {
         guard !approvalAccessBusy else { return }
         approvalAccessError = nil
+        approvalError = nil
         approvalAccessBusy = true
         Task {
             defer { approvalAccessBusy = false }
@@ -493,6 +508,9 @@ final class ChatState: ObservableObject {
                 if enabled { try await client.approvals.enable() }
                 else { try await client.approvals.disable() }
                 approvalAccessEnabled = enabled
+                nextApprovalRead = .distantPast
+                if !enabled { pendingApprovals = [] }
+                if let reference { refresh(reference, force: true) }
             } catch {
                 approvalAccessError = (error as? ApprovalAccessError)?.errorDescription
                     ?? (enabled ? "Float couldn't turn on approvals. Check that T3 Code is running and try again."
@@ -531,6 +549,12 @@ final class ChatState: ObservableObject {
         resetQuestion()
         approvalPreview = nil
         approvalAccessError = nil
+        approvalError = nil
+        approvalSummary = nil
+        pendingApprovals = []
+        respondingToApproval = false
+        answeredApprovalIDs = []
+        nextApprovalRead = .distantPast
         answeredQuestionSummary = nil
         needsT3 = false
         canLaunchT3 = false
@@ -944,7 +968,10 @@ final class ChatState: ObservableObject {
                     }
                     updateApprovalPreview(from: page)
                     try await updateQuestion(from: page, thread: reference)
+                    guard generation == version, !Task.isCancelled else { return }
                     status = page.thread.pendingRequestCount > 0 ? .waiting : page.thread.status
+                    await updateApprovals(from: page, thread: reference, generation: version)
+                    guard generation == version, !Task.isCancelled else { return }
                     activeRunId = page.recentRuns?.first { $0.status == .running }?.runId
                     updateFailure(from: page)
                     if status != .running { stopAcknowledged = false }
@@ -1027,6 +1054,82 @@ final class ChatState: ObservableObject {
             ? snapshot.items.first { $0.type == "approval_request" && $0.status == "running" } : nil
         let preview = pending.map { $0.text ?? "Review this request in T3." }
         if approvalPreview != preview { approvalPreview = preview }
+    }
+
+    private func updateApprovals(from snapshot: ThreadSnapshot, thread: ThreadReference, generation version: Int) async {
+        guard snapshot.thread.pendingRequestCount > 0, thread.environmentID == nil, approvalAccessEnabled else {
+            if !pendingApprovals.isEmpty { pendingApprovals = [] }
+            return
+        }
+        guard !approvalAccessBusy, !respondingToApproval, Date.now >= nextApprovalRead else { return }
+        nextApprovalRead = Date.now.addingTimeInterval(2)
+        do {
+            let requests = try await client.pendingApprovals(thread)
+            guard generation == version, !Task.isCancelled, approvalAccessEnabled, !approvalAccessBusy else { return }
+            let pending = requests.filter { !answeredApprovalIDs.contains($0.id) }
+            if pending != pendingApprovals {
+                if pending.first?.id != activeApproval?.id { approvalError = nil }
+                pendingApprovals = pending
+            }
+            if pending.isEmpty, !requests.isEmpty, pendingQuestion == nil {
+                approvalPreview = nil
+                status = .running
+            }
+        } catch {
+            guard generation == version, !Task.isCancelled else { return }
+            if loseApprovalAccess(ifRejected: error) { return }
+            if activeApproval == nil, approvalPreview != nil {
+                approvalError = "Float couldn't load the approval. You can open it in T3."
+            }
+        }
+    }
+
+    private func loseApprovalAccess(ifRejected error: Error) -> Bool {
+        guard case ApprovalAccessError.rejected = error else { return false }
+        approvalAccessEnabled = false
+        if approvalPreview == nil, let activeApproval {
+            approvalPreview = activeApproval.summary
+        }
+        pendingApprovals = []
+        approvalAccessError = "T3 no longer accepts Float’s approvals key. Turn it on again to continue here."
+        return true
+    }
+
+    @discardableResult func allowVisibleApproval() -> Bool {
+        guard activeQuestion == nil, approvalAccessEnabled,
+              let request = activeApproval, request.allowedDecisions.contains(.allow) else { return false }
+        respondToApproval(.allow, requestID: request.id)
+        return true
+    }
+
+    func respondToApproval(_ decision: ApprovalDecision, requestID: String) {
+        guard activeQuestion == nil, !respondingToApproval, !approvalAccessBusy, approvalAccessEnabled,
+              let request = activeApproval, request.id == requestID, request.allowedDecisions.contains(decision),
+              let reference, reference.environmentID == nil else { return }
+        let version = generation
+        respondingToApproval = true
+        approvalError = nil
+        Task {
+            defer {
+                if version == generation { respondingToApproval = false }
+            }
+            do {
+                try await client.respondToApproval(request, decision: decision, thread: reference)
+                guard generation == version else { return }
+                answeredApprovalIDs.insert(request.id)
+                approvalSummary = "\(decision == .allow ? "Allowed" : "Denied"): \(request.summary)"
+                pendingApprovals.removeAll { $0.id == request.id }
+                approvalPreview = nil
+                if pendingApprovals.isEmpty, pendingQuestion == nil { status = .running }
+                nextApprovalRead = .distantPast
+                refresh(reference, force: true)
+            } catch {
+                guard generation == version else { return }
+                if !loseApprovalAccess(ifRejected: error) {
+                    approvalError = "Float couldn't confirm the decision. Check the request in T3."
+                }
+            }
+        }
     }
 
     private func updateQuestion(

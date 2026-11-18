@@ -439,7 +439,7 @@ sessions afterwards.
   runtime-mode ceiling would no longer apply. A linked environment would
   also require a grant for its own RPC surface.
 
-Float keeps the Open in T3 handoff. The supported headless credential grants
-broader access than approval responses require. An approval-specific scoped
-endpoint or an extension of the existing pending-request MCP contract would
-provide a path for the in-app controls.
+Float uses the two-scope headless credential for local approval responses
+after opt-in. It keeps that credential in Keychain, renews it before expiry,
+and revokes it when the user turns approval access off. Linked-machine
+approvals use Open in T3.

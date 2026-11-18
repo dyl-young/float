@@ -41,6 +41,7 @@ public struct T3Client: Sendable {
     private let scratchRoot: URL
 
     public let approvals: ApprovalAccess
+    private let approvalRPC: ApprovalRPC
 
     public init(base: URL? = nil, executable: URL? = nil, desktopApp: URL? = nil) {
         let home = FileManager.default.homeDirectoryForCurrentUser
@@ -49,7 +50,9 @@ public struct T3Client: Sendable {
         scratchRoot = resolvedBase.appending(path: "scratch").resolvingSymlinksInPath()
         let cli = LocalCLI(base: resolvedBase, executable: executable, desktopApp: desktopApp)
         transport = MCPTransport(cli: cli)
-        approvals = ApprovalAccess(cli: cli)
+        let approvals = ApprovalAccess(cli: cli)
+        self.approvals = approvals
+        approvalRPC = ApprovalRPC(base: resolvedBase, access: approvals)
     }
 
     public func close() async { await transport.close() }
@@ -266,6 +269,19 @@ public struct T3Client: Sendable {
             "threadId": thread.threadId, "view": "activity", "limit": 80, "maxCharsPerItem": 2_000,
             "beforePosition": before ?? 9_007_199_254_740_991, "runLimit": 1,
         ], thread: thread)
+    }
+
+    public func pendingApprovals(_ thread: ThreadReference) async throws -> [ApprovalRequest] {
+        guard thread.environmentID == nil else { return [] }
+        return try await approvalRPC.pending(threadID: thread.threadId)
+    }
+
+    public func respondToApproval(_ request: ApprovalRequest, decision: ApprovalDecision,
+                                  thread: ThreadReference) async throws {
+        guard thread.environmentID == nil, request.allowedDecisions.contains(decision) else {
+            throw ApprovalRPCError.commandFailed
+        }
+        try await approvalRPC.respond(ApprovalCommand(threadId: thread.threadId, requestId: request.id, decision: decision))
     }
 
     public func pendingQuestion(_ thread: ThreadReference) async throws -> T3PendingQuestionRequest? {

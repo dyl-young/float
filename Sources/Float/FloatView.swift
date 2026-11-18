@@ -349,14 +349,22 @@ struct FloatView: View {
                     .help(summary)
                     .padding(.leading, 2)
             }
+            if let summary = chat.approvalSummary {
+                Text(summary)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.muted)
+                    .lineLimit(1)
+                    .help(summary)
+                    .padding(.leading, 2)
+            }
             if let question = chat.activeQuestion, let request = chat.pendingQuestion {
                 QuestionCard(
                     chat: chat, question: question, position: chat.questionIndex + 1,
                     count: request.questions.count
                 )
                 .id("\(request.requestId):\(question.id)")
-            } else if let preview = chat.approvalPreview {
-                approvalCard(preview)
+            } else if chat.activeApproval != nil || chat.approvalPreview != nil {
+                approvalCard
             } else if isThinking {
                 ThinkingActivity(startedAt: chat.thinkingStartedAt)
                     .padding(.leading, 2)
@@ -384,12 +392,15 @@ struct FloatView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func approvalCard(_ preview: String) -> ApprovalCard {
+    private var approvalCard: ApprovalCard {
         let canOptIn = chat.reference?.environmentID == nil && !chat.approvalAccessEnabled
         let optIn: (() -> Void)? = canOptIn ? { chat.enableApprovals() } : nil
         let open: (() -> Void)? = chat.reference?.desktopURL == nil ? nil : { chat.openThread() }
-        return ApprovalCard(preview: preview, optIn: optIn, busy: chat.approvalAccessBusy,
-                            error: chat.approvalAccessError, openInT3: open)
+        return ApprovalCard(request: chat.activeApproval, count: chat.pendingApprovals.count,
+                            preview: chat.approvalPreview, optIn: optIn,
+                            busy: chat.approvalAccessBusy || chat.respondingToApproval,
+                            error: chat.approvalError ?? chat.approvalAccessError, openInT3: open,
+                            respond: chat.respondToApproval)
     }
 
     // MARK: Messages
