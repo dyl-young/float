@@ -8,8 +8,7 @@ import UniformTypeIdentifiers
 /// concave corners, like the nordbones T3 composer.
 struct FloatView: View {
     @ObservedObject var chat: ChatState
-    @ObservedObject var sizing: PanelSizing
-    let resize: (CGFloat, Bool, Bool) -> Void
+    let resize: (CGFloat, Bool) -> Void
     let dismiss: () -> Void
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -37,30 +36,30 @@ struct FloatView: View {
     private let inputShape = RoundedRectangle(cornerRadius: Theme.radius)
 
     private var showsTray: Bool { chat.hasConversation || chat.hasTrayNotice }
-    private var showsContextRow: Bool { !chat.hasConversation }
+    private var showsContextRow: Bool { !showsTray }
 
-    private var panelHeight: CGFloat {
-        guard chat.hasConversation else {
-            return nonConversationHeight ?? composerHeight + Self.contextRowHeight
-        }
-        return min(sizing.maximumHeight, composerHeight + Self.headerHeight + max(56, timelineHeight))
+    private var compactHeight: CGFloat {
+        nonConversationHeight ?? composerHeight + Self.contextRowHeight
     }
 
     var body: some View {
-        let hasConversation = chat.hasConversation
+        let trayVisible = showsTray
         VStack(spacing: 0) {
             shell
             if showsContextRow { projectContextRow }
         }
-        // Measure the whole stack, including the context row, at its natural height.
-        .fixedSize(horizontal: false, vertical: !hasConversation)
+        .fixedSize(horizontal: false, vertical: !trayVisible)
         .onGeometryChange(for: CGFloat?.self, of: { geometry in
-            hasConversation ? nil : ceil(geometry.size.height)
-        }) { nonConversationHeight = $0 }
+            trayVisible ? nil : ceil(geometry.size.height)
+        }) { height in
+            if let height { nonConversationHeight = height }
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .preferredColorScheme(.dark)
-        .onAppear { resize(panelHeight, showsTray, sizing.isDragging) }
-        .onChange(of: panelHeight) { _, value in resize(value, showsTray, sizing.isDragging) }
+        .onChange(of: trayVisible, initial: true) { resize(compactHeight, trayVisible) }
+        .onChange(of: compactHeight) {
+            if !trayVisible { resize(compactHeight, false) }
+        }
     }
 
     private var shell: some View {
@@ -71,6 +70,7 @@ struct FloatView: View {
             } else if chat.hasTrayNotice {
                 noticeCard
                     .padding(14)
+                Spacer(minLength: 0)
             }
             VStack(spacing: 0) {
                 input
@@ -110,18 +110,6 @@ struct FloatView: View {
             RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
                 .strokeBorder(Theme.hairline, lineWidth: 1)
                 .allowsHitTesting(false)
-        }
-        .overlay(alignment: .top) {
-            if chat.hasConversation {
-                PanelResizeHandle(
-                    begin: sizing.beginResize,
-                    resize: sizing.resize,
-                    end: sizing.endResize,
-                    reset: sizing.reset
-                )
-                .frame(height: 4)
-                .accessibilityHidden(true)
-            }
         }
         .frame(maxWidth: .infinity)
     }
@@ -283,7 +271,9 @@ struct FloatView: View {
             }
             .frame(height: Self.headerHeight)
             .overlay {
-                PanelDragHandle().accessibilityHidden(true)
+                PanelDragHandle()
+                    .padding(.top, 10)
+                    .accessibilityHidden(true)
             }
             if chat.hasConversation {
                 PanelButton(
@@ -1220,69 +1210,6 @@ private struct PanelDragHandle: NSViewRepresentable {
 
         override func mouseDown(with event: NSEvent) {
             window?.performDrag(with: event)
-        }
-    }
-}
-
-private struct PanelResizeHandle: NSViewRepresentable {
-    let begin: () -> Void
-    let resize: (CGFloat) -> Void
-    let end: () -> Void
-    let reset: () -> Void
-
-    func makeNSView(context: Context) -> ResizeView {
-        let view = ResizeView()
-        updateNSView(view, context: context)
-        return view
-    }
-
-    func updateNSView(_ view: ResizeView, context: Context) {
-        view.begin = begin
-        view.resize = resize
-        view.end = end
-        view.reset = reset
-    }
-
-    static func dismantleNSView(_ view: ResizeView, coordinator: ()) {
-        view.finishResize()
-    }
-
-    final class ResizeView: NSView {
-        var begin: (() -> Void)?
-        var resize: ((CGFloat) -> Void)?
-        var end: (() -> Void)?
-        var reset: (() -> Void)?
-        private var startY: CGFloat?
-
-        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-        override var mouseDownCanMoveWindow: Bool { false }
-
-        override func resetCursorRects() {
-            addCursorRect(bounds, cursor: .resizeUpDown)
-        }
-
-        override func mouseDown(with event: NSEvent) {
-            if event.clickCount == 2 {
-                reset?()
-                return
-            }
-            startY = NSEvent.mouseLocation.y
-            begin?()
-        }
-
-        override func mouseDragged(with event: NSEvent) {
-            guard let startY else { return }
-            resize?(NSEvent.mouseLocation.y - startY)
-        }
-
-        override func mouseUp(with event: NSEvent) {
-            finishResize()
-        }
-
-        func finishResize() {
-            guard startY != nil else { return }
-            startY = nil
-            end?()
         }
     }
 }

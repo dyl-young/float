@@ -16,3 +16,10 @@ import Testing
 @Test func panelHeightFallsBackToDefaultForInvalidStoredValue() {
     #expect(PanelHeightLimits.clamp(.nan, visibleScreenHeight: 1_000) == 560)
 }
+
+@Test func panelWidthClampsAndFallsBackToCompactWidth() {
+    #expect(PanelWidthLimits.clamp(300) == 420)
+    #expect(PanelWidthLimits.clamp(640) == 640)
+    #expect(PanelWidthLimits.clamp(1_000) == 900)
+    #expect(PanelWidthLimits.clamp(.nan) == 516)
+}

@@ -9,3 +9,11 @@ public enum PanelHeightLimits {
         return min(max(requested, minimum), screenMaximum)
     }
 }
+
+public enum PanelWidthLimits {
+    public static let defaultWidth = 516.0
+
+    public static func clamp(_ width: Double) -> Double {
+        min(900, max(420, width.isFinite ? width : defaultWidth))
+    }
+}

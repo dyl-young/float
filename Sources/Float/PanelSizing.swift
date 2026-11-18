@@ -1,59 +1,37 @@
 import FloatCore
 import Foundation
-import SwiftUI
 
 @MainActor
-final class PanelSizing: ObservableObject {
-    private static let maximumKey = "panelMaximumHeight"
-
-    @Published private(set) var preferredMaximum: CGFloat
-    @Published private(set) var visibleScreenHeight: CGFloat
+final class PanelSizing {
+    // Keep reading the previous maximum-height preference as the fixed tray height.
+    private static let heightKey = "panelMaximumHeight"
+    private static let widthKey = "panelWidth"
     private let defaults: UserDefaults
-    private var dragStart: CGFloat?
 
-    var maximumHeight: CGFloat {
-        CGFloat(PanelHeightLimits.clamp(
-            Double(preferredMaximum),
-            visibleScreenHeight: Double(visibleScreenHeight)
-        ))
-    }
-
-    var isDragging: Bool { dragStart != nil }
-
-    init(defaults: UserDefaults = .standard, visibleScreenHeight: CGFloat = 1_000) {
+    init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        self.visibleScreenHeight = visibleScreenHeight
-        preferredMaximum = defaults.object(forKey: Self.maximumKey) == nil
-            ? CGFloat(PanelHeightLimits.defaultMaximum)
-            : CGFloat(defaults.double(forKey: Self.maximumKey))
     }
 
-    func updateVisibleScreenHeight(_ height: CGFloat) {
-        guard height > 0, height != visibleScreenHeight else { return }
-        visibleScreenHeight = height
+    var width: CGFloat {
+        CGFloat(PanelWidthLimits.clamp(defaults.object(forKey: Self.widthKey) as? Double ?? PanelWidthLimits.defaultWidth))
     }
 
-    func beginResize() {
-        dragStart = maximumHeight
+    func height(on screen: CGFloat) -> CGFloat {
+        let saved = defaults.object(forKey: Self.heightKey) as? Double ?? PanelHeightLimits.defaultMaximum
+        return clampHeight(saved, on: screen)
     }
 
-    func resize(by delta: CGFloat) {
-        guard let dragStart else { return }
-        preferredMaximum = CGFloat(PanelHeightLimits.clamp(
-            Double(dragStart + delta),
-            visibleScreenHeight: Double(visibleScreenHeight)
-        ))
+    func clampHeight(_ height: Double, on screen: CGFloat) -> CGFloat {
+        CGFloat(PanelHeightLimits.clamp(height, visibleScreenHeight: Double(screen)))
     }
 
-    func endResize() {
-        guard dragStart != nil else { return }
-        dragStart = nil
-        defaults.set(Double(preferredMaximum), forKey: Self.maximumKey)
+    func save(_ size: CGSize) {
+        defaults.set(Double(size.height), forKey: Self.heightKey)
+        defaults.set(Double(size.width), forKey: Self.widthKey)
     }
 
     func reset() {
-        dragStart = nil
-        preferredMaximum = CGFloat(PanelHeightLimits.defaultMaximum)
-        defaults.set(PanelHeightLimits.defaultMaximum, forKey: Self.maximumKey)
+        defaults.removeObject(forKey: Self.heightKey)
+        defaults.removeObject(forKey: Self.widthKey)
     }
 }
