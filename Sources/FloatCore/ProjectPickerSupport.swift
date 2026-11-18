@@ -4,6 +4,8 @@ public struct T3ProjectIcon: Codable, Equatable, Sendable {
     public let kind: String
     public let text: String?
     public let emoji: String?
+    public let color: String?
+    public let name: String?
 }
 
 public struct T3Project: Codable, Equatable, Identifiable, Sendable {
