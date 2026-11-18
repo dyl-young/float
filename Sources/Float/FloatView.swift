@@ -295,7 +295,7 @@ struct FloatView: View {
     }
 
     private func headerTitle(_ title: String) -> some View {
-        Text(title)
+        Text(verbatim: ChatTitle.plainText(title))
             .font(.system(size: 12, weight: .medium))
             .foregroundStyle(Theme.text)
             .lineLimit(1)
