@@ -91,7 +91,7 @@ final class FloatPanel: EditingPanel {
         case ("p", [.command, .shift]):
             if !event.isARepeat { openProjectPicker?() }
             return true
-        case ("h", .command):
+        case ("h", [.command, .shift]):
             if !event.isARepeat { openMachinePicker?() }
             return true
         case (".", .command):
