@@ -27,6 +27,7 @@ The colours come from Dylan's nordbones T3 theme. So do the pixel thinking loade
 ## Fixed rules
 
 - **Opaque panel, frosted input.** The panel is opaque, so the desktop never shows through. The conversation scrolls up *behind* the frosted input, and the input blurs the message text under it, as in T3's composer. The solid footer tucks under the input with concave corners. The input's top corners are drawn as solid concave ears over the scrolling content.
+- **Composer text.** It matches T3's composer rhythm: 14pt text in a 1.625× line (22.75pt, T3's `leading-relaxed`), with the extra height split evenly above and below the glyphs. There's 12pt of padding above and below the text (nordbones `padding: 0.75rem 1rem`) and 20pt at the sides. The placeholder sits in the same line, so it lines up with typed text.
 - **Input rim.** As in T3, the frosted input has a 1px hairline ring (foreground at about 9%) that follows its 16pt corners all the way round, so it reads as its own inset card. The input is inset 1pt from the shell's left and right edges, so a 1pt strip of solid tray separates the shell border from the rim and the two lines never merge.
 
 - **Corner radius:** 16 for the shell, 12 for your message bubbles, 10 for cards and menus, 6 for chips.

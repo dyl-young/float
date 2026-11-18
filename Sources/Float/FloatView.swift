@@ -16,7 +16,7 @@ struct FloatView: View {
     @State private var isMachinePickerOpen = false
     @State private var isProjectPickerOpen = false
     @StateObject private var composerMenu = ComposerMenuState()
-    @State private var editorHeight: CGFloat = 28
+    @State private var editorHeight: CGFloat = ceil(ComposerText.lineHeight)
     @State private var inputHeight: CGFloat = 44
     @State private var composerHeight: CGFloat = 86
     @State private var nonConversationHeight: CGFloat?
@@ -531,10 +531,12 @@ struct FloatView: View {
             if !chat.images.isEmpty { draftImages }
             ZStack(alignment: .topLeading) {
                 if chat.composerDraft.editorText.isEmpty {
+                    // Centred in the same 1.625× line as typed text, so the two line up.
                     Text(chat.composerPlaceholder)
                         .font(.system(size: 14))
                         .foregroundStyle(Theme.placeholder)
-                        .padding(.top, 5)
+                        .lineLimit(1)
+                        .frame(height: ComposerText.lineHeight, alignment: .leading)
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
                 }
@@ -555,9 +557,11 @@ struct FloatView: View {
                     .help(chat.noticeDetail ?? notice)
             }
         }
-        .padding(.top, 10)
+        // T3's composer body (nordbones: `padding: 0.75rem 1rem`) gives 12pt above and
+        // below; the sides stay at 20pt, already wider than T3's 16.
+        .padding(.top, 12)
         .padding(.horizontal, 20)
-        .padding(.bottom, 6)
+        .padding(.bottom, 12)
     }
 
     private var draftImages: some View {

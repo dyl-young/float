@@ -2,6 +2,33 @@ import AppKit
 import FloatCore
 import SwiftUI
 
+/// The composer's text rhythm, matching T3's composer: 14pt text in a `leading-relaxed`
+/// line (1.625×), with the extra height split evenly above and below the glyphs as CSS does.
+@MainActor
+enum ComposerText {
+    static let font = NSFont.systemFont(ofSize: 14)
+    nonisolated static let lineHeight: CGFloat = 14 * 1.625
+
+    /// TextKit puts a line's extra height above the glyphs; raising them by half of it
+    /// centres the text in the line, like CSS half-leading.
+    static let baselineOffset: CGFloat = {
+        let natural = NSLayoutManager().defaultLineHeight(for: font)
+        return max(0, (lineHeight - natural) / 2)
+    }()
+
+    static let paragraph: NSParagraphStyle = {
+        let style = NSMutableParagraphStyle()
+        style.minimumLineHeight = lineHeight
+        style.maximumLineHeight = lineHeight
+        return style
+    }()
+
+    static var attributes: [NSAttributedString.Key: Any] {
+        [.font: font, .foregroundColor: NSColor(Theme.text),
+         .paragraphStyle: paragraph, .baselineOffset: baselineOffset]
+    }
+}
+
 struct ComposerEditor: NSViewRepresentable {
     @Binding var draft: ComposerDraft
     @Binding var height: CGFloat
@@ -32,8 +59,11 @@ struct ComposerEditor: NSViewRepresentable {
         editor.allowsUndo = true
         editor.textColor = NSColor(Theme.text)
         editor.insertionPointColor = NSColor(Theme.accent)
-        editor.font = .systemFont(ofSize: 14)
-        editor.textContainerInset = NSSize(width: 0, height: 5)
+        editor.font = ComposerText.font
+        editor.defaultParagraphStyle = ComposerText.paragraph
+        editor.typingAttributes = ComposerText.attributes
+        // The line itself carries T3's spacing, so the container needs no inset.
+        editor.textContainerInset = .zero
         editor.textContainer?.lineFragmentPadding = 0
         editor.textContainer?.widthTracksTextView = true
         editor.isHorizontallyResizable = false
@@ -133,8 +163,8 @@ struct ComposerEditor: NSViewRepresentable {
             let content = max(
                 layout.usedRect(for: container).maxY,
                 layout.extraLineFragmentUsedRect.maxY
-            ) + 11
-            let measured = min(136, max(28, ceil(content)))
+            )
+            let measured = min(136, max(ceil(ComposerText.lineHeight), ceil(content)))
             if measured != parent.height { parent.height = measured }
         }
     }
@@ -163,9 +193,7 @@ final class PromptTextView: NSTextView {
     var pickOption: ((Int) -> Bool)?
     var pasteImages: ((NSPasteboard) -> Bool)?
 
-    private var plainAttributes: [NSAttributedString.Key: Any] {
-        [.font: NSFont.systemFont(ofSize: 14), .foregroundColor: NSColor(Theme.text)]
-    }
+    private var plainAttributes: [NSAttributedString.Key: Any] { ComposerText.attributes }
 
     var composerDraft: ComposerDraft {
         guard let textStorage else { return ComposerDraft(string) }
