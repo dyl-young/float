@@ -26,6 +26,6 @@ open dist/Float.app
 
 ## Development
 
-`swift test` checks MCP framing, timestamps, attachment URL validation, and T3 desktop links. `./App/build.sh debug` builds a debug app bundle.
+`swift test` checks MCP framing, timestamps, attachment URL validation, and T3 desktop links. `./App/build.sh debug` builds a debug app bundle. Agents testing Float with real chats follow [`docs/testing.md`](docs/testing.md): test chats start in the Float project, use cheap models, and leave T3 as they found it.
 
 Float uses AppKit for the panel and paste handling, and SwiftUI for the composer and conversation. The T3 client follows the local discovery, scoped authentication, and streamable HTTP patterns in T3’s `cli/thread.ts` and `mcp/AcpMcpStdioBridge.ts`. T3 owns thread execution and history. Float uses its scratch launch, attachment upload, and timeline APIs on loopback with an in-memory bearer session. Runs use T3’s approval-required mode.
