@@ -77,9 +77,11 @@ private final class MachinePickerPanelController {
         guard let anchor, let parent, let chat else { return }
         self.onClose = onClose
         let height = min(320, CGFloat(71 + chat.machines.count * 42))
-        panel.contentView = NSHostingView(rootView: MachinePickerView(
+        let host = NSHostingView(rootView: MachinePickerView(
             chat: chat, keyboard: keyboard, close: { [weak self] in self?.close() }
         ))
+        host.sizingOptions = []
+        panel.contentView = host
         let anchorFrame = parent.convertToScreen(anchor.convert(anchor.bounds, to: nil))
         let visible = parent.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
         var origin = NSPoint(x: anchorFrame.minX, y: anchorFrame.maxY + 6)

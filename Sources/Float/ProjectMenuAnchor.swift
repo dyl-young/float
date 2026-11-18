@@ -57,8 +57,6 @@ private final class ProjectPickerPanelController {
     private var localMonitor: Any?
     private var globalMonitor: Any?
     private var onClose: (() -> Void)?
-    private var anchorFrame = NSRect.zero
-    private var visibleFrame = NSRect.zero
 
     init(anchor: NSView, parent: NSWindow, chat: ChatState) {
         self.anchor = anchor
@@ -78,14 +76,23 @@ private final class ProjectPickerPanelController {
     func show(onClose: @escaping () -> Void) {
         guard let anchor, let parent, let chat else { return }
         self.onClose = onClose
-        panel.contentView = NSHostingView(rootView: ProjectPickerView(
-            chat: chat, keyboard: keyboard,
-            resize: { [weak self] height in self?.resize(to: height) },
-            close: { [weak self] in self?.close() }
+        let rows = 65 + CGFloat(chat.projects.count * 38)
+            + (chat.loadingProjects || chat.projectCatalogFailed ? 38 : 0)
+        let height = 71 + min(228, rows)
+        let host = NSHostingView(rootView: ProjectPickerView(
+            chat: chat, keyboard: keyboard, height: height, close: { [weak self] in self?.close() }
         ))
-        anchorFrame = parent.convertToScreen(anchor.convert(anchor.bounds, to: nil))
-        visibleFrame = parent.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
-        resize(to: panel.frame.height)
+        host.sizingOptions = []
+        panel.contentView = host
+
+        let anchorFrame = parent.convertToScreen(anchor.convert(anchor.bounds, to: nil))
+        let visibleFrame = parent.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
+        var origin = NSPoint(x: anchorFrame.minX, y: anchorFrame.maxY + 6)
+        origin.x = min(max(visibleFrame.minX + 6, origin.x), visibleFrame.maxX - 256)
+        if origin.y + height > visibleFrame.maxY {
+            origin.y = anchorFrame.minY - height - 6
+        }
+        panel.setFrame(NSRect(origin: origin, size: NSSize(width: 250, height: height)), display: true)
         parent.addChildWindow(panel, ordered: .above)
         panel.makeKeyAndOrderFront(nil)
         installMonitors()
@@ -103,16 +110,6 @@ private final class ProjectPickerPanelController {
         let completion = onClose
         onClose = nil
         completion?()
-    }
-
-    private func resize(to height: CGFloat) {
-        let height = min(320, max(112, ceil(height)))
-        var origin = NSPoint(x: anchorFrame.minX, y: anchorFrame.maxY + 6)
-        origin.x = min(max(visibleFrame.minX + 6, origin.x), visibleFrame.maxX - 256)
-        if origin.y + height > visibleFrame.maxY {
-            origin.y = anchorFrame.minY - height - 6
-        }
-        panel.setFrame(NSRect(x: origin.x, y: origin.y, width: 250, height: height), display: true)
     }
 
     private func installMonitors() {
@@ -171,7 +168,7 @@ private struct ProjectPickerView: View {
 
     @ObservedObject var chat: ChatState
     @ObservedObject var keyboard: ProjectPickerKeyboard
-    let resize: (CGFloat) -> Void
+    let height: CGFloat
     let close: () -> Void
 
     @State private var search = ""
@@ -180,11 +177,11 @@ private struct ProjectPickerView: View {
 
     init(
         chat: ChatState, keyboard: ProjectPickerKeyboard,
-        resize: @escaping (CGFloat) -> Void, close: @escaping () -> Void
+        height: CGFloat, close: @escaping () -> Void
     ) {
         self.chat = chat
         self.keyboard = keyboard
-        self.resize = resize
+        self.height = height
         self.close = close
         _highlightedID = State(initialValue: chat.selectedProject?.id ?? Self.scratch)
     }
@@ -197,23 +194,15 @@ private struct ProjectPickerView: View {
         [Self.scratch] + filteredProjects.map(\.id)
     }
 
-    private var listHeight: CGFloat {
-        let rows = 65 + CGFloat(filteredProjects.count * 38)
-            + (chat.loadingProjects || chat.projectCatalogFailed ? 38 : 0)
-        return min(228, max(40, rows))
-    }
-
-    private var pickerHeight: CGFloat { 8 + 32 + listHeight + 1 + 28 }
-
     var body: some View {
         VStack(spacing: 0) {
             searchField
-            projectList.frame(height: listHeight)
+            projectList.frame(maxHeight: .infinity)
             Divider().overlay(Theme.border)
             hintRow
         }
         .padding(4)
-        .frame(width: 250, height: pickerHeight, alignment: .top)
+        .frame(width: 250, height: height, alignment: .top)
         .background(Theme.raised)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
@@ -223,7 +212,6 @@ private struct ProjectPickerView: View {
         .preferredColorScheme(.dark)
         .onAppear {
             searchFocused = true
-            resize(pickerHeight)
         }
         .onExitCommand(perform: close)
         .onChange(of: search) {
@@ -232,7 +220,6 @@ private struct ProjectPickerView: View {
         .onChange(of: keyboard.event?.id) {
             if let command = keyboard.event?.command { handle(command) }
         }
-        .onChange(of: pickerHeight) { resize(pickerHeight) }
     }
 
     private var searchField: some View {
