@@ -18,7 +18,7 @@ struct ComposerEditor: NSViewRepresentable {
         scroll.borderType = .noBorder
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
-        scroll.scrollerStyle = .overlay
+        KnobOnlyScroller.install(in: scroll)
         scroll.scrollerKnobStyle = .light
 
         let editor = PromptTextView(frame: NSRect(x: 0, y: 0, width: 460, height: 24))

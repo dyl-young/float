@@ -22,7 +22,6 @@ struct FloatView: View {
     @State private var timelineBottom: CGFloat = 0
     @State private var inputTop: CGFloat = 0
     @State private var followsLatest = true
-    @State private var conversationHover = 0
     @State private var copiedMessage: String?
 
     private static let headerHeight: CGFloat = 38
@@ -188,13 +187,12 @@ struct FloatView: View {
                         .frame(height: inputHeight)
                         .id(Self.latest)
                 }
+                .background(OverlayScrollers())
             }
             .contentMargins(.trailing, 4, for: .scrollIndicators)
             .contentMargins(.top, 4, for: .scrollIndicators)
             .contentMargins(.bottom, inputHeight + 4, for: .scrollIndicators)
-            .scrollIndicators(.visible, axes: .vertical)
-            .scrollIndicatorsFlash(trigger: conversationHover)
-            .onHover { if $0 { conversationHover += 1 } }
+            .flashScrollKnobsOnHover()
             .onChange(of: inputTop) {
                 if followsLatest, chat.hasConversation { scroll.scrollTo(Self.latest, anchor: .bottom) }
                 if timelineBottom <= inputTop + 3 { followsLatest = true }
@@ -518,8 +516,9 @@ struct FloatView: View {
                 }
             }
             .padding(.vertical, 1)
+            .background(OverlayScrollers())
         }
-        .scrollIndicators(.hidden)
+        .flashScrollKnobsOnHover()
     }
 
     // MARK: Footer
@@ -682,8 +681,9 @@ private struct MarkdownCodeBlock: View {
                     .textSelection(.enabled)
                     .fixedSize(horizontal: true, vertical: true)
                     .padding(.trailing, 24)
+                    .background(OverlayScrollers())
             }
-            .scrollIndicators(.visible)
+            .flashScrollKnobsOnHover()
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -951,7 +951,9 @@ private struct QuestionCard: View {
                         .fixedSize(horizontal: true, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(8)
+                        .background(OverlayScrollers())
                 }
+                .flashScrollKnobsOnHover()
                 .frame(maxHeight: 88)
                 .background(Theme.code, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                 .padding(.top, 6)

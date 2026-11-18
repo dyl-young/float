@@ -182,8 +182,9 @@ private struct MachinePickerView: View {
                 LazyVStack(spacing: 2) {
                     ForEach(chat.machines) { machine in machineRow(machine) }
                 }
+                .background(OverlayScrollers())
             }
-            .scrollIndicators(.visible)
+            .flashScrollKnobsOnHover()
             Divider().overlay(Theme.border)
                 .padding(.horizontal, 2)
                 .padding(.top, 3)

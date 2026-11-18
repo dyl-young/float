@@ -272,8 +272,9 @@ private struct ProjectPickerView: View {
                     .frame(height: 36)
                 }
             }
+            .background(OverlayScrollers())
         }
-        .scrollIndicators(.visible)
+        .flashScrollKnobsOnHover()
     }
 
     private func projectRow(

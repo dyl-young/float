@@ -436,8 +436,9 @@ private struct ModelPickerView: View {
                             .padding(8)
                     }
                 }
+                .background(OverlayScrollers())
             }
-            .scrollIndicators(.visible)
+            .flashScrollKnobsOnHover()
             .frame(maxHeight: .infinity)
         }
     }
@@ -468,8 +469,9 @@ private struct ModelPickerView: View {
                         .frame(minHeight: 28, alignment: .leading)
                 }
             }
+            .background(OverlayScrollers())
         }
-        .scrollIndicators(.visible)
+        .flashScrollKnobsOnHover()
         .frame(maxHeight: .infinity)
     }
 
