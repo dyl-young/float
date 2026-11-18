@@ -366,10 +366,11 @@ public struct ThreadSnapshot: Decodable, Sendable {
         public let status: RunStatus
         public let failureReason: String?
         public let startedAt: String?
+        public let requestedAt: String?
         public let providerInstanceId: String?
         public let isQueued: Bool
 
-        private enum CodingKeys: String, CodingKey { case runId, status, failureReason, startedAt, providerInstanceId }
+        private enum CodingKeys: String, CodingKey { case runId, status, failureReason, startedAt, requestedAt, providerInstanceId }
 
         public init(from decoder: Decoder) throws {
             let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -379,6 +380,7 @@ public struct ThreadSnapshot: Decodable, Sendable {
             isQueued = rawStatus == "queued"
             failureReason = try values.decodeIfPresent(String.self, forKey: .failureReason)
             startedAt = try values.decodeIfPresent(String.self, forKey: .startedAt)
+            requestedAt = try values.decodeIfPresent(String.self, forKey: .requestedAt)
             providerInstanceId = try values.decodeIfPresent(String.self, forKey: .providerInstanceId)
         }
 
@@ -422,6 +424,7 @@ public struct ThreadSnapshot: Decodable, Sendable {
         public let updatedAt: String
 
         public var date: Date? { t3Date(updatedAt) }
+        public var isMessage: Bool { type == "user_message" || type == "assistant_message" }
     }
 
     public let thread: Thread

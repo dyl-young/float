@@ -26,6 +26,7 @@ class EditingPanel: NSPanel {
 final class PickerPanel: EditingPanel {
     override var canBecomeKey: Bool { true }
     var dismiss: (() -> Void)?
+    var isChatSwitcher = false
     var handleKey: ((NSEvent) -> Bool)?
 
     override func sendEvent(_ event: NSEvent) {
@@ -37,6 +38,17 @@ final class PickerPanel: EditingPanel {
             if handleKey?(event) == true { return }
         }
         super.sendEvent(event)
+    }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
+        if modifiers == .command, let parent = parent as? FloatPanel {
+            switch event.charactersIgnoringModifiers?.lowercased() {
+            case "k", "n": return parent.performKeyEquivalent(with: event)
+            default: break
+            }
+        }
+        return super.performKeyEquivalent(with: event)
     }
 
     override func cancelOperation(_ sender: Any?) { dismiss?() }
@@ -52,6 +64,7 @@ private extension NSEvent {
 final class FloatPanel: EditingPanel {
     var dismiss: (() -> Void)?
     var startNewChat: (() -> Void)?
+    var openChatSwitcher: (() -> Void)?
     var openModelPicker: (() -> Void)?
     var openProjectPicker: (() -> Void)?
     var openMachinePicker: (() -> Void)?
@@ -86,7 +99,18 @@ final class FloatPanel: EditingPanel {
         let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
         switch (event.charactersIgnoringModifiers?.lowercased(), modifiers) {
         case ("n", .command):
-            if !event.isARepeat { startNewChat?() }
+            if !event.isARepeat {
+                childWindows?.compactMap { $0 as? PickerPanel }.first?.dismiss?()
+                startNewChat?()
+            }
+            return true
+        case ("k", .command):
+            if !event.isARepeat {
+                let picker = childWindows?.compactMap { $0 as? PickerPanel }.first
+                let wasSwitcher = picker?.isChatSwitcher == true
+                picker?.dismiss?()
+                if !wasSwitcher { openChatSwitcher?() }
+            }
             return true
         case ("m", [.command, .shift]):
             if !event.isARepeat { openModelPicker?() }

@@ -66,6 +66,7 @@ final class ChatState: ObservableObject {
     @Published private(set) var answeringQuestion = false
     @Published private(set) var answeredQuestionSummary: String?
     @Published private(set) var focusRequest = 0
+    @Published private(set) var chatSwitcherRequest = 0
     @Published private(set) var modelPickerRequest = 0
     @Published private(set) var projectPickerRequest = 0
     @Published private(set) var machinePickerRequest = 0
@@ -111,6 +112,10 @@ final class ChatState: ObservableObject {
     private var previews: [String: [Data]] = [:]
     private var sentSkills: [String: [ComposerSkillChip]] = [:]
     private var earliest: Int?
+    private var resumedHistoryStart: Int?
+    private(set) var isResumedThread = false
+    private(set) var chatSwitcherCatalog: ChatSwitcherCatalog?
+    private var chatSwitcherRefresh: Task<ChatSwitcherCatalog, Error>?
     private var receivedFirstPage = false
     private var generation = 0
     private var visible = false
@@ -162,6 +167,7 @@ final class ChatState: ObservableObject {
             let stored = try? JSONDecoder().decode(ThreadReference.self, from: data) {
             reference = stored
             steeredMessageIDs = Set(defaults.stringArray(forKey: "steeredMessageIDs") ?? [])
+            isResumedThread = defaults.bool(forKey: "isResumedThread")
             threadProjectID = defaults.string(forKey: "threadProjectID")
             cachedProjectName = defaults.string(forKey: "threadProjectName")
                 ?? (threadProjectID == nil ? stored.projectName : nil)
@@ -362,6 +368,38 @@ final class ChatState: ObservableObject {
 
     var canChooseMachine: Bool {
         reference == nil && !submitting && !loading && !loadingMachines && !loadingProjects
+    }
+
+    func requestChatSwitcher() {
+        chatSwitcherRequest += 1
+    }
+
+    func refreshChatSwitcher() async throws -> ChatSwitcherCatalog {
+        if let chatSwitcherRefresh { return try await chatSwitcherRefresh.value }
+        let refresh = Task { try await client.chatSwitcherCatalog() }
+        chatSwitcherRefresh = refresh
+        defer { chatSwitcherRefresh = nil }
+        let catalog = try await refresh.value
+        chatSwitcherCatalog = catalog
+        return catalog
+    }
+
+    func resume(_ entry: ChatSwitcherEntry) {
+        guard !submitting else { return }
+        if let reference, ChatSwitcherEntry.ID(reference) == entry.id { return }
+        resetConversation()
+        reference = entry.reference
+        isResumedThread = true
+        title = entry.thread.title
+        threadProjectID = entry.thread.projectId
+        loadedThreadProject = entry.project
+        cachedProjectName = entry.reference.projectName
+        threadModel = entry.thread.modelSelection
+        activeRunId = entry.thread.latestRunId
+        status = entry.thread.status
+        if let started = entry.runStartedAt { thinkingStartedAt = started }
+        persist()
+        refresh(entry.reference, force: true)
     }
 
     func requestModelPicker() {
@@ -607,12 +645,22 @@ final class ChatState: ObservableObject {
 
     func newChat() {
         guard !submitting else { return }
+        resetConversation()
+        persist()
+        focusRequest += 1
+    }
+
+    private func resetConversation() {
         generation += 1
         watcher?.cancel()
         watcher = nil
         draft = ""
         images = []
         reference = nil
+        isResumedThread = false
+        resumedHistoryStart = nil
+        retrySendAfterLaunch = false
+        thinkingStartedAt = nil
         threadProjectID = nil
         threadWorktreePath = nil
         loadedThreadProject = nil
@@ -654,8 +702,6 @@ final class ChatState: ObservableObject {
         expandedText = [:]
         previews = [:]
         sentSkills = [:]
-        persist()
-        focusRequest += 1
     }
 
     func openThread() {
@@ -696,9 +742,11 @@ final class ChatState: ObservableObject {
             return
         }
         let shouldSend = retrySendAfterLaunch
+        let version = generation
         NSWorkspace.shared.openApplication(at: url, configuration: .init()) { _, error in
             let message = error?.localizedDescription
             Task { @MainActor in
+                guard self.generation == version else { return }
                 if let message {
                     self.needsT3 = true
                     self.setNotice(
@@ -706,7 +754,7 @@ final class ChatState: ObservableObject {
                         kind: .connection, detail: message, canLaunchT3: true
                     )
                 } else {
-                    await self.waitForT3AndResume(shouldSend: shouldSend)
+                    await self.waitForT3AndResume(shouldSend: shouldSend, generation: version)
                 }
             }
         }
@@ -714,12 +762,13 @@ final class ChatState: ObservableObject {
         clearNotice()
     }
 
-    private func waitForT3AndResume(shouldSend: Bool) async {
+    private func waitForT3AndResume(shouldSend: Bool, generation version: Int) async {
         let clock = ContinuousClock()
         let deadline = clock.now.advanced(by: .seconds(30))
-        while clock.now < deadline {
+        while clock.now < deadline, generation == version {
             do {
                 try await loadModelCatalogue()
+                guard generation == version else { return }
                 modelCatalogFailed = false
                 needsT3 = false
                 if shouldSend {
@@ -733,6 +782,7 @@ final class ChatState: ObservableObject {
                 try? await Task.sleep(for: .seconds(1))
             }
         }
+        guard generation == version else { return }
         needsT3 = true
         setNotice(
             "T3 didn't start in time.", title: "T3 Code isn't running",
@@ -768,7 +818,8 @@ final class ChatState: ObservableObject {
         let target = reference
         let launchProject = target == nil ? selectedProject : nil
         let projectID = launchProject?.id
-        let selection = selectedModel.map(selectionForSend)
+        // With no explicit change, T3 keeps the resumed thread’s full model selection.
+        let selection = (isResumedThread ? nextModel : selectedModel).map(selectionForSend)
         clearNotice()
         answeredQuestionSummary = nil
         needsT3 = false
@@ -1087,11 +1138,11 @@ final class ChatState: ObservableObject {
             defer { if generation == version { loadingOlder = false } }
             do {
                 let page = try await client.read(reference, before: before)
-                try await expandLongMessages(page, reference: reference, generation: version)
+                try await expandLongMessages(page.items, reference: reference, generation: version)
                 guard generation == version else { return }
                 earliest = page.earlierPosition
                 hasOlderMessages = earliest != nil
-                merge(page)
+                merge(page.items)
             } catch {
                 guard generation == version else { return }
                 showError(error)
@@ -1169,12 +1220,25 @@ final class ChatState: ObservableObject {
             }
             repeat {
                 do {
+                    if isResumedThread, !receivedFirstPage {
+                        let history = try await client.resumeHistory(reference)
+                        try Task.checkCancellation()
+                        try await expandLongMessages(history.items, reference: reference, generation: version)
+                        guard generation == version, !Task.isCancelled else { return }
+                        merge(history.items)
+                        resumedHistoryStart = history.items.last?.position
+                        hasOlderMessages = history.hasOlder
+                        receivedFirstPage = true
+                    }
                     let page = try await client.read(reference)
                     try Task.checkCancellation()
                     applyThreadMetadata(page.thread)
-                    try await expandLongMessages(page, reference: reference, generation: version)
+                    let items = isResumedThread ? page.items.filter {
+                        $0.isMessage && $0.position >= (resumedHistoryStart ?? 0)
+                    } : page.items
+                    try await expandLongMessages(items, reference: reference, generation: version)
                     guard generation == version, !Task.isCancelled else { return }
-                    merge(page)
+                    merge(items)
                     if !receivedFirstPage {
                         receivedFirstPage = true
                         earliest = page.earlierPosition
@@ -1319,9 +1383,9 @@ final class ChatState: ObservableObject {
         if projectChanged || titleChanged { persistThreadMetadata() }
     }
 
-    private func merge(_ snapshot: ThreadSnapshot) {
+    private func merge(_ items: [ThreadSnapshot.Item]) {
         var merged = Dictionary(uniqueKeysWithValues: messages.map { ($0.id, $0) })
-        for item in snapshot.items where item.isChatMessageCandidate {
+        for item in items where item.isChatMessageCandidate {
             let isUser = item.type == "user_message"
             let expanded = expandedText[item.id]
             let raw = expanded?.timestamp == item.updatedAt ? expanded?.text : nil
@@ -1497,9 +1561,9 @@ final class ChatState: ObservableObject {
     }
 
     private func expandLongMessages(
-        _ snapshot: ThreadSnapshot, reference: ThreadReference, generation version: Int
+        _ items: [ThreadSnapshot.Item], reference: ThreadReference, generation version: Int
     ) async throws {
-        for item in snapshot.items where item.isChatMessageCandidate && item.textTruncated
+        for item in items where item.isChatMessageCandidate && item.textTruncated
             && expandedText[item.id]?.timestamp != item.updatedAt {
             let text = try await client.readRemainder(reference, item: item)
             guard generation == version, !Task.isCancelled else { return }
@@ -1650,6 +1714,7 @@ final class ChatState: ObservableObject {
     }
 
     private func persist() {
+        defaults.set(isResumedThread, forKey: "isResumedThread")
         defaults.set(reference.flatMap { try? JSONEncoder().encode($0) }, forKey: "thread")
         persistThreadMetadata()
         defaults.set(previews.isEmpty ? nil : try? PropertyListEncoder().encode(previews), forKey: "previews")

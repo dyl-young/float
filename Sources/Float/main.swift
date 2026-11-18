@@ -101,6 +101,7 @@ private final class FloatApp: NSObject, NSApplicationDelegate, NSWindowDelegate 
         panel.delegate = self
         panel.dismiss = { [weak self] in self?.hide() }
         panel.startNewChat = { [weak self] in self?.chat.newChat() }
+        panel.openChatSwitcher = { [weak self] in self?.chat.requestChatSwitcher() }
         panel.openModelPicker = { [weak self] in self?.chat.requestModelPicker() }
         panel.openProjectPicker = { [weak self] in self?.chat.requestProjectPicker() }
         panel.openMachinePicker = { [weak self] in self?.chat.requestMachinePicker() }

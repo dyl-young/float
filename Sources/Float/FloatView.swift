@@ -13,6 +13,7 @@ struct FloatView: View {
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.displayScale) private var displayScale
+    @State private var isChatSwitcherOpen = false
     @State private var isMachinePickerOpen = false
     @State private var isProjectPickerOpen = false
     @StateObject private var composerMenu = ComposerMenuState()
@@ -86,6 +87,7 @@ struct FloatView: View {
             followUpModifierMonitor = nil
             followUpAlternate = false
         }
+        .onChange(of: chat.chatSwitcherRequest) { composerMenu.close() }
         .onChange(of: chat.modelPickerRequest) { composerMenu.close() }
         .onChange(of: chat.projectPickerRequest) { composerMenu.close() }
         .onChange(of: chat.machinePickerRequest) { composerMenu.close() }
@@ -108,6 +110,9 @@ struct FloatView: View {
                 input
                     .background { inputBackdrop.clipShape(inputShape) }
                     .background(ComposerMenuAnchor(chat: chat, menu: composerMenu))
+                    .background {
+                        if !showsTray { switcherAnchor(compact: true) }
+                    }
                     .overlay(alignment: .top) {
                         if showsTray {
                             TrayShape(side: .top)
@@ -259,6 +264,10 @@ struct FloatView: View {
                 if followsLatest, chat.hasConversation { scroll.scrollTo(Self.latest, anchor: .bottom) }
                 if timelineBottom <= inputTop + 3 { followsLatest = true }
             }
+            .onChange(of: chat.reference.map(ChatSwitcherEntry.ID.init)) {
+                followsLatest = true
+                scroll.scrollTo(Self.latest, anchor: .bottom)
+            }
             .onDisappear { followsLatest = true }
             .mask {
                 VStack(spacing: 0) {
@@ -291,7 +300,18 @@ struct FloatView: View {
 
     private var timeline: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if chat.hasOlderMessages {
+            if chat.hasOlderMessages, chat.isResumedThread {
+                HStack(spacing: 6) {
+                    Text("Earlier messages ·")
+                        .foregroundStyle(Theme.muted)
+                    Button("Open in T3", action: chat.openThread)
+                        .floatButtonStyle()
+                        .foregroundStyle(Theme.accent)
+                        .disabled(chat.reference?.desktopURL == nil)
+                }
+                .font(.system(size: 10.5))
+                .frame(maxWidth: .infinity)
+            } else if chat.hasOlderMessages {
                 Button("Load older messages", action: chat.loadOlder)
                     .floatButtonStyle()
                     .font(.system(size: 12, weight: .medium))
@@ -313,46 +333,62 @@ struct FloatView: View {
                 "Close (Esc)", accessibilityLabel: "Close",
                 systemImage: "xmark", size: Self.headerButtonSize, glyphSize: 12, action: dismiss
             )
-            HStack(spacing: 7) {
-                if let offlineLabel {
-                    Circle()
-                        .fill(Theme.muted)
-                        .frame(width: 6, height: 6)
-                        .accessibilityHidden(true)
-                    .help(offlineLabel)
-                }
-                if let project = chat.threadProjectLabel {
-                    HStack(spacing: 5) {
-                        ProjectIconView(
-                            project: chat.threadProject, environmentID: chat.threadHeaderEnvironmentID,
-                            size: 11, fallbackTitle: project
-                        )
-                        Text(chat.threadMachineName.map { "\(project) · \($0)" } ?? project)
+            Button(action: chat.requestChatSwitcher) {
+                HStack(spacing: 7) {
+                    if let offlineLabel {
+                        Circle()
+                            .fill(Theme.muted)
+                            .frame(width: 6, height: 6)
+                            .accessibilityHidden(true)
+                        .help(offlineLabel)
+                    }
+                    if let project = chat.threadProjectLabel {
+                        HStack(spacing: 5) {
+                            ProjectIconView(
+                                project: chat.threadProject, environmentID: chat.threadHeaderEnvironmentID,
+                                size: 11, fallbackTitle: project
+                            )
+                            Text(chat.threadMachineName.map { "\(project) · \($0)" } ?? project)
+                                .lineLimit(1)
+                        }
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.muted)
+                        .frame(maxWidth: 210, alignment: .leading)
+                        .fixedSize(horizontal: true, vertical: false)
+                        Text("/")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Theme.muted.opacity(0.55))
+                    }
+                    headerTitle(chat.title ?? "Float")
+                    if !chat.hasConversation, let offlineLabel {
+                        Text(offlineLabel)
+                            .font(.system(size: 11))
+                            .foregroundStyle(Theme.muted)
                             .lineLimit(1)
                     }
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.muted)
-                    .frame(maxWidth: 210, alignment: .leading)
-                    .fixedSize(horizontal: true, vertical: false)
-                    Text("/")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Theme.muted.opacity(0.55))
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(Theme.text.opacity(0.7))
+                        .accessibilityHidden(true)
                 }
-                headerTitle(chat.title ?? "Float")
-                if !chat.hasConversation, let offlineLabel {
-                    Text(offlineLabel)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.muted)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 8)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(isChatSwitcherOpen ? Theme.selection : .clear, in: RoundedRectangle(cornerRadius: 6))
+                .contentShape(Rectangle())
             }
-            .frame(height: Self.headerHeight)
-            .overlay {
-                PanelDragHandle()
-                    .padding(.top, 10)
-                    .accessibilityHidden(true)
-            }
+            .floatButtonStyle(highlight: isChatSwitcherOpen ? .none : .overlay)
+            .accessibilityHint("Switch chat")
+            .help("Switch chat · ⌘K")
+            .background { switcherAnchor(compact: false) }
+            .padding(.leading, -6)
+            .layoutPriority(1)
+
+            PanelDragHandle()
+                .frame(minWidth: 8, maxWidth: .infinity)
+                .frame(height: Self.headerHeight - 10)
+                .padding(.top, 10)
+                .accessibilityHidden(true)
+
             if chat.hasConversation {
                 PanelButton(
                     "New chat · ⌘N", systemImage: "square.and.pencil",
@@ -369,6 +405,12 @@ struct FloatView: View {
         .padding(.horizontal, Self.headerButtonInset)
         .frame(height: Self.headerHeight)
         .task(id: chat.threadProjectLookup) { await chat.loadThreadProject() }
+    }
+
+    private func switcherAnchor(compact: Bool) -> some View {
+        ChatSwitcherAnchor(
+            chat: chat, request: chat.chatSwitcherRequest, compact: compact, isPresented: $isChatSwitcherOpen
+        )
     }
 
     private func headerTitle(_ title: String) -> some View {

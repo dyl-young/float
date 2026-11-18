@@ -25,6 +25,11 @@ public struct T3Client: Sendable {
         let projects: [T3Project]
         let nextCursor: Int?
     }
+    private struct ThreadListPage: Decodable {
+        let threads: [T3ThreadListItem]
+        let nextCursor: Int?
+    }
+
     private struct EnvironmentLinks: Decodable {
         struct Link: Decodable {
             let environmentId: String
@@ -151,10 +156,7 @@ public struct T3Client: Sendable {
 
     public func machines() async throws -> [T3Machine] {
         do {
-            let response = try await transport.call(
-                "t3_environment_links", [:], result: EnvironmentLinks.self,
-                retryExpiredSession: true
-            )
+            let response = try await environmentLinks()
             var machines = [
                 T3Machine(
                     id: response.environmentId, name: "This Mac", kind: .local,
@@ -175,6 +177,78 @@ public struct T3Client: Sendable {
             .cannotConnectToHost, .networkConnectionLost, .notConnectedToInternet, .timedOut,
         ].contains(error.code) {
             throw T3Error.serverUnavailable
+        }
+    }
+
+    private func environmentLinks() async throws -> EnvironmentLinks {
+        try await transport.call(
+            "t3_environment_links", [:], result: EnvironmentLinks.self, retryExpiredSession: true
+        )
+    }
+
+    public func chatSwitcherCatalog() async throws -> ChatSwitcherCatalog {
+        let links = try? await environmentLinks()
+        return try await withThrowingTaskGroup(of: [ChatSwitcherEntry]?.self) { group in
+            group.addTask {
+                try await threadList(environmentID: nil, machineName: nil)
+            }
+            for link in links?.links ?? [] where link.status == .reachable {
+                group.addTask {
+                    try? await threadList(environmentID: link.environmentId, machineName: link.label)
+                }
+            }
+            var entries: [ChatSwitcherEntry] = []
+            var unavailable = links == nil
+            for try await result in group {
+                if let result { entries.append(contentsOf: result) }
+                else { unavailable = true }
+            }
+            return ChatSwitcherCatalog(groups: ChatSwitcherGroup.group(entries), hasUnavailableMachines: unavailable)
+        }
+    }
+
+    private func threadList(environmentID: String?, machineName: String?) async throws -> [ChatSwitcherEntry] {
+        async let projectList = try? projects(environmentID: environmentID)
+        var threads: [T3ThreadListItem] = []
+        var cursor: Int?
+        repeat {
+            var arguments: [String: any Sendable] = [
+                "allProjects": true, "includeSubagents": false, "settled": false, "limit": 100,
+            ]
+            arguments["environmentId"] = environmentID
+            arguments["cursor"] = cursor
+            let page = try await transport.call(
+                "t3_thread_list", arguments, result: ThreadListPage.self, retryExpiredSession: true
+            )
+            threads.append(contentsOf: page.threads)
+            cursor = page.nextCursor
+        } while cursor != nil
+
+        let projects = Dictionary((await projectList ?? []).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let entries = threads.map { thread in
+            let project = projects[thread.projectId].flatMap {
+                isScratchProject($0, environmentID: environmentID) ? nil : $0
+            }
+            let reference = ThreadReference(
+                threadId: thread.threadId, link: thread.linkURL, environmentID: environmentID,
+                machineName: machineName, projectName: project?.title
+            )
+            return ChatSwitcherEntry(thread: thread, reference: reference, project: project)
+        }
+        return await withTaskGroup(of: ChatSwitcherEntry.self) { group in
+            var result = entries.filter { $0.thread.status != .running }
+            for entry in entries where entry.thread.status == .running {
+                group.addTask {
+                    let page = try? await read(entry.reference, messagesLimit: 1)
+                    let run = page?.recentRuns?.first { $0.runId == entry.thread.latestRunId && $0.status.isInProgress }
+                    return ChatSwitcherEntry(
+                        thread: entry.thread, reference: entry.reference, project: entry.project,
+                        runStartedAt: (run?.startedAt ?? run?.requestedAt).flatMap(t3Date)
+                    )
+                }
+            }
+            for await entry in group { result.append(entry) }
+            return result
         }
     }
 
@@ -362,13 +436,29 @@ public struct T3Client: Sendable {
             || message.contains("does not support active steering")
     }
 
-    public func read(_ thread: ThreadReference, before: Int? = nil) async throws -> ThreadSnapshot {
+    public func read(_ thread: ThreadReference, before: Int? = nil, messagesLimit: Int? = nil) async throws -> ThreadSnapshot {
         // T3 reads forward for external clients unless given an upper bound.
         // Use the largest JSON-safe integer to request the newest page.
         try await readSnapshot([
-            "threadId": thread.threadId, "view": "activity", "limit": 80, "maxCharsPerItem": 2_000,
+            "threadId": thread.threadId, "view": messagesLimit == nil ? "activity" : "messages",
+            "limit": messagesLimit ?? 80, "maxCharsPerItem": 2_000,
             "beforePosition": before ?? 9_007_199_254_740_991, "runLimit": 1,
         ], thread: thread)
+    }
+
+    public func resumeHistory(
+        _ thread: ThreadReference
+    ) async throws -> (items: [ThreadSnapshot.Item], hasOlder: Bool) {
+        let limit = 10
+        var items: [ThreadSnapshot.Item] = []
+        var cursor: Int?
+        repeat {
+            let page = try await read(thread, before: cursor, messagesLimit: limit + 1 - items.count)
+            items.append(contentsOf: page.items.filter(\.isMessage).sorted { $0.position > $1.position })
+            let earlier = page.earlierPosition
+            cursor = earlier == cursor ? nil : earlier
+        } while items.count <= limit && cursor != nil
+        return (Array(items.prefix(limit)), items.count > limit)
     }
 
     public func pendingApprovals(_ thread: ThreadReference) async throws -> [ApprovalRequest] {
