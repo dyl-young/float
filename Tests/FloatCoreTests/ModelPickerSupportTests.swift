@@ -14,13 +14,13 @@ private func model(
 }
 
 private func provider(
-    _ id: String, name: String, driver: String, constraints: [String] = [],
+    _ id: String, name: String, driver: String, constraints: [String] = [], omittedModels: Int = 0,
     models: [T3Model]
 ) -> T3ModelProvider {
     T3ModelProvider(
         instanceId: id, driverKind: driver, displayName: name,
         constraints: constraints, runtimeModes: ["approval-required"],
-        omittedModels: 0, models: models
+        omittedModels: omittedModels, models: models
     )
 }
 
@@ -273,4 +273,28 @@ private func provider(
     #expect(T3Model.preferred(in: models, saved: stale, favourites: favourites) == second)
     #expect(T3Model.preferred(in: models, saved: stale, favourites: [T3ModelKey(stale)]) == first)
     #expect(T3Model.preferred(in: [], favourites: favourites) == nil)
+}
+
+@Test func omittedModelSearchUsesTheTargetProvidersAvailability() {
+    let listed = model("listed", label: "Listed", instanceId: "codex", provider: "Codex", driver: "codex")
+    let saved = T3ModelSelection(instanceId: "codex", model: "saved")
+    let other = T3ModelSelection(instanceId: "other", model: "saved")
+    let catalogue = T3ModelCatalogue(providers: [
+        provider("codex", name: "Codex", driver: "codex", omittedModels: 1, models: [listed]),
+    ])
+    #expect(catalogue.needsSearch(for: saved))
+    #expect(!catalogue.needsSearch(for: listed.selection))
+    #expect(!catalogue.needsSearch(for: other))
+
+    let disabled = T3ModelCatalogue(providers: [
+        provider("codex", name: "Codex", driver: "codex", constraints: ["Disabled"], omittedModels: 1, models: [listed]),
+    ])
+    #expect(!disabled.needsSearch(for: saved))
+    #expect(disabled.available.isEmpty)
+
+    let complete = T3ModelCatalogue(providers: [
+        provider("codex", name: "Codex", driver: "codex", models: [listed]),
+    ])
+    #expect(!complete.needsSearch(for: saved))
+    #expect(T3Model.preferred(in: complete.available, saved: saved) == listed)
 }

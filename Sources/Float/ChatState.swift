@@ -70,11 +70,13 @@ final class ChatState: ObservableObject {
     @Published private(set) var modelPickerRequest = 0
     @Published private(set) var projectPickerRequest = 0
     @Published private(set) var machinePickerRequest = 0
-    @Published private(set) var models: [T3Model] = []
+    @Published private var models: [T3Model] = []
     @Published private(set) var modelProviders: [T3ModelProvider] = []
     @Published private(set) var favouriteModelKeys: Set<T3ModelKey> = []
     @Published private(set) var loadingModels = false
     @Published private(set) var modelCatalogFailed = false
+    @Published private(set) var modelCatalogueRevision = 0
+    @Published private var modelCatalogueLoaded = false
     @Published private(set) var projects: [T3Project] = []
     @Published private(set) var loadingProjects = false
     @Published private(set) var projectCatalogFailed = false
@@ -97,7 +99,6 @@ final class ChatState: ObservableObject {
     @Published private(set) var selectedMachineID: String?
     @Published private var threadModel: T3ModelSelection?
     @Published private var nextModel: T3ModelSelection?
-    @Published private var savedModel: T3ModelSelection?
     @Published private var dismissedStatusNotice: RunStatus?
     @Published private(set) var failureReason: String?
     @Published private(set) var failureDetail: String?
@@ -107,7 +108,9 @@ final class ChatState: ObservableObject {
     let projectFaviconCache: ProjectFaviconCache
     private let favouritesStore: T3ModelFavouritesStore
     @Published private var modelEfforts: T3ModelEfforts
-    private var pickedCatalogModel: T3Model?
+    @Published private var extraCatalogModels: [T3Model] = []
+    private var modelCatalogueEnvironmentID: String?
+    private var modelReload: Task<Bool, Never>?
     private var watcher: Task<Void, Never>?
     private var previews: [String: [Data]] = [:]
     private var sentSkills: [String: [ComposerSkillChip]] = [:]
@@ -160,9 +163,6 @@ final class ChatState: ObservableObject {
         }
         selectedProjectID = defaults.string(forKey: "preferredProjectID")
         selectedMachineID = defaults.string(forKey: "preferredMachineID")
-        if let data = defaults.data(forKey: "preferredModel") {
-            savedModel = try? JSONDecoder().decode(T3ModelSelection.self, from: data)
-        }
         if let data = defaults.data(forKey: "thread"),
             let stored = try? JSONDecoder().decode(ThreadReference.self, from: data) {
             reference = stored
@@ -240,23 +240,43 @@ final class ChatState: ObservableObject {
         !submitting && !sendingFollowUp && !stopping && !loading && status != .waiting &&
             (status != .running || canFollowUp || stopAcknowledged) &&
             activeQuestion == nil && activeApproval == nil && approvalPreview == nil &&
-            (reference != nil || (!loadingProjects && (!loadingModels || !models.isEmpty))) &&
+            (reference != nil || (!loadingMachines && !loadingProjects)) &&
+            (canFollowUp || hasModelForSend) &&
             (!draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !images.isEmpty)
     }
 
+    var modelEnvironmentID: String? {
+        reference == nil ? selectedMachineEnvironmentID : reference?.environmentID
+    }
+
+    private func modelDefaultsKey(_ key: String) -> String {
+        modelEnvironmentID.map { "\(key).\($0)" } ?? key
+    }
+
+    private var savedModel: T3ModelSelection? {
+        let data = defaults.data(forKey: modelDefaultsKey("preferredModel")) ?? defaults.data(forKey: "preferredModel")
+        return data.flatMap { try? JSONDecoder().decode(T3ModelSelection.self, from: $0) }
+    }
+
+    var pickerModels: [T3Model] { models + extraCatalogModels }
+
     var selectedModel: T3ModelSelection? {
-        if let threadSelection = nextModel ?? threadModel, reference != nil { return threadSelection }
-        if let pickedCatalogModel, pickedCatalogModel.selection.matches(savedModel) {
-            return pickedCatalogModel.selection
-        }
+        if reference != nil { return nextModel ?? threadModel }
         return T3Model.preferred(
-            in: models, saved: savedModel, favourites: favouriteModelKeys
+            in: pickerModels, saved: savedModel, favourites: favouriteModelKeys
         )?.selection
     }
 
     var selectedCatalogModel: T3Model? {
-        models.first { $0.selection.matches(selectedModel) }
-            ?? pickedCatalogModel.flatMap { $0.selection.matches(selectedModel) ? $0 : nil }
+        pickerModels.first { $0.selection.matches(selectedModel) }
+    }
+
+    private var hasModelForSend: Bool {
+        if nextModel != nil { return selectedCatalogModel != nil }
+        if reference != nil {
+            return !modelCatalogueLoaded || threadModel == nil || selectedCatalogModel != nil
+        }
+        return selectedCatalogModel != nil || modelCatalogFailed
     }
 
     private var composerProvider: T3ModelProvider? {
@@ -270,8 +290,8 @@ final class ChatState: ObservableObject {
     var composerDriverKind: String? { composerProvider?.driverKind ?? selectedCatalogModel?.driverKind }
 
     var composerInventoryTarget: ComposerMenuState.InventoryTarget? {
-        let environment = reference == nil ? selectedMachineEnvironmentID : reference?.environmentID
-        guard environment == nil, let instanceID = selectedModel?.instanceId else { return nil }
+        // The inventory RPC only accepts local workspaces.
+        guard modelEnvironmentID == nil, let instanceID = selectedCatalogModel?.selection.instanceId else { return nil }
         let cwd = reference == nil ? selectedProject?.workspaceRoot : threadWorktreePath ?? threadProject?.workspaceRoot
         return .init(instanceID: instanceID, cwd: cwd)
     }
@@ -288,9 +308,9 @@ final class ChatState: ObservableObject {
     }
 
     var modelLabel: String {
-        selectedCatalogModel?.label
-            ?? selectedModel?.fallbackLabel
-            ?? "Choose model"
+        if let model = selectedCatalogModel { return model.label }
+        if modelCatalogueLoaded, selectedModel != nil || models.isEmpty { return "Model unavailable" }
+        return selectedModel?.fallbackLabel ?? "Choose model"
     }
 
     var canChooseModel: Bool {
@@ -387,6 +407,7 @@ final class ChatState: ObservableObject {
     func resume(_ entry: ChatSwitcherEntry) {
         guard !submitting else { return }
         if let reference, ChatSwitcherEntry.ID(reference) == entry.id { return }
+        let previousEnvironment = modelEnvironmentID
         resetConversation()
         reference = entry.reference
         isResumedThread = true
@@ -399,6 +420,9 @@ final class ChatState: ObservableObject {
         status = entry.thread.status
         if let started = entry.runStartedAt { thinkingStartedAt = started }
         persist()
+        if previousEnvironment != modelEnvironmentID || needsModelLookup(threadModel) {
+            reloadModels()
+        }
         refresh(entry.reference, force: true)
     }
 
@@ -415,45 +439,87 @@ final class ChatState: ObservableObject {
     }
 
     func reloadModels() {
-        guard !loadingModels else { return }
-        loadingModels = true
-        modelCatalogFailed = false
-        Task {
-            defer { loadingModels = false }
-            do {
-                try await loadModelCatalogue()
-            } catch {
-                modelCatalogFailed = true
-            }
-        }
+        _ = startModelReload()
     }
 
-    private func loadModelCatalogue() async throws {
-        let catalogue = try await client.modelCatalogue()
-        await reloadFavourites()
-        let saved = savedModel
-        var savedSearchMatch: T3Model?
-        if let saved,
-            let provider = catalogue.providers.first(where: { $0.id == saved.instanceId }),
-            provider.enabled, provider.omittedModels > 0,
-            !provider.models.contains(where: { $0.selection.matches(saved) }) {
-            // T3 can omit a model from the initial list while still returning it in search.
-            let results = try? await client.modelCatalogue(search: saved.model)
-            savedSearchMatch = results?.available.first { $0.selection.matches(saved) }
-            if results == nil { savedSearchMatch = pickedCatalogModel }
+    private func startModelReload() -> Task<Bool, Never> {
+        let environmentID = modelEnvironmentID
+        if modelCatalogueEnvironmentID == environmentID, let modelReload { return modelReload }
+        if modelCatalogueEnvironmentID != environmentID {
+            modelReload?.cancel()
+            modelCatalogueEnvironmentID = environmentID
+            models = []
+            modelProviders = []
+            extraCatalogModels = []
+            modelCatalogueLoaded = false
+            modelEfforts = T3ModelEfforts(
+                values: defaults.dictionary(forKey: modelDefaultsKey("modelEfforts")) as? [String: String] ?? [:]
+            )
         }
-        if savedModel == saved { pickedCatalogModel = savedSearchMatch }
-        models = catalogue.available
-        modelProviders = catalogue.providers
+        modelCatalogueRevision += 1
+        let revision = modelCatalogueRevision
+        loadingModels = true
+        modelCatalogFailed = false
+        let task = Task<Bool, Never> {
+            defer {
+                if modelCatalogueRevision == revision {
+                    loadingModels = false
+                    modelReload = nil
+                }
+            }
+            do {
+                let catalogue = try await client.modelCatalogue(environmentID: environmentID)
+                guard modelCatalogueRevision == revision, modelEnvironmentID == environmentID else { return false }
+                let selections = [savedModel, nextModel, threadModel].compactMap { $0 }
+                var lookedUp: Set<T3ModelKey> = []
+                var extraModels: [T3Model] = []
+                for selection in selections where catalogue.needsSearch(for: selection) {
+                    guard modelCatalogueRevision == revision, modelEnvironmentID == environmentID else { return false }
+                    guard lookedUp.insert(T3ModelKey(selection)).inserted else { continue }
+                    let result = try? await client.modelCatalogue(search: selection.model, environmentID: environmentID)
+                    if let match = result?.available.first(where: { $0.selection.matches(selection) }) {
+                        extraModels.append(match)
+                    }
+                }
+                guard modelCatalogueRevision == revision, modelEnvironmentID == environmentID else { return false }
+                models = catalogue.available
+                modelProviders = catalogue.providers
+                extraCatalogModels = extraModels
+                modelCatalogueLoaded = true
+                if let threadModel, catalogue.needsSearch(for: threadModel),
+                    !lookedUp.contains(T3ModelKey(threadModel)) {
+                    modelReload = nil
+                    reloadModels()
+                }
+                return true
+            } catch {
+                guard modelCatalogueRevision == revision, modelEnvironmentID == environmentID else { return false }
+                modelCatalogFailed = true
+                return false
+            }
+        }
+        modelReload = task
+        return task
+    }
+
+    private func needsModelLookup(_ selection: T3ModelSelection?) -> Bool {
+        guard let selection, !extraCatalogModels.contains(where: { $0.selection.matches(selection) }) else {
+            return false
+        }
+        return T3ModelCatalogue(providers: modelProviders).needsSearch(for: selection)
     }
 
     func selectModel(_ model: T3Model) {
-        guard canChooseModel else { return }
+        guard canChooseModel, !loadingModels,
+              modelProviders.contains(where: { $0.instanceId == model.selection.instanceId && $0.enabled })
+        else { return }
         let selection = model.selection
-        pickedCatalogModel = model
-        savedModel = selection
+        if !models.contains(where: { $0.selection.matches(selection) }),
+            !extraCatalogModels.contains(where: { $0.selection.matches(selection) }) {
+            extraCatalogModels.append(model)
+        }
         if reference != nil { nextModel = selection.matches(threadModel) ? nil : selection }
-        defaults.set(try? JSONEncoder().encode(selection), forKey: "preferredModel")
+        defaults.set(try? JSONEncoder().encode(selection), forKey: modelDefaultsKey("preferredModel"))
         focusRequest += 1
     }
 
@@ -509,16 +575,19 @@ final class ChatState: ObservableObject {
             defaults.set(selectedMachineID, forKey: "preferredMachineID")
             projects = []
             reloadProjects()
+            reloadModels()
         }
     }
 
     func selectMachine(_ machine: T3Machine) {
         guard canChooseMachine, machine.isOnline else { return }
+        let previousEnvironment = modelEnvironmentID
         selectedMachineID = machine.id
         defaults.set(machine.id, forKey: "preferredMachineID")
         projects = []
         projectCatalogFailed = false
         reloadProjects()
+        if previousEnvironment != modelEnvironmentID { reloadModels() }
         focusRequest += 1
     }
 
@@ -552,35 +621,49 @@ final class ChatState: ObservableObject {
     }
 
     func effort(for model: T3Model) -> String? {
-        modelEfforts.value(for: model)
+        if reference != nil, let selection = nextModel ?? threadModel, model.selection.matches(selection),
+            let option = model.effortOption {
+            let configured = selection.options?.first { $0.id == option.id }?.value
+            if let configured, option.stringValues.contains(configured) { return configured }
+            if nextModel == nil { return option.defaultString ?? option.stringValues.first }
+        }
+        return modelEfforts.value(for: model)
     }
 
     func setEffort(_ value: String, for model: T3Model) {
-        guard modelEfforts.set(value, for: model) else { return }
-        defaults.set(modelEfforts.values, forKey: "modelEfforts")
+        guard !loadingModels, model.selection.matches(selectedCatalogModel?.selection),
+              modelEfforts.set(value, for: model) else { return }
+        defaults.set(modelEfforts.values, forKey: modelDefaultsKey("modelEfforts"))
+        if reference != nil {
+            let options = model.selection(withEffort: value).options ?? []
+            let previous = threadModel.flatMap { model.selection.matches($0) ? $0.options : nil } ?? []
+            nextModel = T3ModelSelection(
+                instanceId: model.selection.instanceId, model: model.selection.model,
+                options: previous.filter { $0.id != model.effortOption?.id } + options
+            )
+        }
     }
 
     func searchModelProviders(_ query: String) async -> [T3ModelProvider] {
-        do {
-            return try await client.modelCatalogue(search: T3ModelSearch.serverQuery(query)).providers
-        } catch {
-            return modelProviders
-        }
+        let environmentID = modelEnvironmentID
+        let revision = modelCatalogueRevision
+        let result = try? await client.modelCatalogue(
+            search: T3ModelSearch.serverQuery(query), environmentID: environmentID
+        )
+        guard modelCatalogueRevision == revision, modelEnvironmentID == environmentID else { return [] }
+        return result?.providers ?? modelProviders
     }
 
     func revealed() {
         visible = true
         followUpPreference = client.followUpMode()
         focusRequest += 1
-        if models.isEmpty {
-            reloadModels()
-        } else {
-            Task { await reloadFavourites() }
-        }
+        Task { await reloadFavourites() }
         if machines.isEmpty {
             reloadMachines()
-        } else if projects.isEmpty {
-            reloadProjects()
+        } else {
+            if projects.isEmpty { reloadProjects() }
+            if !modelCatalogueLoaded || modelCatalogFailed { reloadModels() }
         }
         if let reference { refresh(reference, force: watcher == nil) }
     }
@@ -645,7 +728,9 @@ final class ChatState: ObservableObject {
 
     func newChat() {
         guard !submitting else { return }
+        let previousEnvironment = modelEnvironmentID
         resetConversation()
+        if previousEnvironment != modelEnvironmentID { reloadModels() }
         persist()
         focusRequest += 1
     }
@@ -766,10 +851,9 @@ final class ChatState: ObservableObject {
         let clock = ContinuousClock()
         let deadline = clock.now.advanced(by: .seconds(30))
         while clock.now < deadline, generation == version {
-            do {
-                try await loadModelCatalogue()
-                guard generation == version else { return }
-                modelCatalogFailed = false
+            let ready = await startModelReload().value
+            guard generation == version else { return }
+            if ready {
                 needsT3 = false
                 if shouldSend {
                     retrySendAfterLaunch = false
@@ -778,9 +862,8 @@ final class ChatState: ObservableObject {
                     refresh(reference, force: watcher == nil)
                 }
                 return
-            } catch {
-                try? await Task.sleep(for: .seconds(1))
             }
+            try? await Task.sleep(for: .seconds(1))
         }
         guard generation == version else { return }
         needsT3 = true
@@ -803,8 +886,7 @@ final class ChatState: ObservableObject {
             return
         }
         let launchMachine = reference == nil ? selectedMachine : nil
-        let environmentID = reference?.environmentID
-            ?? (launchMachine?.isLocal == false ? launchMachine?.id : nil)
+        let environmentID = modelEnvironmentID
         if environmentID != nil, !images.isEmpty {
             setNotice("Attachments can't be sent to a linked machine yet.", kind: .input)
             return
@@ -818,8 +900,15 @@ final class ChatState: ObservableObject {
         let target = reference
         let launchProject = target == nil ? selectedProject : nil
         let projectID = launchProject?.id
-        // With no explicit change, T3 keeps the resumed thread’s full model selection.
-        let selection = (isResumedThread ? nextModel : selectedModel).map(selectionForSend)
+        // Without a change in Float, T3 keeps the thread’s full model selection.
+        let selection = (target == nil || nextModel != nil) ? selectedCatalogModel.map { model in
+            let configured = model.selection(withEffort: effort(for: model))
+            guard let options = nextModel?.options else { return configured }
+            return T3ModelSelection(
+                instanceId: configured.instanceId, model: configured.model,
+                options: options.filter { $0.id != model.effortOption?.id } + (configured.options ?? [])
+            )
+        } : nil
         clearNotice()
         answeredQuestionSummary = nil
         needsT3 = false
@@ -1316,14 +1405,16 @@ final class ChatState: ObservableObject {
         followUpContextTask?.cancel()
         steeringCapabilities = nil
         let version = generation
-        let localDriver = modelProviders.first { $0.instanceId == instanceID }?.driverKind ?? instanceID
+        let catalogueDriver = modelProviders.first { $0.instanceId == instanceID }?.driverKind
         followUpContextTask = Task {
             let driver: String?
-            if let environmentID = reference.environmentID {
-                let catalogue = try? await client.modelCatalogue(environmentID: environmentID)
+            if let catalogueDriver {
+                driver = catalogueDriver
+            } else if let instanceID {
+                let catalogue = try? await client.modelCatalogue(environmentID: reference.environmentID)
                 driver = catalogue?.providers.first { $0.instanceId == instanceID }?.driverKind ?? instanceID
             } else {
-                driver = localDriver
+                driver = nil
             }
             guard generation == version, !Task.isCancelled else { return }
             steeringCapabilities = Self.baselineSteeringCapabilities(driver: driver)
@@ -1379,7 +1470,10 @@ final class ChatState: ObservableObject {
             loadedThreadProject = nil
         }
         if let serverTitle, titleChanged { title = serverTitle }
-        threadModel = thread.modelSelection ?? threadModel
+        if let selection = thread.modelSelection, selection != threadModel {
+            threadModel = selection
+            if nextModel == nil, needsModelLookup(selection) { reloadModels() }
+        }
         if projectChanged || titleChanged { persistThreadMetadata() }
     }
 
@@ -1725,13 +1819,6 @@ final class ChatState: ObservableObject {
         defaults.set(threadProjectID, forKey: "threadProjectID")
         defaults.set(threadProjectLabel, forKey: "threadProjectName")
         defaults.set(title, forKey: "threadTitle")
-    }
-
-    private func selectionForSend(_ selection: T3ModelSelection) -> T3ModelSelection {
-        guard let model = selectedCatalogModel, model.selection.matches(selection) else {
-            return T3ModelSelection(instanceId: selection.instanceId, model: selection.model)
-        }
-        return model.selection(withEffort: effort(for: model))
     }
 
     private func reloadFavourites() async {

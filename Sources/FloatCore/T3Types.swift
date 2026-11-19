@@ -267,6 +267,12 @@ public struct T3ModelCatalogue: Equatable, Sendable {
         providers.filter(\.enabled).flatMap(\.models)
     }
 
+    public func needsSearch(for selection: T3ModelSelection) -> Bool {
+        guard let provider = providers.first(where: { $0.instanceId == selection.instanceId }),
+              provider.enabled, provider.omittedModels > 0 else { return false }
+        return !provider.models.contains { $0.selection.matches(selection) }
+    }
+
     /// T3's runtime modes, narrowest first.
     static let runtimeModes = ["approval-required", "auto-accept-edits", "auto", "full-access"]
 

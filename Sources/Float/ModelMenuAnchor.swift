@@ -190,6 +190,11 @@ private struct ModelRowTrailingIcons: View {
 private struct ModelPickerView: View {
     private static let favourites = "favourites"
 
+    private struct SearchRequest: Equatable {
+        let query: String
+        let revision: Int
+    }
+
     @ObservedObject var chat: ChatState
     let keyboard: ModelPickerKeyboard
     let close: () -> Void
@@ -198,7 +203,7 @@ private struct ModelPickerView: View {
     @State private var selectedTab: String
     @State private var hovered: T3ModelSelection?
     @State private var highlighted: T3ModelKey?
-    @State private var searchProviders: [T3ModelProvider]
+    @State private var searchResult: (SearchRequest, [T3ModelProvider])?
     @FocusState private var searchFocused: Bool
 
     init(
@@ -213,7 +218,6 @@ private struct ModelPickerView: View {
                 ? chat.selectedModel?.instanceId ?? Self.favourites
                 : Self.favourites
         )
-        _searchProviders = State(initialValue: chat.modelProviders)
     }
 
     private var providers: [T3ModelProvider] {
@@ -229,15 +233,21 @@ private struct ModelPickerView: View {
             return searchGroups.flatMap(\.models)
         }
         if selectedTab == Self.favourites {
-            return chat.modelProviders.filter(\.enabled).flatMap(\.models).filter {
+            return chat.pickerModels.filter {
                 chat.favouriteModelKeys.contains(T3ModelKey($0.selection))
             }
         }
         guard let selectedProvider, selectedProvider.enabled else { return [] }
-        return selectedProvider.models
+        return chat.pickerModels.filter { $0.selection.instanceId == selectedProvider.instanceId }
+    }
+
+    private var searchRequest: SearchRequest {
+        SearchRequest(query: search.trimmingCharacters(in: .whitespacesAndNewlines),
+                      revision: chat.modelCatalogueRevision)
     }
 
     private var searchGroups: [T3ModelSearchGroup] {
+        let searchProviders = searchResult.flatMap { $0.0 == searchRequest ? $0.1 : nil } ?? chat.modelProviders
         let results = Dictionary(uniqueKeysWithValues: searchProviders.map { ($0.instanceId, $0) })
         let ordered = providers.compactMap { results[$0.instanceId] }
         return T3ModelSearch.groups(providers: ordered, query: search)
@@ -288,29 +298,30 @@ private struct ModelPickerView: View {
         .preferredColorScheme(.dark)
         .defaultFocus($searchFocused, true)
         .onAppear {
-            if selectedTab != Self.favourites,
-                !providers.contains(where: { $0.instanceId == selectedTab }) {
-                selectedTab = providers.first?.instanceId ?? Self.favourites
-            }
+            resolveSelectedTab()
             searchFocused = true
         }
         .onExitCommand(perform: close)
         .onChange(of: search) {
             highlighted = search.isEmpty ? nil : rows.first
         }
+        .onChange(of: providers.map(\.instanceId)) { resolveSelectedTab() }
         .onReceive(keyboard.events, perform: handle)
-        .task(id: search) {
-            let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !query.isEmpty else {
-                searchProviders = chat.modelProviders
-                return
-            }
+        .task(id: searchRequest) { [request = searchRequest] in
+            guard !request.query.isEmpty else { return }
             try? await Task.sleep(for: .milliseconds(120))
             guard !Task.isCancelled else { return }
-            let results = await chat.searchModelProviders(query)
+            let results = await chat.searchModelProviders(request.query)
             guard !Task.isCancelled else { return }
-            searchProviders = results
+            searchResult = (request, results)
             if highlighted.map(rows.contains) != true { highlighted = rows.first }
+        }
+    }
+
+    private func resolveSelectedTab() {
+        if selectedTab != Self.favourites,
+            !providers.contains(where: { $0.instanceId == selectedTab }) {
+            selectedTab = providers.first?.instanceId ?? Self.favourites
         }
     }
 
@@ -397,11 +408,13 @@ private struct ModelPickerView: View {
                 Text("\(provider.pickerName) is turned off in T3.")
                     .font(.system(size: 11.5))
                     .foregroundStyle(Theme.muted)
-                Button("Open T3 settings") {
-                    chat.openProviderSettings(provider.instanceId)
-                    close()
+                if chat.modelEnvironmentID == nil {
+                    Button("Open T3 settings") {
+                        chat.openProviderSettings(provider.instanceId)
+                        close()
+                    }
+                    .floatPillButtonStyle()
                 }
-                .floatPillButtonStyle()
             }
             .padding(.horizontal, 8)
             .padding(.top, 10)
@@ -505,6 +518,7 @@ private struct ModelPickerView: View {
             hovered = $0 ? model.selection : nil
         }
         .onTapGesture {
+            guard !chat.loadingModels else { return }
             chat.selectModel(model)
             close()
         }
@@ -578,7 +592,7 @@ private struct ModelPickerView: View {
                 highlighted = rows[index]
             }
         case .pick:
-            guard let key = highlighted ?? rows.first,
+            guard !chat.loadingModels, let key = highlighted ?? rows.first,
                 let model = displayedModels.first(where: { T3ModelKey($0.selection) == key })
             else { return }
             chat.selectModel(model)

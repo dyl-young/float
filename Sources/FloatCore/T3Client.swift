@@ -303,7 +303,7 @@ public struct T3Client: Sendable {
         let selection: T3ModelSelection?
         var catalogue: T3ModelCatalogue?
         if thread == nil, modelSelection == nil {
-            catalogue = try await modelCatalogue()
+            catalogue = try await modelCatalogue(environmentID: environmentID)
             guard let preferred = T3Model.preferred(in: catalogue?.available ?? []) else {
                 throw T3Error.tool("Enable a supported provider in T3 Settings → Providers to send a prompt.")
             }
