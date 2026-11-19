@@ -99,6 +99,11 @@ private final class FloatApp: NSObject, NSApplicationDelegate, NSWindowDelegate 
         chat.hidden()
     }
 
+    private func closeChat() {
+        chat.newChat()
+        hide()
+    }
+
     private func makePanel() -> FloatPanel {
         let panel = FloatPanel(
             contentRect: NSRect(x: 0, y: 0, width: sizing.width + 2 * FloatView.contextShadowSides, height: compactHeight),
@@ -137,7 +142,7 @@ private final class FloatApp: NSObject, NSApplicationDelegate, NSWindowDelegate 
             DispatchQueue.main.async {
                 self?.resize(to: height, trayVisible: trayVisible)
             }
-        }, dismiss: { [weak self] in self?.hide() }))
+        }, close: { [weak self] in self?.closeChat() }))
         host.sizingOptions = []
         panel.contentView = host
         self.panel = panel

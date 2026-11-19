@@ -9,7 +9,7 @@ import UniformTypeIdentifiers
 struct FloatView: View {
     @ObservedObject var chat: ChatState
     let resize: (CGFloat, Bool) -> Void
-    let dismiss: () -> Void
+    let close: () -> Void
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.displayScale) private var displayScale
@@ -315,9 +315,9 @@ struct FloatView: View {
     private var header: some View {
         HStack(spacing: 6) {
             PanelButton(
-                "Close (Esc)", accessibilityLabel: "Close",
-                systemImage: "xmark", size: Self.headerButtonSize, glyphSize: 12, action: dismiss
+                "Close chat", systemImage: "xmark", size: Self.headerButtonSize, glyphSize: 12, action: close
             )
+            .disabled(chat.submitting)
             Button(action: chat.requestChatSwitcher) {
                 HStack(spacing: 7) {
                     if let offlineLabel {
