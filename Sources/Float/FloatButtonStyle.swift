@@ -22,7 +22,7 @@ private struct FloatPillButtonStyle: ButtonStyle {
         let pill = Capsule()
         configuration.label
             .font(.system(size: 11.5, weight: .medium))
-            .foregroundStyle(fill == nil ? Theme.muted : Theme.canvas)
+            .foregroundStyle(fill == nil ? Theme.muted : Theme.accentForeground)
             .padding(.horizontal, 10)
             .frame(height: 24)
             .background(fill ?? .clear, in: pill)
@@ -58,7 +58,7 @@ private struct ButtonHighlight<Highlight: Shape>: ViewModifier {
 }
 
 extension View {
-    func floatPillButtonStyle(tint: Color? = Theme.accent) -> some View {
+    func floatPillButtonStyle(tint: Color? = Theme.accentInk) -> some View {
         buttonStyle(FloatPillButtonStyle(tint: tint))
             .focusEffectDisabled()
     }

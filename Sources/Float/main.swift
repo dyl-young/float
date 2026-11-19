@@ -122,7 +122,6 @@ private final class FloatApp: NSObject, NSApplicationDelegate, NSWindowDelegate 
         panel.isMovableByWindowBackground = true
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        panel.appearance = NSAppearance(named: .darkAqua)
         panel.delegate = self
         panel.dismiss = { [weak self] in self?.hide() }
         panel.startNewChat = { [weak self] in self?.chat.newChat() }

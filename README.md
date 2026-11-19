@@ -15,7 +15,7 @@ You’ll need macOS 14 or later, Swift 6, and a local T3 Code build with the thr
 open dist/Float.app
 ```
 
-If T3 isn’t running, use **Launch T3** in Float. Float saves your draft while it reconnects.
+Float follows the macOS light or dark appearance and updates while it’s open. If T3 isn’t running, use **Launch T3** in Float. Float saves your draft while it reconnects.
 
 ## Use Float
 

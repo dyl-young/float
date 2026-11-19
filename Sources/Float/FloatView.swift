@@ -68,7 +68,6 @@ struct FloatView: View {
             if let height { nonConversationHeight = height }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-        .preferredColorScheme(.dark)
         .environment(\.projectFaviconCache, chat.projectFaviconCache)
         .onChange(of: trayVisible, initial: true) { resize(compactHeight, trayVisible) }
         .task(id: composerMenu.trigger == nil ? nil : chat.composerInventoryTarget) {
@@ -291,7 +290,7 @@ struct FloatView: View {
                         .foregroundStyle(Theme.muted)
                     Button("Open in T3", action: chat.openThread)
                         .floatButtonStyle()
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(Theme.accentInk)
                         .disabled(chat.reference?.desktopURL == nil)
                 }
                 .font(.system(size: 10.5))
@@ -300,7 +299,7 @@ struct FloatView: View {
                 Button("Load older messages", action: chat.loadOlder)
                     .floatButtonStyle()
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(Theme.accentInk)
                     .disabled(chat.loadingOlder)
                     .frame(maxWidth: .infinity)
             }
@@ -679,7 +678,7 @@ struct FloatView: View {
                     .padding(.leading, 3)
                     .padding(.trailing, 2)
                     .frame(height: 26)
-                    .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .background(Theme.attachmentFill, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                     .overlay {
                         RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Theme.hairline, lineWidth: 1)
                     }
@@ -890,7 +889,7 @@ struct MarkdownCodeBlock: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.border.opacity(0.32), in: RoundedRectangle(cornerRadius: 8))
+        .background(Theme.codeBlock, in: RoundedRectangle(cornerRadius: 8))
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
@@ -984,7 +983,7 @@ private struct ModelButton: View {
                 if chat.modelCatalogFailed {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Theme.warning)
+                        .foregroundStyle(Theme.warningInk)
                 } else {
                     ProviderGlyph(driverKind: chat.selectedCatalogModel?.driverKind ?? chat.selectedModel?.instanceId)
                 }
@@ -1175,8 +1174,7 @@ private struct QuestionCard: View {
                 .background(OverlayScrollers())
             }
             .frame(width: 220, height: CGFloat(min(request.questions.count, 8) * 28 + 6))
-            .background(Theme.raised)
-            .preferredColorScheme(.dark)
+            .background(Theme.overlay)
             .onExitCommand { chat.closeQuestionSteps() }
         }
         .onChange(of: showingSteps) {
@@ -1275,7 +1273,7 @@ private struct QuestionCard: View {
                     if selected {
                         Image(systemName: "checkmark")
                             .font(.system(size: 8, weight: .semibold))
-                            .foregroundStyle(Theme.canvas)
+                            .foregroundStyle(Theme.accentForeground)
                     }
                 }
         } else {
@@ -1313,9 +1311,17 @@ private struct NoticeCard: View {
 
     private var tint: Color {
         switch tone {
-        case .info: Theme.accent
-        case .warning: Theme.warning
+        case .info: Theme.accentInk
+        case .warning: Theme.warningInk
         case .error: Theme.error
+        }
+    }
+
+    private var surface: Color {
+        switch tone {
+        case .info: Theme.accentNotice
+        case .warning: Theme.warningNotice
+        case .error: Theme.errorSurface
         }
     }
 
@@ -1367,7 +1373,7 @@ private struct NoticeCard: View {
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 11)
-        .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(surface, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(tint.opacity(0.35), lineWidth: 1)
         }

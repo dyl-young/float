@@ -13,7 +13,7 @@ struct MessageMarkdown: View {
         let isLong = source.utf8.count > 24_000
         let blocks = isLong ? lastBlocks : Self.cache.blocks(source, isUser: isUser)
         MarkdownBlocks(blocks: blocks, isUser: isUser)
-            .tint(Theme.accent)
+            .tint(Theme.accentInk)
             .environment(\.markdownSkillChips, chips)
             .task(id: source) {
                 if isLong {
@@ -189,6 +189,7 @@ private struct MarkdownText: View {
     var color = Theme.text
 
     @Environment(\.markdownSkillChips) private var chips
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         rendered
@@ -207,7 +208,9 @@ private struct MarkdownText: View {
             for (range, chip) in matches {
                 tail += styled(String(span.text[start..<range.lowerBound]), like: span)
                 let prefix = Text(tail)
-                let glyph = Text(Image(nsImage: SkillChip.image(for: chip))).baselineOffset(-3)
+                let appearance = NSAppearance(named: colorScheme == .dark ? .darkAqua : .aqua)
+                let image = SkillChip.image(for: chip, appearance: appearance)
+                let glyph = Text(Image(nsImage: image)).baselineOffset(-3)
                 result = result.map { Text("\($0)\(prefix)\(glyph)") } ?? Text("\(prefix)\(glyph)")
                 tail = AttributedString()
                 start = range.upperBound
@@ -230,7 +233,7 @@ private struct MarkdownText: View {
         if span.struck { run.strikethroughStyle = .single }
         if let link = span.link {
             run.link = link
-            run.foregroundColor = Theme.accent
+            run.foregroundColor = Theme.accentInk
         }
         return run
     }

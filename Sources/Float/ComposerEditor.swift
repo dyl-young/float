@@ -24,7 +24,7 @@ enum ComposerText {
     }()
 
     static var attributes: [NSAttributedString.Key: Any] {
-        [.font: font, .foregroundColor: NSColor(Theme.text),
+        [.font: font, .foregroundColor: Theme.textColor,
          .paragraphStyle: paragraph, .baselineOffset: baselineOffset]
     }
 }
@@ -49,7 +49,7 @@ struct ComposerEditor: NSViewRepresentable {
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
         KnobOnlyScroller.install(in: scroll)
-        scroll.scrollerKnobStyle = .light
+        scroll.scrollerKnobStyle = Theme.isDark(scroll.effectiveAppearance) ? .light : .dark
 
         let editor = PromptTextView(frame: NSRect(x: 0, y: 0, width: 460, height: 24))
         editor.backgroundColor = .clear
@@ -57,8 +57,8 @@ struct ComposerEditor: NSViewRepresentable {
         editor.isRichText = true
         editor.importsGraphics = false
         editor.allowsUndo = true
-        editor.textColor = NSColor(Theme.text)
-        editor.insertionPointColor = NSColor(Theme.accent)
+        editor.textColor = Theme.textColor
+        editor.insertionPointColor = Theme.accentColor
         editor.font = ComposerText.font
         editor.defaultParagraphStyle = ComposerText.paragraph
         editor.typingAttributes = ComposerText.attributes
@@ -182,6 +182,11 @@ private final class EditorScrollView: NSScrollView {
         hoverArea = area
     }
 
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        scrollerKnobStyle = Theme.isDark(effectiveAppearance) ? .light : .dark
+    }
+
     override func mouseEntered(with event: NSEvent) {
         flashScrollers()
     }
@@ -221,6 +226,14 @@ final class PromptTextView: NSTextView {
         contents.append(NSAttributedString(string: " ", attributes: plainAttributes))
         insertText(contents, replacementRange: range)
         typingAttributes = plainAttributes
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        insertionPointColor = Theme.accentColor
+        if !hasMarkedText() { typingAttributes = plainAttributes }
+        layoutManager?.invalidateDisplay(forCharacterRange: NSRange(location: 0, length: textStorage?.length ?? 0))
+        needsDisplay = true
     }
 
     override func deleteBackward(_ sender: Any?) {

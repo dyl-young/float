@@ -26,7 +26,7 @@ struct ProjectIconView: View {
                 Image(systemName: symbol)
                     .resizable()
                     .scaledToFit()
-                    .foregroundStyle(color.darkColor)
+                    .foregroundStyle(color.themeColor)
             } else if let key, let favicon = cache?.image(for: key) ?? (loaded?.key == key ? loaded?.image : nil) {
                 Image(decorative: favicon, scale: 1)
                     .resizable()
@@ -59,12 +59,12 @@ struct ProjectIconView: View {
         Text(text)
             .font(.system(size: size * 0.54, weight: .bold, design: .monospaced))
             .tracking(-0.2)
-            .foregroundStyle(color.darkColor)
+            .foregroundStyle(color.themeColor)
             .lineLimit(1)
             .minimumScaleFactor(0.5)
             .padding(.horizontal, size / 8)
             .frame(width: size, height: size)
-            .background(color.darkColor.opacity(0.14), in: RoundedRectangle(cornerRadius: size / 4))
+            .background(color.themeColor.opacity(0.14), in: RoundedRectangle(cornerRadius: size / 4))
     }
 
     private static let symbols: [String: String] = [

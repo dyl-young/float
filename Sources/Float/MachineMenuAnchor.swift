@@ -229,13 +229,12 @@ private struct MachinePickerView: View {
         }
         .padding(4)
         .frame(width: 236)
-        .background(Theme.raised)
+        .background(Theme.overlay)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(Theme.border, lineWidth: 1)
         }
-        .preferredColorScheme(.dark)
         .onExitCommand(perform: close)
         .onChange(of: keyboard.event?.id) {
             if let command = keyboard.event?.command { handle(command) }

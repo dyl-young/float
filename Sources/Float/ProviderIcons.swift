@@ -30,9 +30,9 @@ enum ProviderIcon {
         }
     }
 
-    private var layers: [(Path, Color)] {
+    private var layers: [(Path, NSColor)] {
         switch self {
-        case .openAI: [(ProviderPaths.openAI, Theme.text)]
+        case .openAI: [(ProviderPaths.openAI, Theme.textColor)]
         case .claude: [(ProviderPaths.claude, Theme.claude)]
         case .cursor: [(ProviderPaths.cursor, Theme.cursor)]
         case .antigravity: []
@@ -57,14 +57,14 @@ enum ProviderIcon {
         } else {
             Canvas { context, size in
                 for (path, tint) in layers {
-                    context.fill(fit(path, in: CGRect(origin: .zero, size: size)), with: .color(tint), style: .init(eoFill: true))
+                    context.fill(fit(path, in: CGRect(origin: .zero, size: size)), with: .color(Color(nsColor: tint)), style: .init(eoFill: true))
                 }
             }
         }
     }
 
     func menuImage(size: CGFloat = 13) -> NSImage {
-        NSImage(size: NSSize(width: size, height: size), flipped: true) { rect in
+        let glyph = NSImage(size: NSSize(width: size, height: size), flipped: true) { rect in
             if isAntigravity, let image = Self.antigravityImage {
                 image.draw(
                     in: rect, from: NSRect(origin: .zero, size: image.size),
@@ -75,12 +75,14 @@ enum ProviderIcon {
             }
             guard let context = NSGraphicsContext.current?.cgContext else { return false }
             for (path, tint) in layers {
-                context.setFillColor(NSColor(tint).cgColor)
+                context.setFillColor(tint.cgColor)
                 context.addPath(fit(path, in: rect).cgPath)
                 context.fillPath(using: .evenOdd)
             }
             return true
         }
+        glyph.cacheMode = .never
+        return glyph
     }
 
     private static let antigravityImage: NSImage? = {

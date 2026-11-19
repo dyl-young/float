@@ -274,10 +274,9 @@ private struct ComposerMenuView: View {
                 }
             }
         }
-        .background(Theme.raised, in: shape)
+        .background(Theme.overlay, in: shape)
         .clipShape(shape)
         .overlay { shape.strokeBorder(Theme.border).allowsHitTesting(false) }
-        .preferredColorScheme(.dark)
     }
 
     private func row(_ item: ComposerCompletion, nameWidth: CGFloat) -> some View {

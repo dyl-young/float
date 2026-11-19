@@ -289,13 +289,12 @@ private struct ModelPickerView: View {
         }
         .padding(4)
         .frame(width: 300, height: 360, alignment: .top)
-        .background(Theme.raised)
+        .background(Theme.overlay)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(Theme.border, lineWidth: 1)
         }
-        .preferredColorScheme(.dark)
         .defaultFocus($searchFocused, true)
         .onAppear {
             resolveSelectedTab()
@@ -326,22 +325,7 @@ private struct ModelPickerView: View {
     }
 
     private var searchField: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 10.5, weight: .medium))
-                .foregroundStyle(Theme.muted)
-            TextField("Search models", text: $search)
-                .textFieldStyle(.plain)
-                .focusEffectDisabled()
-                .font(.system(size: 11.5))
-                .foregroundStyle(Theme.text)
-                .focused($searchFocused)
-        }
-        .padding(.horizontal, 8)
-        .frame(height: 28)
-        .background(Theme.text.opacity(0.06), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-        .padding(2)
-        .padding(.bottom, 2)
+        PickerSearchField(title: "Search models", text: $search, focus: $searchFocused)
     }
 
     private var tabs: some View {

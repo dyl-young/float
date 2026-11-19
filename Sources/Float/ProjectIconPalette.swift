@@ -1,9 +1,10 @@
+import AppKit
 import FloatCore
 import SwiftUI
 
 extension T3ProjectIconColor {
-    /// Tailwind’s dark-mode -400 palette, converted from OKLCH to Display P3.
-    var darkColor: Color {
+    /// Tailwind’s -400 dark and -600 light shades.
+    var themeColor: Color {
         let components: (Double, Double, Double) = switch self {
         case .gray: (0.6057, 0.6304, 0.6802)
         case .red: (0.9335, 0.4317, 0.4235)
@@ -24,6 +25,27 @@ extension T3ProjectIconColor {
         case .pink: (0.9155, 0.4305, 0.7027)
         case .rose: (0.9429, 0.4308, 0.5031)
         }
-        return Color(.displayP3, red: components.0, green: components.1, blue: components.2)
+        let light: UInt32 = switch self {
+        case .gray: 0x4A5565
+        case .red: 0xE7000B
+        case .orange: 0xF54900
+        case .amber: 0xE17100
+        case .yellow: 0xD08700
+        case .lime: 0x5EA500
+        case .green: 0x00A63E
+        case .emerald: 0x009966
+        case .teal: 0x009689
+        case .cyan: 0x0092B8
+        case .sky: 0x0084D1
+        case .blue: 0x155DFC
+        case .indigo: 0x4F39F6
+        case .violet: 0x7F22FE
+        case .purple: 0x9810FA
+        case .fuchsia: 0xC800DE
+        case .pink: 0xE60076
+        case .rose: 0xEC003F
+        }
+        let dark = NSColor(displayP3Red: components.0, green: components.1, blue: components.2, alpha: 1)
+        return Color(nsColor: Theme.adaptive(dark: dark, light: Theme.srgb(light)))
     }
 }

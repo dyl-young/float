@@ -15,7 +15,7 @@ struct ApprovalCard: View {
         HStack(alignment: .top, spacing: 9) {
             Image(systemName: "exclamationmark.shield")
                 .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(Theme.warning)
+                .foregroundStyle(Theme.warningInk)
                 .frame(width: 16)
                 .padding(.top, 1)
                 .accessibilityHidden(true)
@@ -125,6 +125,6 @@ struct ApprovalCard: View {
 
     private func pill(_ title: String, primary: Bool = true, action: @escaping () -> Void) -> some View {
         Button(title, action: action)
-            .floatPillButtonStyle(tint: primary ? Theme.accent : nil)
+            .floatPillButtonStyle(tint: primary ? Theme.accentInk : nil)
     }
 }

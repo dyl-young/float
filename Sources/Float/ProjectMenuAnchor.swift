@@ -209,13 +209,12 @@ private struct ProjectPickerView: View {
         }
         .padding(4)
         .frame(width: 250, height: height, alignment: .top)
-        .background(Theme.raised)
+        .background(Theme.overlay)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(Theme.border, lineWidth: 1)
         }
-        .preferredColorScheme(.dark)
         .defaultFocus($searchFocused, true)
         .onAppear { searchFocused = true }
         .onExitCommand(perform: close)
@@ -228,22 +227,7 @@ private struct ProjectPickerView: View {
     }
 
     private var searchField: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 10.5, weight: .medium))
-                .foregroundStyle(Theme.muted)
-            TextField("Search projects", text: $search)
-                .textFieldStyle(.plain)
-                .focusEffectDisabled()
-                .font(.system(size: 11.5))
-                .foregroundStyle(Theme.text)
-                .focused($searchFocused)
-        }
-        .padding(.horizontal, 8)
-        .frame(height: 28)
-        .background(Theme.text.opacity(0.06), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-        .padding(2)
-        .padding(.bottom, 2)
+        PickerSearchField(title: "Search projects", text: $search, focus: $searchFocused)
     }
 
     private var projectList: some View {
@@ -281,7 +265,7 @@ private struct ProjectPickerView: View {
                         Button("Retry", action: chat.reloadProjects)
                             .floatButtonStyle()
                             .font(.system(size: 11.5, weight: .medium))
-                            .foregroundStyle(Theme.accent)
+                            .foregroundStyle(Theme.accentInk)
                     }
                     .padding(.horizontal, 8)
                     .frame(height: 36)
