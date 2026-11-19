@@ -11,6 +11,8 @@ enum Theme {
     static let border = colour(0.180, 0.255, 0.321, light: 0xD8DEE9)
     static let hairline = colour(0.63, 0.76, 0.86, light: 0x2E3440, darkOpacity: 0.13, lightOpacity: 0.16)
     static let selection = colour(28.0 / 255.0, 51.0 / 255.0, 73.0 / 255.0, light: 0xCFD8E6)
+    /// Hover and keyboard highlight. Lighter than `selection` so the current item stays distinct.
+    static let highlight = colour(0.882, 0.945, 1.0, light: 0x5E81AC, darkOpacity: 0.06, lightOpacity: 0.16)
     static let text = Color(nsColor: textColor)
     static let muted = colour(0.493, 0.544, 0.584, light: 0x4C566A)
     static let placeholder = colour(0.501, 0.554, 0.600, light: 0x7B8394)

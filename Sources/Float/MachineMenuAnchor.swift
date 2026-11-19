@@ -267,7 +267,7 @@ private struct MachinePickerView: View {
         .padding(.horizontal, 8)
         .frame(height: 40)
         .background(
-            machine.isOnline && (highlightedID == machine.id || hoveredID == machine.id) ? Theme.text.opacity(0.06) : .clear,
+            machine.isOnline && (highlightedID == machine.id || hoveredID == machine.id) ? Theme.highlight : .clear,
             in: RoundedRectangle(cornerRadius: 8, style: .continuous)
         )
         .background(current ? Theme.selection : .clear, in: RoundedRectangle(cornerRadius: 8))

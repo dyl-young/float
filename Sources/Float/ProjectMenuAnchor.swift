@@ -310,7 +310,7 @@ private struct ProjectPickerView: View {
         .padding(.horizontal, 8)
         .frame(height: 36)
         .background(
-            (highlightedID == id || hoveredID == id) ? Theme.text.opacity(0.06) : .clear,
+            (highlightedID == id || hoveredID == id) ? Theme.highlight : .clear,
             in: RoundedRectangle(cornerRadius: 8, style: .continuous)
         )
         .background(isCurrent ? Theme.selection : .clear, in: RoundedRectangle(cornerRadius: 8))

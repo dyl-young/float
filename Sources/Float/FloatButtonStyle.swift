@@ -44,7 +44,7 @@ private struct ButtonHighlight<Highlight: Shape>: ViewModifier {
     @State private var hovered = false
 
     private var highlight: some View {
-        shape.fill(Theme.text.opacity(enabled && (hovered || focused) ? 0.06 : 0))
+        shape.fill(enabled && (hovered || focused) ? Theme.highlight : .clear)
             .allowsHitTesting(false)
             .accessibilityHidden(true)
     }

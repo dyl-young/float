@@ -297,7 +297,7 @@ private struct ChatSwitcherView: View {
             }
             .padding(.horizontal, 8)
             .frame(height: 36)
-            .background(highlight == entry.id ? Theme.text.opacity(0.06) : .clear, in: RoundedRectangle(cornerRadius: 8))
+            .background(highlight == entry.id ? Theme.highlight : .clear, in: RoundedRectangle(cornerRadius: 8))
             .background(currentID == entry.id ? Theme.selection : .clear, in: RoundedRectangle(cornerRadius: 8))
             .contentShape(Rectangle())
         }

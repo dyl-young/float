@@ -492,7 +492,7 @@ private struct ModelPickerView: View {
         .padding(.horizontal, 8)
         .frame(minHeight: selectedTab == Self.favourites && search.isEmpty ? 36 : 28)
         .background(
-            highlighted == row || hovered == model.selection ? Theme.text.opacity(0.06) : .clear,
+            highlighted == row || hovered == model.selection ? Theme.highlight : .clear,
             in: RoundedRectangle(cornerRadius: 8, style: .continuous)
         )
         .background(isCurrent ? Theme.selection : .clear, in: RoundedRectangle(cornerRadius: 8))
